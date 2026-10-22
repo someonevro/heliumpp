@@ -1,0 +1,372 @@
+--- a/chrome/browser/ui/webui/help/version_updater_basic.cc
++++ b/chrome/browser/ui/webui/help/version_updater_basic.cc
+@@ -5,6 +5,8 @@
+ #include <memory>
+ #include <string>
+ 
++#include "build/build_config.h"
++
+ #include "chrome/browser/ui/webui/help/version_updater.h"
+ #include "chrome/browser/upgrade_detector/upgrade_detector.h"
+ 
+@@ -29,7 +31,15 @@
+ 
+ }  // namespace
+ 
++#if BUILDFLAG(IS_LINUX)
++std::unique_ptr<VersionUpdater> CreateHeliumAppImageUpdater();
++#endif
++
+ std::unique_ptr<VersionUpdater> VersionUpdater::Create(
+     content::WebContents* web_contents) {
++#if BUILDFLAG(IS_LINUX)
++  return CreateHeliumAppImageUpdater();
++#else
+   return std::make_unique<VersionUpdaterBasic>();
++#endif
+ }
+--- a/chrome/browser/ui/webui/help/BUILD.gn
++++ b/chrome/browser/ui/webui/help/BUILD.gn
+@@ -67,7 +67,18 @@
+   }
+ 
+   if (is_linux) {
+-    sources = [ "version_updater_basic.cc" ]
++    sources = [
++      "helium_appimage_updater.cc",
++      "version_updater_basic.cc",
++    ]
++    deps += [
++      "//chrome/browser:browser_process",
++      "//crypto",
++      "//net",
++      "//services/network/public/cpp",
++      "//third_party/boringssl",
++      "//url",
++    ]
+   }
+ }
+ 
+--- a/chrome/browser/first_run/upgrade_util.cc
++++ b/chrome/browser/first_run/upgrade_util.cc
+@@ -5,9 +5,12 @@
+ #include "chrome/browser/first_run/upgrade_util.h"
+ 
+ #include <memory>
++#include <optional>
++#include <string>
+ #include <utility>
+ 
+ #include "base/command_line.h"
++#include "base/environment.h"
+ #include "base/files/file_path.h"
+ #include "base/functional/callback.h"
+ #include "base/memory/ptr_util.h"
+@@ -44,7 +47,17 @@
+ base::CommandLine GetRelaunchCommandLine(
+     const base::CommandLine& old_cl,
+     browser_shutdown::RestartMode restart_mode) {
++#if BUILDFLAG(IS_LINUX)
++  // Inside an AppImage the program path points into a temporary mount that is stale after an
++  // update; relaunch the AppImage file itself.
++  std::optional<std::string> appimage =
++      base::Environment::Create()->GetVar("APPIMAGE");
++  base::CommandLine new_cl(appimage && !appimage->empty()
++                               ? base::FilePath(*appimage)
++                               : old_cl.GetProgram());
++#else
+   base::CommandLine new_cl(old_cl.GetProgram());
++#endif
+   base::CommandLine::SwitchMap switches = old_cl.GetSwitches();
+ 
+   // Remove switches that shouldn't persist across any restart.
+--- a/chrome/browser/ui/webui/help/helium_appimage_updater.cc
++++ b/chrome/browser/ui/webui/help/helium_appimage_updater.cc
+@@ -0,0 +1,287 @@
++// Self-updater for the Linux AppImage. Reads a signed latest.json, downloads the new AppImage,
++// checks it against the signed sha256 and swaps it in place. Created by Helium++.
++
++#include <algorithm>
++#include <array>
++#include <memory>
++#include <optional>
++#include <string>
++#include <vector>
++
++#include "base/command_line.h"
++#include "base/environment.h"
++#include "base/files/file.h"
++#include "base/files/file_path.h"
++#include "base/files/file_util.h"
++#include "base/functional/bind.h"
++#include "base/json/json_reader.h"
++#include "base/memory/weak_ptr.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/strings/strcat.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/task/thread_pool.h"
++#include "base/values.h"
++#include "base/version.h"
++#include "base/version_info/version_info.h"
++#include "chrome/browser/browser_process.h"
++#include "chrome/browser/ui/webui/help/version_updater.h"
++#include "crypto/hash.h"
++#include "net/base/url_util.h"
++#include "net/traffic_annotation/network_traffic_annotation.h"
++#include "services/network/public/cpp/resource_request.h"
++#include "services/network/public/cpp/shared_url_loader_factory.h"
++#include "services/network/public/cpp/simple_url_loader.h"
++#include "third_party/boringssl/src/include/openssl/curve25519.h"
++#include "url/gurl.h"
++
++namespace {
++
++// Where latest.json lives. Empty = updates off. shortcut: no release host chosen yet, set this
++// (or pass --helium-update-url) once there is one.
++constexpr char kDefaultManifestUrl[] = "";
++// Test hooks: --helium-update-url=<latest.json url>, --helium-update-target=<file to replace>.
++constexpr char kUpdateUrlSwitch[] = "helium-update-url";
++constexpr char kUpdateTargetSwitch[] = "helium-update-target";
++
++// Public half of build/keys/update.key (scripts/release_sign.sh keygen).
++constexpr std::array<uint8_t, 32> kUpdatePublicKey = {{0x42, 0xf3, 0x49, 0x78, 0x49, 0x50, 0x1f, 0xe3, 0x80, 0xc6, 0xad, 0xe6, 0xa3, 0x19, 0xbc, 0x41, 0xae, 0xc1, 0xc6, 0xe2, 0x9f, 0xae, 0xe1, 0xf0, 0x97, 0x17, 0x40, 0xfb, 0x5c, 0x4e, 0x84, 0xc6}};
++
++constexpr size_t kMaxManifestBytes = 64 * 1024;
++constexpr int64_t kMaxAppImageBytes = 2LL * 1024 * 1024 * 1024;
++
++// https only; plain http is allowed for localhost so tests can run a local server.
++bool IsAllowedUrl(const GURL& url) {
++  return url.is_valid() &&
++         (url.SchemeIs("https") ||
++          (url.SchemeIs("http") && net::IsLocalhost(url)));
++}
++
++// Runs on a blocking thread: size and sha256 must match the signed values, then swap the file in.
++bool VerifyAndInstall(const base::FilePath& downloaded,
++                      const base::FilePath& target,
++                      int64_t size,
++                      const std::string& sha256_hex) {
++  base::File file(downloaded, base::File::FLAG_OPEN | base::File::FLAG_READ);
++  int64_t length = file.IsValid() ? file.GetLength() : -1;
++  bool ok = length == size;
++  if (ok) {
++    crypto::hash::Hasher hasher(crypto::hash::kSha256);
++    std::vector<uint8_t> buffer(1 << 20);
++    for (;;) {
++      std::optional<size_t> n = file.ReadAtCurrentPos(buffer);
++      if (!n.has_value()) {
++        ok = false;
++        break;
++      }
++      if (*n == 0) {
++        break;
++      }
++      hasher.Update(base::span(buffer).first(*n));
++    }
++    if (ok) {
++      std::array<uint8_t, crypto::hash::kSha256Size> digest;
++      hasher.Finish(digest);
++      ok = base::HexEncode(digest) == base::ToUpperASCII(sha256_hex);
++    }
++  }
++  file.Close();
++  ok = ok && base::SetPosixFilePermissions(downloaded, 0755) &&
++       base::ReplaceFile(downloaded, target, nullptr);
++  if (!ok) {
++    base::DeleteFile(downloaded);
++  }
++  return ok;
++}
++
++class HeliumAppImageUpdater : public VersionUpdater {
++ public:
++  HeliumAppImageUpdater() = default;
++  ~HeliumAppImageUpdater() override = default;
++
++  void CheckForUpdate(StatusCallback callback, PromoteCallback) override {
++    if (busy_) {
++      return;
++    }
++    callback_ = std::move(callback);
++
++    const base::CommandLine* cl = base::CommandLine::ForCurrentProcess();
++    std::string url = cl->HasSwitch(kUpdateUrlSwitch)
++                          ? cl->GetSwitchValueASCII(kUpdateUrlSwitch)
++                          : kDefaultManifestUrl;
++    target_ = cl->GetSwitchValuePath(kUpdateTargetSwitch);
++    if (target_.empty()) {
++      std::optional<std::string> appimage =
++          base::Environment::Create()->GetVar("APPIMAGE");
++      if (appimage) {
++        target_ = base::FilePath(*appimage);
++      }
++    }
++    GURL manifest_url(url);
++    if (target_.empty() || url.empty() || !IsAllowedUrl(manifest_url)) {
++      Report(DISABLED, 0, std::u16string());
++      return;
++    }
++
++    busy_ = true;
++    Report(CHECKING, 0, std::u16string());
++    auto request = std::make_unique<network::ResourceRequest>();
++    request->url = manifest_url;
++    request->credentials_mode = network::mojom::CredentialsMode::kOmit;
++    loader_ = network::SimpleURLLoader::Create(
++        std::move(request),
++        net::DefineNetworkTrafficAnnotation("helium_update_check", R"(
++          semantics {
++            sender: "Helium++ update check"
++            description: "Fetches the small signed latest.json that names the newest release."
++            trigger: "The user opens Settings > About."
++            data: "None. No cookies or identifiers are sent."
++            destination: OTHER
++          }
++          policy {
++            cookies_allowed: NO
++            setting: "Off until a release URL is configured."
++            policy_exception_justification: "Not implemented."
++          })"));
++    loader_->DownloadToString(
++        g_browser_process->shared_url_loader_factory().get(),
++        base::BindOnce(&HeliumAppImageUpdater::OnManifest,
++                       weak_factory_.GetWeakPtr()),
++        kMaxManifestBytes);
++  }
++
++ private:
++  void Report(Status status, int progress, const std::u16string& message) {
++    callback_.Run(status, progress, false, false, version_, size_, message);
++  }
++
++  void Fail(const std::string& why) {
++    busy_ = false;
++    loader_.reset();
++    Report(FAILED, 0, base::UTF8ToUTF16("Update failed: " + why));
++  }
++
++  void OnManifest(std::optional<std::string> body) {
++    if (!body.has_value()) {
++      return Fail("could not reach the update server.");
++    }
++    std::optional<base::DictValue> dict =
++        base::JSONReader::ReadDict(*body, base::JSON_PARSE_RFC);
++    const std::string* version = dict ? dict->FindString("version") : nullptr;
++    const std::string* url = dict ? dict->FindString("url") : nullptr;
++    const std::string* sha = dict ? dict->FindString("sha256") : nullptr;
++    const std::string* sig = dict ? dict->FindString("signature") : nullptr;
++    std::optional<double> size = dict ? dict->FindDouble("size") : std::nullopt;
++    if (!version || !url || !sha || !sig || !size || *size <= 0 ||
++        *size > kMaxAppImageBytes) {
++      return Fail("the update information is malformed.");
++    }
++
++    // The signature covers version, sha256 and size. The url is not signed: the file is checked
++    // against the signed sha256 below.
++    int64_t size_bytes = static_cast<int64_t>(*size);
++    std::string signed_text = base::StrCat(
++        {"heliumpp-update-v1\n", *version, "\n", *sha, "\n",
++         base::NumberToString(size_bytes), "\n"});
++    std::vector<uint8_t> sig_bytes;
++    if (!base::HexStringToBytes(*sig, &sig_bytes) || sig_bytes.size() != 64 ||
++        !ED25519_verify(reinterpret_cast<const uint8_t*>(signed_text.data()),
++                        signed_text.size(), sig_bytes.data(),
++                        kUpdatePublicKey.data())) {
++      return Fail("the update signature is not valid.");
++    }
++
++    base::Version latest(*version);
++    base::Version current{std::string(version_info::GetHeliumVersionNumber())};
++    GURL download_url(*url);
++    if (!latest.IsValid() || !current.IsValid() || sha->size() != 64 ||
++        !IsAllowedUrl(download_url)) {
++      return Fail("the update information is malformed.");
++    }
++    if (latest <= current) {
++      busy_ = false;
++      loader_.reset();
++      return Report(UPDATED, 0, std::u16string());
++    }
++
++    version_ = *version;
++    size_ = size_bytes;
++    sha256_ = *sha;
++    download_path_ = target_.AddExtensionASCII("new");
++    last_percent_ = -1;
++    Report(UPDATING, 0, std::u16string());
++
++    auto request = std::make_unique<network::ResourceRequest>();
++    request->url = download_url;
++    request->credentials_mode = network::mojom::CredentialsMode::kOmit;
++    loader_ = network::SimpleURLLoader::Create(
++        std::move(request),
++        net::DefineNetworkTrafficAnnotation("helium_update_download", R"(
++          semantics {
++            sender: "Helium++ update download"
++            description: "Downloads the new AppImage named by the signed latest.json."
++            trigger: "A newer version was found after the user opened Settings > About."
++            data: "None. No cookies or identifiers are sent."
++            destination: OTHER
++          }
++          policy {
++            cookies_allowed: NO
++            setting: "Off until a release URL is configured."
++            policy_exception_justification: "Not implemented."
++          })"));
++    loader_->SetOnDownloadProgressCallback(base::BindRepeating(
++        &HeliumAppImageUpdater::OnProgress, weak_factory_.GetWeakPtr()));
++    loader_->DownloadToFile(
++        g_browser_process->shared_url_loader_factory().get(),
++        base::BindOnce(&HeliumAppImageUpdater::OnDownloaded,
++                       weak_factory_.GetWeakPtr()),
++        download_path_, size_);
++  }
++
++  void OnProgress(uint64_t current) {
++    int percent = static_cast<int>(
++        std::min<uint64_t>(99, current * 100 / static_cast<uint64_t>(size_)));
++    if (percent != last_percent_) {
++      last_percent_ = percent;
++      Report(UPDATING, percent, std::u16string());
++    }
++  }
++
++  void OnDownloaded(base::FilePath path) {
++    if (path.empty()) {
++      return Fail("the download failed.");
++    }
++    base::ThreadPool::PostTaskAndReplyWithResult(
++        FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
++        base::BindOnce(&VerifyAndInstall, path, target_, size_, sha256_),
++        base::BindOnce(&HeliumAppImageUpdater::OnInstalled,
++                       weak_factory_.GetWeakPtr()));
++  }
++
++  void OnInstalled(bool ok) {
++    if (!ok) {
++      return Fail(
++          "the downloaded file did not match the signed checksum, or the "
++          "AppImage file could not be replaced (is its folder writable?).");
++    }
++    busy_ = false;
++    loader_.reset();
++    Report(NEARLY_UPDATED, 0, std::u16string());
++  }
++
++  StatusCallback callback_;
++  std::unique_ptr<network::SimpleURLLoader> loader_;
++  base::FilePath target_;
++  base::FilePath download_path_;
++  std::string version_;
++  std::string sha256_;
++  int64_t size_ = 0;
++  int last_percent_ = -1;
++  bool busy_ = false;
++  base::WeakPtrFactory<HeliumAppImageUpdater> weak_factory_{this};
++};
++
++}  // namespace
++
++std::unique_ptr<VersionUpdater> CreateHeliumAppImageUpdater() {
++  return std::make_unique<HeliumAppImageUpdater>();
++}

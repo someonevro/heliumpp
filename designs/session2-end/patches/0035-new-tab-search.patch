@@ -1,0 +1,114 @@
+--- a/chrome/browser/ui/webui/new_tab_page/new_tab_page_ui.cc
++++ b/chrome/browser/ui/webui/new_tab_page/new_tab_page_ui.cc
+@@ -111,6 +111,7 @@
+ #include "components/prefs/pref_registry_simple.h"
+ #include "components/prefs/pref_service.h"
+ #include "components/search/ntp_features.h"
++#include "components/search_engines/template_url.h"
+ #include "components/search_engines/template_url_service.h"
+ #include "components/signin/public/identity_manager/accounts_in_cookie_jar_info.h"
+ #include "components/signin/public/identity_manager/identity_manager.h"
+@@ -224,6 +225,19 @@
+                                   .GoogleBaseURLValue());
+   source->AddString("googleBaseUrl", google_base_url.spec());
+ 
++  // Default search engine URL with a placeholder, used by the greeting page's
++  // search field. Empty when no default search engine is set.
++  std::string search_url_template;
++  TemplateURLService* template_url_service =
++      TemplateURLServiceFactory::GetForProfile(profile);
++  if (const TemplateURL* default_provider =
++          template_url_service->GetDefaultSearchProvider()) {
++    search_url_template = default_provider->url_ref().ReplaceSearchTerms(
++        TemplateURLRef::SearchTermsArgs(u"__QUERY__"),
++        template_url_service->search_terms_data());
++  }
++  source->AddString("defaultSearchUrlTemplate", search_url_template);
++
+   GURL threads_url = google_base_url.Resolve("/search");
+   threads_url = net::AppendQueryParameter(threads_url, "udm", kAIMDisplayMode);
+   threads_url = net::AppendQueryParameter(
+--- a/chrome/browser/resources/new_tab_page/app.html
++++ b/chrome/browser/resources/new_tab_page/app.html
+@@ -2,6 +2,11 @@
+   <div id="greeting">
+     <h1>${this.greeting_()}</h1>
+     <div class="sub">Where to today?</div>
++    <form id="searchForm" @submit="${this.onSearchSubmit_}">
++      <input id="searchInput" type="text" autocomplete="off" autofocus
++          spellcheck="false"
++          placeholder="Search privately or enter address">
++    </form>
+   </div>
+   ${this.lazyRender_ ? html`
+     ${this.shortcutsEnabled_ ? html`
+--- a/chrome/browser/resources/new_tab_page/app.css
++++ b/chrome/browser/resources/new_tab_page/app.css
+@@ -596,3 +596,32 @@
+   font-size: clamp(16px, 1.8vw, 22px);
+   color: var(--color-new-tab-page-secondary-foreground);
+ }
++
++#searchForm {
++  margin-top: 22px;
++  width: min(520px, 86vw);
++}
++
++#searchInput {
++  backdrop-filter: blur(14px);
++  background: color-mix(in oklab, var(--color-new-tab-page-primary-foreground) 10%, transparent);
++  border: 0;
++  border-radius: 999px;
++  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-new-tab-page-primary-foreground) 22%, transparent);
++  box-sizing: border-box;
++  color: var(--color-new-tab-page-primary-foreground);
++  font: inherit;
++  font-size: 15px;
++  outline: none;
++  padding: 14px 22px;
++  width: 100%;
++}
++
++#searchInput::placeholder {
++  color: var(--color-new-tab-page-secondary-foreground);
++}
++
++#searchInput:focus-visible {
++  box-shadow: inset 0 0 0 1.5px var(--color-new-tab-page-focus-ring),
++              0 0 0 4px color-mix(in oklab, var(--color-new-tab-page-focus-ring) 25%, transparent);
++}
+--- a/chrome/browser/resources/new_tab_page/app.ts
++++ b/chrome/browser/resources/new_tab_page/app.ts
+@@ -1430,6 +1430,32 @@
+         (!!this.theme_.backgroundImage || !this.theme_.isGm3);
+   }
+ 
++  protected onSearchSubmit_(e: Event) {
++    e.preventDefault();
++    const input = this.shadowRoot.querySelector<HTMLInputElement>(
++        '#searchInput')!;
++    const text = input.value.trim();
++    if (!text) {
++      return;
++    }
++    // Looks like an address: a scheme, or a dotted host without spaces.
++    const hasScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(text);
++    const looksLikeHost = !/\s/.test(text) && /^[^\s.]+\.[^\s.]{2,}(\/.*)?$/.test(text);
++    let target = '';
++    if (hasScheme && /^https?:/i.test(text)) {
++      target = text;
++    } else if (looksLikeHost) {
++      target = `https://${text}`;
++    } else {
++      const template = loadTimeData.getString('defaultSearchUrlTemplate');
++      if (!template) {
++        return;
++      }
++      target = template.replace('__QUERY__', encodeURIComponent(text));
++    }
++    window.location.href = target;
++  }
++
+   protected greeting_(): string {
+     const hour = new Date().getHours();
+     const part = hour < 5 ? 'Night' : hour < 12 ? 'Morning' :

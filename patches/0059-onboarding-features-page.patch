@@ -1,0 +1,94 @@
+--- a/components/helium_onboarding/src/lib/onboarding-flow.ts
++++ b/components/helium_onboarding/src/lib/onboarding-flow.ts
+@@ -10,6 +10,7 @@
+ 
+ export const flow = [
+     "Welcome",
++    "Features",
+     "PrivacyMode",
+     "Dns",
+     "TabLayout",
+--- a/components/helium_onboarding/src/pages/index.ts
++++ b/components/helium_onboarding/src/pages/index.ts
+@@ -1,4 +1,5 @@
+ export { default as Welcome } from "./Welcome.svelte";
++export { default as Features } from "./Features.svelte";
+ export { default as PrivacyMode } from "./PrivacyMode.svelte";
+ export { default as Dns } from "./Dns.svelte";
+ export { default as TabLayout } from "./TabLayout.svelte";
+--- a/components/helium_onboarding/src/pages/Features.svelte
++++ b/components/helium_onboarding/src/pages/Features.svelte
+@@ -0,0 +1,73 @@
++<script lang="ts">
++    import { HeliumLogo } from "@imput/helium-prism";
++    import { currentPage } from "../lib/onboarding-flow";
++
++    import PageHeader from "../components/PageHeader.svelte";
++
++    const features = [
++        { name: "Three privacy levels", detail: "Low, Medium (recommended) or High. Change it any time from the lock button in the sidebar or the switch on the home page." },
++        { name: "Isolated tabs", detail: "Press Ctrl+Alt+N for a tab with its own throwaway storage. Cookies and site data are not shared with other tabs and are deleted when it closes. It does not hide your IP address." },
++        { name: "Performance mode", detail: "A switch on the home page. Puts idle tabs to sleep, turns on energy saver and cuts down animations." },
++        { name: "Ad and tracker blocking", detail: "uBlock Origin is built in." },
++        { name: "Encrypted DNS", detail: "Pick your DNS provider in the next step. Change it later in Settings." },
++    ];
++
++    const visible = $derived($currentPage === "Features");
++</script>
++
++<div id="features-page" class="onboarding-page" class:visible>
++    <div class="scrollable-page">
++        <PageHeader
++            title="What you get"
++            subtitle="A quick tour. Next, a few choices to set things up."
++            Icon={HeliumLogo}
++            iconHeight="32px"
++        />
++        <div class="page-content">
++            <ul class="feature-list">
++                {#each features as feature (feature.name)}
++                    <li class="feature-card">
++                        <span class="feature-name">{feature.name}</span>
++                        <span class="feature-detail">{feature.detail}</span>
++                    </li>
++                {/each}
++            </ul>
++        </div>
++    </div>
++</div>
++
++<style>
++    #features-page {
++        --page-in-delay: 0.1s;
++    }
++
++    .feature-list {
++        display: flex;
++        flex-direction: column;
++        gap: 10px;
++        width: 100%;
++        margin: 0;
++        padding: 0;
++        list-style: none;
++    }
++
++    .feature-card {
++        display: flex;
++        flex-direction: column;
++        gap: 4px;
++        padding: 14px 16px;
++        background: var(--helium-elevated-5);
++        border: 2px solid var(--helium-elevated-10);
++        border-radius: 16px;
++    }
++
++    .feature-name {
++        font-weight: 600;
++        font-size: 1.05em;
++    }
++
++    .feature-detail {
++        opacity: 0.7;
++        font-size: 0.92em;
++    }
++</style>

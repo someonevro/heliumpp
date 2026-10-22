@@ -1,0 +1,21 @@
+--- a/chrome/browser/helium_theme/helium_theme.cc
++++ b/chrome/browser/helium_theme/helium_theme.cc
+@@ -61,7 +61,8 @@
+ constexpr SkColor kFallbackColor = SkColorSetRGB(0x20, 0x22, 0x2E);
+ 
+ constexpr int64_t kMaxWallpaperFileBytes = 64 * 1024 * 1024;
+-// The decoder shrinks the image to fit; plenty for estimating a color.
++// The decoder shrinks the image to fit; plenty for estimating a color. A
++// smaller cap (512 KB) made decoding fail and every wallpaper read as gray.
+ constexpr uint64_t kMaxDecodedBytes = 4 * 1024 * 1024;
+ 
+ #if BUILDFLAG(IS_LINUX)
+@@ -308,7 +309,7 @@
+   void OnNativeThemeUpdated(ui::NativeTheme*) override { Schedule(); }
+   void OnFileChanged(const base::FilePath&, bool) { Schedule(); }
+   void Schedule() {
+-    timer_.Start(FROM_HERE, base::Milliseconds(600),
++    timer_.Start(FROM_HERE, base::Milliseconds(150),
+                  base::BindOnce(&DesktopWatcher::Reload, base::Unretained(this)));
+   }
+ 

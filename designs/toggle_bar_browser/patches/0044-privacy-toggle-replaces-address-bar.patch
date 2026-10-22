@@ -1,0 +1,513 @@
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
+@@ -32,6 +32,10 @@
+ #include "ui/views/focus/focus_manager.h"
+ 
+ class BrowserView;
++class PrivacyToggleView;
++namespace content {
++class WebContents;
++}
+ class VerticalTabStripBottomContainer;
+ class VerticalTabStripFocusSwipeController;
+ class ShadowFrameView;
+@@ -47,6 +51,21 @@
+ class FlexLayout;
+ }  // namespace views
+ 
++class VerticalTabStripRegionView;
++
++// Watches focus while the sidebar address bar is temporarily revealed.
++class RevealFocusListener final : public views::FocusChangeListener {
++ public:
++  explicit RevealFocusListener(VerticalTabStripRegionView* region)
++      : region_(region) {}
++  ~RevealFocusListener() override = default;
++  void OnDidChangeFocus(views::View* focused_before,
++                        views::View* focused_now) override;
++
++ private:
++  raw_ptr<VerticalTabStripRegionView> region_;
++};
++
+ // Container for the vertical tabstrip and the other views sharing space with
+ // it, excluding the caption buttons.
+ class VerticalTabStripRegionView final
+@@ -63,6 +82,13 @@
+   void SetSidebarLocationBar(std::unique_ptr<views::View> location_bar);
+   std::unique_ptr<views::View> TakeSidebarLocationBar();
+ 
++  // Shows the privacy toggle in the address bar's place on every page except
++  // the homepage. The address bar itself only appears while it has focus
++  // (Ctrl+L), so the toggle never makes URL entry impossible.
++  void UpdatePrivacyToggle(content::WebContents* contents);
++  void OnRevealFocusChanged(views::View* focused_now);
++
++
+   DECLARE_CLASS_CUSTOM_ELEMENT_EVENT_TYPE(kAnimationCompletedEvent);
+ 
+   // TODO(crbug.com/465833741): Replace constant with derived value based on
+@@ -240,6 +266,14 @@
+ 
+   raw_ptr<VerticalTabStripBottomContainer> bottom_button_container_ = nullptr;
+   raw_ptr<views::View> sidebar_location_bar_ = nullptr;
++  raw_ptr<PrivacyToggleView> privacy_toggle_ = nullptr;
++  bool on_homepage_ = true;
++  bool location_bar_revealed_ = false;
++  void UpdateSidebarSlot(bool expanded);
++  void RevealSidebarLocationBar();
++  void HideRevealedLocationBar();
++
++  std::unique_ptr<RevealFocusListener> reveal_focus_listener_;
+   raw_ptr<views::View> gemini_button_ = nullptr;
+   raw_ptr<views::ResizeArea> resize_area_ = nullptr;
+   raw_ptr<ShadowFrameView> shadow_frame_ = nullptr;
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+@@ -16,6 +16,13 @@
+ #include "base/metrics/user_metrics_action.h"
+ #include "base/time/time.h"
+ #include "chrome/browser/ui/actions/chrome_action_id.h"
++#include "chrome/browser/ui/browser.h"
++#include "chrome/browser/ui/views/frame/privacy_toggle_view.h"
++#include "chrome/browser/ui/views/location_bar/location_bar_view.h"
++#include "content/public/browser/web_contents.h"
++#include "ui/gfx/geometry/transform.h"
++#include "ui/views/animation/animation_builder.h"
++#include "url/gurl.h"
+ #include "chrome/browser/ui/animation/browser_animation_controller.h"
+ #include "chrome/browser/ui/animation/browser_animation_types.h"
+ #include "chrome/browser/ui/browser_actions.h"
+@@ -814,8 +821,21 @@
+   sidebar_location_bar_->SetProperty(
+       views::kMarginsKey, gfx::Insets::TLBR(8, horizontal_padding, 2,
+                                             horizontal_padding));
+-  sidebar_location_bar_->SetVisible(state_controller_->GetCollapseState() ==
+-                                    tabs::VerticalTabStripCollapseState::kExpanded);
++  static_cast<LocationBarView*>(sidebar_location_bar_.get())
++      ->SetFocusRequestedCallback(base::BindRepeating(
++          &VerticalTabStripRegionView::RevealSidebarLocationBar,
++          base::Unretained(this)));
++  privacy_toggle_ = AddChildViewAt(
++      std::make_unique<PrivacyToggleView>(
++          browser_view()->browser()->GetProfile()),
++      1);
++  privacy_toggle_->SetProperty(
++      views::kMarginsKey,
++      gfx::Insets::TLBR(8, horizontal_padding, 2, horizontal_padding));
++  privacy_toggle_->SetPaintToLayer();
++  privacy_toggle_->layer()->SetFillsBoundsOpaquely(false);
++  UpdateSidebarSlot(state_controller_->GetCollapseState() ==
++                    tabs::VerticalTabStripCollapseState::kExpanded);
+   // Margins at the edge of the layout are collapsed, so give the address bar
+   // breathing room from the window edge with an interior margin.
+   flex_layout_->SetInteriorMargin(gfx::Insets::TLBR(kSidebarTopInset, 0, 0, 0));
+@@ -827,6 +847,13 @@
+     return nullptr;
+   }
+   views::View* bar = sidebar_location_bar_.get();
++  static_cast<LocationBarView*>(bar)->SetFocusRequestedCallback(
++      base::RepeatingClosure());
++  HideRevealedLocationBar();
++  if (privacy_toggle_) {
++    RemoveChildViewT(privacy_toggle_.get());
++    privacy_toggle_ = nullptr;
++  }
+   sidebar_location_bar_ = nullptr;
+   bar->SetVisible(true);
+   flex_layout_->SetInteriorMargin(gfx::Insets());
+@@ -834,6 +861,85 @@
+   return RemoveChildViewT(bar);
+ }
+ 
++void VerticalTabStripRegionView::UpdateSidebarSlot(bool expanded) {
++  if (sidebar_location_bar_) {
++    sidebar_location_bar_->SetVisible(expanded && location_bar_revealed_);
++  }
++  if (privacy_toggle_) {
++    const bool show = expanded && !on_homepage_ && !location_bar_revealed_;
++    if (show && !privacy_toggle_->GetVisible()) {
++      privacy_toggle_->Refresh();
++      // Fade in while sliding down a few pixels.
++      gfx::Transform start;
++      start.Translate(0, -8);
++      privacy_toggle_->layer()->SetOpacity(0.0f);
++      privacy_toggle_->layer()->SetTransform(start);
++      privacy_toggle_->SetVisible(true);
++      views::AnimationBuilder()
++          .Once()
++          .SetDuration(base::Milliseconds(240))
++          .SetOpacity(privacy_toggle_, 1.0f, gfx::Tween::EASE_OUT)
++          .SetTransform(privacy_toggle_, gfx::Transform(),
++                        gfx::Tween::EASE_OUT);
++    } else {
++      privacy_toggle_->SetVisible(show);
++    }
++  }
++  InvalidateLayout();
++}
++
++void VerticalTabStripRegionView::UpdatePrivacyToggle(
++    content::WebContents* contents) {
++  if (!privacy_toggle_) {
++    return;
++  }
++  const GURL url = contents ? contents->GetVisibleURL() : GURL();
++  on_homepage_ = url.SchemeIs("chrome") &&
++                 (url.host() == "newtab" || url.host() == "new-tab-page");
++  UpdateSidebarSlot(state_controller_->GetCollapseState() ==
++                    tabs::VerticalTabStripCollapseState::kExpanded);
++}
++
++void VerticalTabStripRegionView::RevealSidebarLocationBar() {
++  if (!sidebar_location_bar_ || location_bar_revealed_ || !GetWidget()) {
++    return;
++  }
++  location_bar_revealed_ = true;
++  // Hides the address bar again once focus leaves it. A null focus happens when
++  // the window is deactivated; keep the bar then.
++  reveal_focus_listener_ = std::make_unique<RevealFocusListener>(this);
++  GetWidget()->GetFocusManager()->AddFocusChangeListener(
++      reveal_focus_listener_.get());
++  UpdateSidebarSlot(true);
++  DeprecatedLayoutImmediately();
++}
++
++void VerticalTabStripRegionView::HideRevealedLocationBar() {
++  if (!location_bar_revealed_) {
++    return;
++  }
++  location_bar_revealed_ = false;
++  if (GetWidget() && GetWidget()->GetFocusManager()) {
++    GetWidget()->GetFocusManager()->RemoveFocusChangeListener(
++        reveal_focus_listener_.get());
++  }
++  UpdateSidebarSlot(state_controller_->GetCollapseState() ==
++                    tabs::VerticalTabStripCollapseState::kExpanded);
++}
++
++void RevealFocusListener::OnDidChangeFocus(views::View*,
++                                           views::View* focused_now) {
++  region_->OnRevealFocusChanged(focused_now);
++}
++
++void VerticalTabStripRegionView::OnRevealFocusChanged(
++    views::View* focused_now) {
++  if (focused_now && sidebar_location_bar_ &&
++      !sidebar_location_bar_->Contains(focused_now)) {
++    HideRevealedLocationBar();
++  }
++}
++
+ void VerticalTabStripRegionView::OnCollapseStateChanged(
+     tabs::VerticalTabStripCollapseState state) {
+   // Apply padding immediately at the start of the animation by including
+@@ -841,9 +947,7 @@
+   bool collapsed = state != tabs::VerticalTabStripCollapseState::kExpanded;
+ 
+   // The address bar does not fit in the narrow, collapsed strip.
+-  if (sidebar_location_bar_) {
+-    sidebar_location_bar_->SetVisible(!collapsed);
+-  }
++  UpdateSidebarSlot(!collapsed);
+ 
+   UpdateResizeAreaVisibility();
+ 
+--- a/chrome/browser/ui/views/location_bar/location_bar_view.h
++++ b/chrome/browser/ui/views/location_bar/location_bar_view.h
+@@ -14,6 +14,7 @@
+ 
+ #include "base/callback_list.h"
+ #include "base/gtest_prod_util.h"
++#include "base/functional/callback.h"
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/weak_ptr.h"
+ #include "base/scoped_observation.h"
+@@ -144,6 +145,12 @@
+   // Pill-shaped bar with a copy-link button on hover; used when the toolbar sits
+   // in the vertical tab sidebar.
+   void SetSidebarStyle(bool enabled);
++
++  // Called at the start of FocusLocation() so the sidebar can bring a hidden
++  // address bar back before it receives focus.
++  void SetFocusRequestedCallback(base::RepeatingClosure callback) {
++    focus_requested_callback_ = std::move(callback);
++  }
+   static int ComputeBorderRadius(gfx::Size size);
+ 
+   // Initializes the LocationBarView.
+@@ -333,6 +340,7 @@
+   OmniboxPopupUI* GetOmniboxPopupUI();
+ 
+  private:
++  base::RepeatingClosure focus_requested_callback_;
+   FRIEND_TEST_ALL_PREFIXES(SecurityIndicatorTest, CheckIndicatorText);
+   FRIEND_TEST_ALL_PREFIXES(TouchLocationBarViewBrowserTest,
+                            OmniboxViewViewsSize);
+--- a/chrome/browser/ui/views/location_bar/location_bar_view.cc
++++ b/chrome/browser/ui/views/location_bar/location_bar_view.cc
+@@ -725,6 +725,9 @@
+ 
+ void LocationBarView::FocusLocation(bool is_user_initiated,
+                                     bool clear_focus_if_failed) {
++  if (focus_requested_callback_) {
++    focus_requested_callback_.Run();
++  }
+   if (base::FeatureList::IsEnabled(omnibox::kWebUIOmniboxFullPopup)) {
+     if (IsFullWebUiOmniboxReady()) {
+       // In Full WebUI mode, `LocationBarView` is the focusable Views proxy for
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+@@ -1403,6 +1403,9 @@
+ }
+ 
+ void ToolbarView::Update(WebContents* tab) {
++  if (auto* region = browser_view_->vertical_tab_strip_region_view()) {
++    region->UpdatePrivacyToggle(tab);
++  }
+   if (location_bar_) {
+     location_bar_->Update(tab);
+   }
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -2764,6 +2764,8 @@
+       "views/frame/picture_in_picture_browser_frame_view.h",
+       "views/frame/top_container_view.cc",
+       "views/frame/top_container_view.h",
++      "views/frame/privacy_toggle_view.cc",
++      "views/frame/privacy_toggle_view.h",
+       "views/frame/vertical_tab_strip_region_view.cc",
+       "views/frame/vertical_tab_strip_region_view.h",
+       "views/helium/frame_corner_radius.cc",
+--- a/chrome/browser/ui/views/frame/privacy_toggle_view.h
++++ b/chrome/browser/ui/views/frame/privacy_toggle_view.h
+@@ -0,0 +1,50 @@
++#ifndef CHROME_BROWSER_UI_VIEWS_FRAME_PRIVACY_TOGGLE_VIEW_H_
++#define CHROME_BROWSER_UI_VIEWS_FRAME_PRIVACY_TOGGLE_VIEW_H_
++
++#include <string>
++
++#include "base/memory/raw_ptr.h"
++#include "ui/base/metadata/metadata_header_macros.h"
++#include "ui/gfx/animation/animation_delegate.h"
++#include "ui/gfx/animation/slide_animation.h"
++#include "ui/views/view.h"
++
++class Profile;
++
++// Low / Medium / High privacy level switch shown in the sidebar instead of the
++// address bar. Reads and writes the same stored mode as the first-run chooser,
++// Settings and the new tab page (helium_privacy_mode).
++class PrivacyToggleView : public views::View, public gfx::AnimationDelegate {
++  METADATA_HEADER(PrivacyToggleView, views::View)
++
++ public:
++  explicit PrivacyToggleView(Profile* profile);
++  ~PrivacyToggleView() override;
++
++  // Re-reads the stored mode (it may have been changed elsewhere).
++  void Refresh();
++
++  // views::View:
++  gfx::Size CalculatePreferredSize(
++      const views::SizeBounds& available_size) const override;
++  void OnPaint(gfx::Canvas* canvas) override;
++  bool OnMousePressed(const ui::MouseEvent& event) override;
++  bool OnKeyPressed(const ui::KeyEvent& event) override;
++  void OnMouseMoved(const ui::MouseEvent& event) override;
++
++  // gfx::AnimationDelegate:
++  void AnimationProgressed(const gfx::Animation* animation) override;
++
++ private:
++  int IndexAt(int x) const;
++  void Select(int index);
++  std::u16string Caption() const;
++
++  raw_ptr<Profile> profile_;
++  int selected_ = -1;
++  int from_ = -1;
++  bool restart_required_ = false;
++  gfx::SlideAnimation slide_{this};
++};
++
++#endif  // CHROME_BROWSER_UI_VIEWS_FRAME_PRIVACY_TOGGLE_VIEW_H_
+--- a/chrome/browser/ui/views/frame/privacy_toggle_view.cc
++++ b/chrome/browser/ui/views/frame/privacy_toggle_view.cc
+@@ -0,0 +1,176 @@
++#include "chrome/browser/ui/views/frame/privacy_toggle_view.h"
++
++#include <algorithm>
++
++#include "cc/paint/paint_flags.h"
++#include "chrome/browser/helium_privacy_mode/helium_privacy_mode.h"
++#include "chrome/browser/profiles/profile.h"
++#include "ui/accessibility/ax_enums.mojom.h"
++#include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/color/color_id.h"
++#include "ui/color/color_provider.h"
++#include "ui/events/event.h"
++#include "ui/events/keycodes/keyboard_codes.h"
++#include "ui/gfx/canvas.h"
++#include "ui/gfx/font_list.h"
++#include "ui/gfx/geometry/rect_f.h"
++#include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/controls/focus_ring.h"
++
++namespace {
++
++constexpr int kSegmentsHeight = 28;
++constexpr int kCaptionGap = 3;
++constexpr int kCaptionHeight = 13;
++constexpr int kPad = 3;
++
++struct Level {
++  const char* id;  // stored mode name
++  const char16_t* label;
++  const char16_t* tooltip;
++  const char16_t* caption;
++};
++
++constexpr Level kLevels[] = {
++    {"usability", u"Low", u"Low: fewest site problems", u"Fewest site problems"},
++    {"medium", u"Medium", u"Medium (Recommended)", u"Recommended"},
++    {"maximum", u"High", u"High: strictest, some sites may break",
++     u"Strictest, may break sites"},
++};
++constexpr int kLevelCount = static_cast<int>(std::size(kLevels));
++
++}  // namespace
++
++PrivacyToggleView::PrivacyToggleView(Profile* profile) : profile_(profile) {
++  GetViewAccessibility().SetRole(ax::mojom::Role::kRadioGroup);
++  GetViewAccessibility().SetName(u"Privacy level");
++  SetFocusBehavior(FocusBehavior::ALWAYS);
++  views::FocusRing::Install(this);
++  slide_.SetSlideDuration(base::Milliseconds(200));
++  slide_.SetTweenType(gfx::Tween::EASE_OUT);
++  Refresh();
++}
++
++PrivacyToggleView::~PrivacyToggleView() = default;
++
++void PrivacyToggleView::Refresh() {
++  const std::string mode = helium_privacy_mode::GetModeName(profile_);
++  int index = -1;
++  for (int i = 0; i < kLevelCount; ++i) {
++    if (mode == kLevels[i].id) {
++      index = i;
++    }
++  }
++  selected_ = from_ = index;
++  slide_.Reset(1.0);
++  SchedulePaint();
++}
++
++gfx::Size PrivacyToggleView::CalculatePreferredSize(
++    const views::SizeBounds&) const {
++  return gfx::Size(150, kSegmentsHeight + kCaptionGap + kCaptionHeight);
++}
++
++int PrivacyToggleView::IndexAt(int x) const {
++  const int segment_width = std::max(1, width() / kLevelCount);
++  return std::clamp(x / segment_width, 0, kLevelCount - 1);
++}
++
++void PrivacyToggleView::Select(int index) {
++  if (index == selected_ || index < 0 || index >= kLevelCount) {
++    return;
++  }
++  bool restart = false;
++  if (!helium_privacy_mode::SetMode(profile_, kLevels[index].id, &restart)) {
++    return;
++  }
++  from_ = selected_ < 0 ? index : selected_;
++  selected_ = index;
++  restart_required_ = restart;
++  slide_.Reset(0.0);
++  slide_.Show();
++  SchedulePaint();
++}
++
++std::u16string PrivacyToggleView::Caption() const {
++  if (restart_required_) {
++    return u"Restart to fully apply";
++  }
++  return selected_ >= 0 ? kLevels[selected_].caption : u"Choose a privacy level";
++}
++
++void PrivacyToggleView::OnPaint(gfx::Canvas* canvas) {
++  const ui::ColorProvider* colors = GetColorProvider();
++  const float segment_width = static_cast<float>(width()) / kLevelCount;
++  const gfx::RectF track(0, 0, width(), kSegmentsHeight);
++  const float radius = kSegmentsHeight / 2.0f;
++
++  cc::PaintFlags flags;
++  flags.setAntiAlias(true);
++  flags.setStyle(cc::PaintFlags::kFill_Style);
++  flags.setColor(colors->GetColor(ui::kColorSysSurface3));
++  canvas->DrawRoundRect(track, radius, flags);
++
++  if (selected_ >= 0) {
++    const float t = static_cast<float>(slide_.GetCurrentValue());
++    const float x = (from_ + (selected_ - from_) * t) * segment_width;
++    const gfx::RectF pill(x + kPad, kPad, segment_width - 2 * kPad,
++                          kSegmentsHeight - 2 * kPad);
++    flags.setColor(colors->GetColor(ui::kColorSysTonalContainer));
++    canvas->DrawRoundRect(pill, pill.height() / 2, flags);
++  }
++
++  const gfx::FontList font = gfx::FontList().DeriveWithWeight(
++      gfx::Font::Weight::MEDIUM);
++  for (int i = 0; i < kLevelCount; ++i) {
++    const SkColor color = colors->GetColor(i == selected_
++                                               ? ui::kColorSysOnTonalContainer
++                                               : ui::kColorSysOnSurfaceSubtle);
++    canvas->DrawStringRectWithFlags(
++        kLevels[i].label, font, color,
++        gfx::Rect(static_cast<int>(i * segment_width), 0,
++                  static_cast<int>(segment_width), kSegmentsHeight),
++        gfx::Canvas::TEXT_ALIGN_CENTER);
++  }
++
++  canvas->DrawStringRectWithFlags(
++      Caption(), gfx::FontList().DeriveWithSizeDelta(-3),
++      colors->GetColor(ui::kColorSysOnSurfaceSubtle),
++      gfx::Rect(0, kSegmentsHeight + kCaptionGap, width(), kCaptionHeight),
++      gfx::Canvas::TEXT_ALIGN_CENTER);
++}
++
++bool PrivacyToggleView::OnMousePressed(const ui::MouseEvent& event) {
++  if (!event.IsOnlyLeftMouseButton() || event.y() > kSegmentsHeight) {
++    return false;
++  }
++  Select(IndexAt(event.x()));
++  RequestFocus();
++  return true;
++}
++
++bool PrivacyToggleView::OnKeyPressed(const ui::KeyEvent& event) {
++  const int current = selected_ < 0 ? 0 : selected_;
++  if (event.key_code() == ui::VKEY_LEFT) {
++    Select(std::max(0, current - 1));
++    return true;
++  }
++  if (event.key_code() == ui::VKEY_RIGHT) {
++    Select(std::min(kLevelCount - 1, current + 1));
++    return true;
++  }
++  return false;
++}
++
++void PrivacyToggleView::OnMouseMoved(const ui::MouseEvent& event) {
++  SetTooltipText(event.y() <= kSegmentsHeight
++                     ? std::u16string(kLevels[IndexAt(event.x())].tooltip)
++                     : std::u16string());
++}
++
++void PrivacyToggleView::AnimationProgressed(const gfx::Animation*) {
++  SchedulePaint();
++}
++
++BEGIN_METADATA(PrivacyToggleView)
++END_METADATA

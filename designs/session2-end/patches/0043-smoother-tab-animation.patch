@@ -1,0 +1,14 @@
+--- a/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.cc
+@@ -83,8 +83,9 @@
+       animation_axis_(animation_axis),
+       animate_host_size_(animate_host_size) {
+   animation_.SetSlideDuration(
+-      gfx::Animation::RichAnimationDuration(base::Milliseconds(200)));
+-  animation_.SetTweenType(gfx::Tween::EASE_IN_OUT);
++      gfx::Animation::RichAnimationDuration(base::Milliseconds(300)));
++  // Tabs open and close with a quick start and a soft landing.
++  animation_.SetTweenType(gfx::Tween::FAST_OUT_SLOW_IN);
+ }
+ 
+ TabCollectionAnimatingLayoutManager::~TabCollectionAnimatingLayoutManager() =

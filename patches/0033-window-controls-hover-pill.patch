@@ -1,0 +1,57 @@
+--- a/chrome/browser/ui/views/frame/opaque_browser_frame_view.cc
++++ b/chrome/browser/ui/views/frame/opaque_browser_frame_view.cc
+@@ -49,6 +49,8 @@
+ #include "ui/gfx/scoped_canvas.h"
+ #include "base/command_line.h"
+ #include "ui/gfx/geometry/transform.h"
++#include "chrome/browser/ui/side_panel/side_panel_ui.h"
++#include "ui/views/background.h"
+ #include "ui/views/event_monitor.h"
+ #include "ui/views/controls/button/image_button.h"
+ #include "ui/views/controls/label.h"
+@@ -161,8 +163,8 @@
+ 
+ OpaqueBrowserFrameView::~OpaqueBrowserFrameView() = default;
+ 
+-constexpr int kRevealHotZoneWidth = 200;
+-constexpr int kRevealHotZoneHeight = 14;
++constexpr int kRevealHotZoneWidth = 320;
++constexpr int kRevealHotZoneHeight = 22;
+ constexpr int kRevealMargin = 12;
+ 
+ bool OpaqueBrowserFrameView::ShouldAutoHideCaptionButtons() const {
+@@ -170,8 +172,7 @@
+       base::CommandLine::ForCurrentProcess()->HasSwitch("no-sidebar-toolbar");
+   auto* controller =
+       HeliumLayoutStateController::From(GetBrowserView()->browser());
+-  return !disabled && controller && controller->IsVerticalLayout() &&
+-         !controller->IsZenModeEnabled();
++  return !disabled && controller && !controller->IsZenModeEnabled();
+ }
+ 
+ gfx::Rect OpaqueBrowserFrameView::CaptionButtonsBounds() const {
+@@ -193,6 +194,10 @@
+     if (button) {
+       button->SetPaintToLayer();
+       button->layer()->SetFillsBoundsOpaquely(false);
++      // Themed round backdrop so the revealed buttons read as a floating pill
++      // over the page instead of stock Chromium caption buttons.
++      button->SetBackground(
++          views::CreateRoundedRectBackground(kColorToolbar, 16.0f));
+     }
+   }
+   UpdateCaptionButtonReveal();
+@@ -233,8 +238,12 @@
+   const gfx::Point point =
+       gfx::ToFlooredPoint(event.AsMouseEvent()->root_location_f());
+   const gfx::Rect bounds = GetLocalBounds();
++  // The side panel's own close button sits in this corner; revealing the
++  // window controls over it made clicking it close the whole window.
++  auto* side_panel_ui = SidePanelUI::From(GetBrowserView()->browser());
+   const bool in_hot_zone = point.x() >= bounds.right() - kRevealHotZoneWidth &&
+-                           point.y() <= kRevealHotZoneHeight;
++                           point.y() <= kRevealHotZoneHeight &&
++                           !(side_panel_ui && side_panel_ui->IsSidePanelShowing());
+   gfx::Rect controls = CaptionButtonsBounds();
+   controls.Outset(kRevealMargin);
+   const bool on_controls =

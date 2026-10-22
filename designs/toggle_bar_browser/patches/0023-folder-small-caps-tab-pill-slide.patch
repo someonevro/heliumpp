@@ -1,0 +1,168 @@
+--- a/chrome/browser/ui/views/tabs/common/tab_group_header_view.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_group_header_view.cc
+@@ -2,6 +2,7 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include "base/i18n/case_conversion.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_group_header_view.h"
+ 
+ #include "base/task/single_thread_task_runner.h"
+@@ -124,6 +125,10 @@
+     SetHorizontalAlignment(gfx::ALIGN_TO_HEAD);
+     SetElideBehavior(gfx::FADE_TAIL);
+     SetAutoColorReadabilityEnabled(false);
++    // Folder labels read as small caps: upper-cased (see OnDataChanged), a
++    // size smaller and semibold.
++    SetFontList(font_list().Derive(-2, gfx::Font::NORMAL,
++                                   gfx::Font::Weight::SEMIBOLD));
+   }
+ };
+ 
+@@ -524,7 +529,8 @@
+   tab_group_visual_data_ = tab_group_data.visual_data;
+   is_shared_ = tab_group_data.is_sharing_group;
+ 
+-  group_header_label_->SetText(tab_group_visual_data_.title());
++  group_header_label_->SetText(
++      base::i18n::ToUpper(tab_group_visual_data_.title()));
+   if (GetColorProvider()) {
+     SkColor background_color = GetColorProvider()->GetColor(
+         GetTabGroupTabStripColorId(tab_group_visual_data_.color(),
+--- a/chrome/browser/ui/views/tabs/common/tab_view.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_view.cc
+@@ -420,6 +420,38 @@
+ 
+ TabView::~TabView() = default;
+ 
++namespace {
++// Screen y of the most recently activated tab, and the direction of the move.
++// Shared by all tabs so the previous and the new tab agree on it.
++int g_last_active_y = 0;
++bool g_select_travel_down = true;
++
++class SelectAnimationDelegate : public gfx::AnimationDelegate {
++ public:
++  explicit SelectAnimationDelegate(views::View* view) : view_(view) {}
++  void AnimationProgressed(const gfx::Animation*) override {
++    view_->SchedulePaint();
++  }
++  void AnimationEnded(const gfx::Animation*) override { view_->SchedulePaint(); }
++
++ private:
++  raw_ptr<views::View> view_;
++};
++}  // namespace
++
++bool TabView::IsSelectAnimationRunning(float* value) const {
++  if (!select_animation_ || !select_animation_->is_animating()) {
++    return false;
++  }
++  *value = static_cast<float>(select_animation_->GetCurrentValue());
++  return true;
++}
++
++// static
++bool TabView::IsSelectTravelDown() {
++  return g_select_travel_down;
++}
++
+ void TabView::LayoutManager::OnInstalled(views::View* host) {
+   CHECK(IsViewClass<class TabView>(host));
+ }
+@@ -1081,7 +1113,27 @@
+   int index = tab_strip_model->GetIndexOfTab(tab);
+   CHECK(index != TabStripModel::kNoTab);
+ 
++  const bool was_active = active_;
+   active_ = tab_strip_model->IsTabInForeground(index);
++  if (!select_animation_) {
++    select_animation_delegate_ = std::make_unique<SelectAnimationDelegate>(this);
++    select_animation_ = std::make_unique<gfx::SlideAnimation>(
++        select_animation_delegate_.get());
++    select_animation_->SetSlideDuration(base::Milliseconds(200));
++    select_animation_->Reset(active_ ? 1.0 : 0.0);
++  } else if (active_ != was_active) {
++    if (active_ && GetWidget()) {
++      gfx::Point origin;
++      views::View::ConvertPointToScreen(this, &origin);
++      g_select_travel_down = origin.y() >= g_last_active_y;
++      g_last_active_y = origin.y();
++    }
++    if (GetWidget() && IsDrawn()) {
++      active_ ? select_animation_->Show() : select_animation_->Hide();
++    } else {
++      select_animation_->Reset(active_ ? 1.0 : 0.0);
++    }
++  }
+   split_ = tab->IsSplit();
+   pinned_ = tab->IsPinned();
+ 
+--- a/chrome/browser/ui/views/tabs/common/tab_view.h
++++ b/chrome/browser/ui/views/tabs/common/tab_view.h
+@@ -25,6 +25,8 @@
+ #include "third_party/skia/include/core/SkScalar.h"
+ #include "ui/base/metadata/metadata_header_macros.h"
+ #include "ui/gfx/canvas.h"
++#include "ui/gfx/animation/animation_delegate.h"
++#include "ui/gfx/animation/slide_animation.h"
+ #include "ui/views/context_menu_controller.h"
+ #include "ui/views/layout/layout_manager_base.h"
+ #include "ui/views/masked_targeter_delegate.h"
+@@ -95,6 +97,14 @@
+   void UpdateHovered(bool hovered);
+   bool IsHoverAnimationActive() const;
+ 
++  // The selection pill wipes in over the newly active tab and out of the
++  // previously active one, so the pill appears to slide between tabs.
++  // Returns true while that animation runs; `value` goes 0..1 as the tab
++  // becomes active (and 1..0 as it stops being active).
++  bool IsSelectAnimationRunning(float* value) const;
++  // True when the last activation moved down the list.
++  static bool IsSelectTravelDown();
++
+   std::optional<SkColor> GetBackgroundColor();
+   SkPath GetPath() const;
+ 
+@@ -237,6 +247,8 @@
+ 
+   tabs::TabData tab_data_;
+   bool active_ = false;
++  std::unique_ptr<gfx::AnimationDelegate> select_animation_delegate_;
++  std::unique_ptr<gfx::SlideAnimation> select_animation_;
+   bool selected_ = false;
+   bool hovered_ = false;
+   bool split_ = false;
+--- a/chrome/browser/ui/views/tabs/common/vertical_tab_style_views.cc
++++ b/chrome/browser/ui/views/tabs/common/vertical_tab_style_views.cc
+@@ -159,8 +159,28 @@
+ 
+   canvas->ClipPath(fill_path, true);
+ 
+-  if (ShouldPaintTabBackgroundColor(selection_state, fill_id.has_value(),
+-                                    hovered)) {
++  // While the selection animation runs, paint only the part of the pill that
++  // has arrived (entering tab) or has not yet left (leaving tab).
++  float wipe = 0;
++  const TabView* const tab_view =
++      views::AsViewClass<TabView>(delegate_->GetView());
++  if (tab_view && tab_view->IsSelectAnimationRunning(&wipe) &&
++      !fill_id.has_value()) {
++    const gfx::Rect local = delegate_->GetView()->GetLocalBounds();
++    const int pill_height = static_cast<int>(local.height() * wipe + 0.5f);
++    const bool down = TabView::IsSelectTravelDown();
++    const bool entering = delegate_->IsActive();
++    const bool anchored_top = entering ? down : !down;
++    gfx::Rect pill(local.x(),
++                   anchored_top ? local.y() : local.bottom() - pill_height,
++                   local.width(), pill_height);
++    cc::PaintFlags flags;
++    flags.setAntiAlias(true);
++    flags.setColor(GetCurrentTabBackgroundColor(
++        TabStyle::TabSelectionState::kActive));
++    canvas->DrawRect(gfx::ScaleToEnclosingRect(pill, scale), flags);
++  } else if (ShouldPaintTabBackgroundColor(selection_state,
++                                           fill_id.has_value(), hovered)) {
+     cc::PaintFlags flags;
+     flags.setAntiAlias(true);
+     flags.setColor(GetCurrentTabBackgroundColor(selection_state));

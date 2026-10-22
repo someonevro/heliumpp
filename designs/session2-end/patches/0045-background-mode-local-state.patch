@@ -1,0 +1,14 @@
+--- a/chrome/browser/helium_privacy_mode/helium_privacy_mode.cc
++++ b/chrome/browser/helium_privacy_mode/helium_privacy_mode.cc
+@@ -131,7 +131,10 @@
+   prefs->SetInteger(
+       prefetch::prefs::kNetworkPredictionOptions,
+       static_cast<int>(prefetch::NetworkPredictionOptions::kDisabled));
+-  prefs->SetBoolean(prefs::kBackgroundModeEnabled, false);
++  // Background mode is a browser-wide (local state) pref; it is not registered
++  // in the profile prefs.
++  g_browser_process->local_state()->SetBoolean(prefs::kBackgroundModeEnabled,
++                                               false);
+   prefs->SetBoolean(prefs::kEnableQuietNotificationPermissionUi,
+                     mode.permissions == Permissions::kAskRestricted);
+ 

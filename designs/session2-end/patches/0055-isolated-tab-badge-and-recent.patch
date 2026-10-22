@@ -1,0 +1,102 @@
+--- a/chrome/browser/ui/views/tabs/common/tab_view.h
++++ b/chrome/browser/ui/views/tabs/common/tab_view.h
+@@ -254,6 +254,8 @@
+   bool split_ = false;
+   bool collapsed_ = false;
+   bool pinned_ = false;
++  // Tab with its own private storage area: draws a small badge on the icon.
++  bool isolated_ = false;
+   bool shift_pressed_on_mouse_down_ = false;
+   bool should_fill_background_tab_color_ = false;
+ 
+--- a/chrome/browser/ui/views/tabs/common/tab_view.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_view.cc
+@@ -2,6 +2,12 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include "chrome/browser/helium_privacy_mode/helium_privacy_mode.h"
++#include "cc/paint/paint_flags.h"
++#include "ui/compositor/paint_recorder.h"
++#include "ui/color/color_id.h"
++#include "ui/gfx/canvas.h"
++#include "ui/gfx/geometry/point_f.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_view.h"
+ 
+ #include <optional>
+@@ -819,6 +825,22 @@
+   }
+ 
+   View::PaintChildren(info);
++
++  if (isolated_) {
++    // Small badge on the bottom-right of the favicon: accent dot with a ring in
++    // the surface colour so it reads on any tab background.
++    ui::PaintRecorder recorder(info.context(), size());
++    gfx::Canvas* canvas = recorder.canvas();
++    const gfx::Rect icon = icon_->bounds();
++    const gfx::PointF center(icon.right() - 2.0f, icon.bottom() - 2.0f);
++    cc::PaintFlags flags;
++    flags.setAntiAlias(true);
++    flags.setStyle(cc::PaintFlags::kFill_Style);
++    flags.setColor(GetColorProvider()->GetColor(ui::kColorSysSurface));
++    canvas->DrawCircle(center, 5.5f, flags);
++    flags.setColor(GetColorProvider()->GetColor(ui::kColorSysPrimary));
++    canvas->DrawCircle(center, 3.75f, flags);
++  }
+ }
+ 
+ void TabView::OnPaint(gfx::Canvas* canvas) {
+@@ -1077,6 +1099,9 @@
+ 
+   std::u16string name =
+       tabs::GetAccessibleTabLabel(GetTabInterface(), /*is_for_tab=*/true);
++  if (isolated_ && !name.empty()) {
++    name += u", isolated tab";
++  }
+   if (!name.empty()) {
+     GetViewAccessibility().SetName(name);
+   } else {
+@@ -1140,6 +1165,11 @@
+   }
+   split_ = tab->IsSplit();
+   pinned_ = tab->IsPinned();
++  const bool isolated = helium_privacy_mode::IsIsolatedWebContents(tab->GetContents());
++  if (isolated != isolated_) {
++    isolated_ = isolated;
++    SchedulePaint();
++  }
+ 
+   SetSelection(tab->IsSelected());
+   UpdateTabData(tab_data_observer_->tab_data());
+--- a/components/sessions/content/content_live_tab.cc
++++ b/components/sessions/content/content_live_tab.cc
+@@ -9,6 +9,11 @@
+ #include "base/memory/ptr_util.h"
+ #include "components/sessions/content/content_platform_specific_tab_data.h"
+ #include "components/sessions/content/session_tab_helper.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/browser/storage_partition_config.h"
++#include "content/public/browser/storage_partition.h"
++#include "content/public/browser/site_instance.h"
++#include "content/public/browser/browser_context.h"
+ #include "content/public/browser/navigation_controller.h"
+ #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
+ 
+@@ -28,6 +33,16 @@
+ }
+ 
+ bool ContentLiveTab::IsInitialBlankNavigation() {
++  // Helium: a tab with a private (isolated) storage area is reported as blank
++  // so it never lands in the "recently closed" list (or its file on disk).
++  content::WebContents* contents = &GetWebContents();
++  content::SiteInstance* site_instance = contents->GetSiteInstance();
++  if (site_instance && contents->GetBrowserContext()
++                               ->GetStoragePartition(site_instance)
++                               ->GetConfig()
++                               .partition_domain() == "heliumisolated") {
++    return true;
++  }
+   return navigation_controller().IsInitialBlankNavigation();
+ }
+ 

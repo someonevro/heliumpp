@@ -1,0 +1,139 @@
+--- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_footer.cc
++++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_footer.cc
+@@ -5,18 +5,40 @@
+ #include "base/functional/bind.h"
+ #include "chrome/app/chrome_command_ids.h"
+ #include "chrome/app/vector_icons/vector_icons.h"
++#include "chrome/browser/helium_privacy_mode/helium_privacy_mode.h"
++#include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
+ #include "components/vector_icons/vector_icons.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+ #include "ui/views/controls/button/image_button.h"
+ #include "ui/views/controls/button/image_button_factory.h"
++#include "ui/base/mojom/menu_source_type.mojom.h"
++#include "ui/views/controls/menu/menu_runner.h"
+ #include "ui/views/layout/flex_layout_types.h"
+ #include "ui/views/view_class_properties.h"
+ 
+ namespace {
+ constexpr int kIconSize = 18;
+-constexpr int kButtonSize = 28;
++constexpr int kButtonSize = 25;
++
++// Privacy level menu: command id -> stored mode name (see helium_privacy_mode).
++constexpr int kPrivacyLow = 1;
++constexpr int kPrivacyMedium = 2;
++constexpr int kPrivacyHigh = 3;
++
++const char* ModeForCommand(int command_id) {
++  switch (command_id) {
++    case kPrivacyLow:
++      return "usability";
++    case kPrivacyMedium:
++      return "medium";
++    case kPrivacyHigh:
++      return "maximum";
++  }
++  return nullptr;
++}
+ }  // namespace
+ 
+ VerticalTabStripFooter::VerticalTabStripFooter(
+@@ -26,6 +48,7 @@
+   SetMainAxisAlignment(views::LayoutAlignment::kCenter);
+   SetCrossAxisAlignment(views::LayoutAlignment::kCenter);
+ 
++  AddPrivacyButton();
+   AddButton(kCreateNewTabGroupOldIcon, IDC_CREATE_NEW_TAB_GROUP,
+             u"New folder (tab group)");
+   AddButton(vector_icons::kSettingsIcon, IDC_OPTIONS, u"Settings");
+@@ -62,6 +85,43 @@
+   AddChildView(std::move(button));
+ }
+ 
++void VerticalTabStripFooter::AddPrivacyButton() {
++  auto button = views::CreateVectorImageButtonWithNativeTheme(
++      views::Button::PressedCallback(), vector_icons::kLockIcon, kIconSize);
++  views::View* anchor = button.get();
++  button->SetCallback(base::BindRepeating(
++      &VerticalTabStripFooter::ShowPrivacyMenu, base::Unretained(this),
++      base::Unretained(anchor)));
++  button->SetTooltipText(u"Privacy level");
++  button->SetPreferredSize(gfx::Size(kButtonSize, kButtonSize));
++  button->SetProperty(views::kMarginsKey, gfx::Insets::VH(1, 0));
++  AddChildView(std::move(button));
++}
++
++void VerticalTabStripFooter::ShowPrivacyMenu(views::View* anchor) {
++  privacy_menu_model_ = std::make_unique<ui::SimpleMenuModel>(this);
++  privacy_menu_model_->AddRadioItem(kPrivacyLow, u"Low", 0);
++  privacy_menu_model_->AddRadioItem(kPrivacyMedium, u"Medium (Recommended)", 0);
++  privacy_menu_model_->AddRadioItem(kPrivacyHigh, u"High", 0);
++  privacy_menu_runner_ = std::make_unique<views::MenuRunner>(
++      privacy_menu_model_.get(), views::MenuRunner::HAS_MNEMONICS);
++  privacy_menu_runner_->RunMenuAt(
++      anchor->GetWidget(), nullptr, anchor->GetBoundsInScreen(),
++      views::MenuAnchorPosition::kTopLeft, ui::mojom::MenuSourceType::kMouse);
++}
++
++bool VerticalTabStripFooter::IsCommandIdChecked(int command_id) const {
++  const char* mode = ModeForCommand(command_id);
++  return mode &&
++         helium_privacy_mode::GetModeName(browser_->GetProfile()) == mode;
++}
++
++void VerticalTabStripFooter::ExecuteCommand(int command_id, int event_flags) {
++  if (const char* mode = ModeForCommand(command_id)) {
++    helium_privacy_mode::SetMode(browser_->GetProfile(), mode);
++  }
++}
++
+ void VerticalTabStripFooter::OnCollapseStateChanged(
+     tabs::VerticalTabStripCollapseState state) {
+   SetOrientation(state == tabs::VerticalTabStripCollapseState::kExpanded
+--- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_footer.h
++++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_footer.h
+@@ -5,7 +5,9 @@
+ 
+ #include "base/callback_list.h"
+ #include "base/memory/raw_ptr.h"
++#include "ui/menus/simple_menu_model.h"
+ #include "ui/base/metadata/metadata_header_macros.h"
++#include "ui/views/controls/menu/menu_runner.h"
+ #include "ui/views/layout/flex_layout_view.h"
+ 
+ class BrowserWindowInterface;
+@@ -22,7 +24,8 @@
+ // A row of icon buttons at the bottom of the vertical tab strip that opens
+ // settings, extensions, downloads, history and the bookmark manager. Laid out
+ // horizontally when the strip is expanded and vertically when it is collapsed.
+-class VerticalTabStripFooter : public views::FlexLayoutView {
++class VerticalTabStripFooter : public views::FlexLayoutView,
++                               public ui::SimpleMenuModel::Delegate {
+   METADATA_HEADER(VerticalTabStripFooter, views::FlexLayoutView)
+ 
+  public:
+@@ -30,11 +33,20 @@
+                          BrowserWindowInterface* browser);
+   ~VerticalTabStripFooter() override;
+ 
++  // ui::SimpleMenuModel::Delegate:
++  bool IsCommandIdChecked(int command_id) const override;
++  void ExecuteCommand(int command_id, int event_flags) override;
++
+  private:
+   void AddButton(const gfx::VectorIcon& icon,
+                  int command_id,
+                  std::u16string_view tooltip);
+   void OnCollapseStateChanged(tabs::VerticalTabStripCollapseState state);
++  void AddPrivacyButton();
++  void ShowPrivacyMenu(views::View* anchor);
++
++  std::unique_ptr<ui::SimpleMenuModel> privacy_menu_model_;
++  std::unique_ptr<views::MenuRunner> privacy_menu_runner_;
+ 
+   raw_ptr<BrowserWindowInterface> browser_ = nullptr;
+   base::CallbackListSubscription collapsed_state_change_subscription_;

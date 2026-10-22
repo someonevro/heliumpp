@@ -1,0 +1,293 @@
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -865,6 +865,8 @@
+     "helium_noise/helium_noise_settings.cc",
+     "helium_noise/helium_noise_settings.h",
+     "helium_privacy_mode/helium_privacy_mode.cc",
++    "helium_theme/helium_theme.cc",
++    "helium_theme/helium_theme.h",
+     "helium_privacy_mode/helium_privacy_mode.h",
+     "icon_manager.cc",
+     "intranet_redirect_detector.cc",
+--- a/chrome/browser/profiles/profile_impl.cc
++++ b/chrome/browser/profiles/profile_impl.cc
+@@ -87,6 +87,7 @@
+ #include "chrome/browser/profiles/profile_avatar_icon_util.h"
+ #include "chrome/browser/profiles/profile_destroyer.h"
+ #include "chrome/browser/helium_privacy_mode/helium_privacy_mode.h"
++#include "chrome/browser/helium_theme/helium_theme.h"
+ #include "chrome/browser/profiles/profile_key.h"
+ #include "chrome/browser/profiles/profile_manager.h"
+ #include "chrome/browser/profiles/profile_metrics.h"
+@@ -1207,6 +1208,7 @@
+       this);
+ 
+   helium_privacy_mode::Apply(this);
++  helium_theme::Apply(this);
+ 
+   FullBrowserTransitionManager::Get()->OnProfileCreated(this);
+ 
+--- a/chrome/browser/prefs/browser_prefs.cc
++++ b/chrome/browser/prefs/browser_prefs.cc
+@@ -39,6 +39,7 @@
+ #include "chrome/browser/glic/suggestions/contextual_cueing_prefs.h"
+ #include "chrome/browser/gpu/gpu_mode_manager.h"
+ #include "chrome/browser/helium_privacy_mode/helium_privacy_mode.h"
++#include "chrome/browser/helium_theme/helium_theme.h"
+ #include "chrome/browser/hid/hid_policy_allowed_devices.h"
+ #include "chrome/browser/intranet_redirect_detector.h"
+ #include "chrome/browser/lifetime/browser_shutdown.h"
+@@ -1750,6 +1751,7 @@
+   TRACE_EVENT0("browser", "chrome::RegisterProfilePrefs");
+   // User prefs. Please keep this list alphabetized.
+   helium_privacy_mode::RegisterProfilePrefs(registry);
++  helium_theme::RegisterProfilePrefs(registry);
+   AccessibilityLabelsService::RegisterProfilePrefs(registry);
+   registry->RegisterBooleanPref(prefs::kRendererAccessibilityEnabled, true);
+   AccessibilityUIMessageHandler::RegisterProfilePrefs(registry);
+--- /dev/null
++++ b/chrome/browser/helium_theme/helium_theme.h
+@@ -0,0 +1,39 @@
++// Default theme color for new profiles, and the opt-in "match my wallpaper"
++// accent. Wallpaper lookup is implemented for Linux (Omarchy) only; elsewhere
++// the option does nothing and the fallback color stays.
++
++#ifndef CHROME_BROWSER_HELIUM_THEME_HELIUM_THEME_H_
++#define CHROME_BROWSER_HELIUM_THEME_HELIUM_THEME_H_
++
++#include <optional>
++
++#include "third_party/skia/include/core/SkColor.h"
++
++class Profile;
++class SkBitmap;
++
++namespace user_prefs {
++class PrefRegistrySyncable;
++}
++
++namespace helium_theme {
++
++// helium.theme.initialized (bool) and helium.theme.match_wallpaper (bool).
++void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
++
++// On a profile's first start, applies a dark, not-pure-black theme color unless
++// the profile already has a theme. If match_wallpaper is on (the default; the
++// --match-wallpaper[=<image path>] switch also turns it on), derives an accent
++// from the desktop wallpaper and applies it at every start, but only over the
++// default theme or a color applied here earlier, never over the user's own
++// choice. The wallpaper is read locally, decoded in the sandboxed data decoder,
++// and never sent anywhere.
++void Apply(Profile* profile);
++
++// Saturation- and lightness-weighted average color of |bitmap|, or nullopt for
++// images with no meaningful color (grayscale, nearly black or white).
++std::optional<SkColor> DominantColor(const SkBitmap& bitmap);
++
++}  // namespace helium_theme
++
++#endif  // CHROME_BROWSER_HELIUM_THEME_HELIUM_THEME_H_
+--- /dev/null
++++ b/chrome/browser/helium_theme/helium_theme.cc
+@@ -0,0 +1,201 @@
++#include "chrome/browser/helium_theme/helium_theme.h"
++
++#include <algorithm>
++#include <cmath>
++#include <string>
++#include <utility>
++#include <vector>
++
++#include "base/command_line.h"
++#include "base/environment.h"
++#include "base/files/file_path.h"
++#include "base/files/file_util.h"
++#include "base/functional/bind.h"
++#include "base/logging.h"
++#include "base/memory/weak_ptr.h"
++#include "base/task/thread_pool.h"
++#include "build/build_config.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/themes/theme_service.h"
++#include "chrome/browser/themes/theme_service_factory.h"
++#include "components/pref_registry/pref_registry_syncable.h"
++#include "components/prefs/pref_service.h"
++#include "services/data_decoder/public/cpp/decode_image.h"
++#include "services/data_decoder/public/mojom/image_decoder.mojom.h"
++#include "third_party/skia/include/core/SkBitmap.h"
++#include "ui/base/mojom/themes.mojom.h"
++#include "ui/gfx/geometry/size.h"
++
++namespace helium_theme {
++
++namespace {
++
++constexpr char kInitializedPref[] = "helium.theme.initialized";
++constexpr char kMatchWallpaperPref[] = "helium.theme.match_wallpaper";
++// The color we last applied; lets us tell our own theme from one the user chose.
++constexpr char kLastAppliedPref[] = "helium.theme.last_applied_color";
++constexpr char kSwitch[] = "match-wallpaper";
++
++// Dark slate, deliberately not pure black.
++constexpr SkColor kFallbackColor = SkColorSetRGB(0x20, 0x22, 0x2E);
++
++constexpr int64_t kMaxWallpaperFileBytes = 64 * 1024 * 1024;
++// The decoder shrinks the image to fit; plenty for estimating a color.
++constexpr uint64_t kMaxDecodedBytes = 4 * 1024 * 1024;
++
++base::FilePath DefaultWallpaperPath() {
++#if BUILDFLAG(IS_LINUX)
++  // Omarchy keeps a symlink to the current wallpaper here.
++  std::optional<std::string> state_home =
++      base::Environment::Create()->GetVar("XDG_STATE_HOME");
++  base::FilePath base_dir;
++  if (state_home && !state_home->empty()) {
++    base_dir = base::FilePath(*state_home);
++  } else {
++    base_dir = base::GetHomeDir().Append(".local/state");
++  }
++  return base_dir.Append("omarchy/current/background");
++#else
++  return base::FilePath();
++#endif
++}
++
++std::optional<std::vector<uint8_t>> ReadWallpaper(const base::FilePath& path) {
++  if (path.empty()) {
++    return std::nullopt;
++  }
++  std::optional<int64_t> size = base::GetFileSize(path);
++  if (!size || *size <= 0 || *size > kMaxWallpaperFileBytes) {
++    return std::nullopt;
++  }
++  return base::ReadFileToBytes(path);
++}
++
++// True if the profile's theme is the default or one this module applied, so it
++// is safe to replace without overriding a choice the user made.
++bool CanReplaceTheme(Profile* profile) {
++  ThemeService* theme = ThemeServiceFactory::GetForProfile(profile);
++  std::optional<SkColor> user_color = theme->GetUserColor();
++  if (!user_color) {
++    return theme->GetThemeID().empty();
++  }
++  const SkColor last = static_cast<SkColor>(
++      profile->GetPrefs()->GetInteger(kLastAppliedPref));
++  return *user_color == last || *user_color == kFallbackColor;
++}
++
++void OnDecoded(base::WeakPtr<Profile> profile, const SkBitmap& bitmap) {
++  if (!profile || bitmap.isNull()) {
++    return;
++  }
++  if (!CanReplaceTheme(profile.get())) {
++    LOG(INFO) << "Theme was chosen by the user; not applying wallpaper accent";
++    return;
++  }
++  std::optional<SkColor> color = DominantColor(bitmap);
++  if (!color) {
++    LOG(INFO) << "Wallpaper has no usable accent color; keeping current theme";
++    return;
++  }
++  ThemeService* theme = ThemeServiceFactory::GetForProfile(profile.get());
++  theme->SetIsGrayscale(false);
++  theme->SetUserColorAndBrowserColorVariant(
++      *color, ui::mojom::BrowserColorVariant::kTonalSpot);
++  profile->GetPrefs()->SetInteger(kLastAppliedPref, static_cast<int>(*color));
++  LOG(INFO) << "Applied wallpaper accent color " << std::hex << *color;
++}
++
++void OnRead(base::WeakPtr<Profile> profile,
++            std::optional<std::vector<uint8_t>> bytes) {
++  if (!profile || !bytes) {
++    LOG(INFO) << "Wallpaper not found or unreadable; keeping current theme";
++    return;
++  }
++  data_decoder::DecodeImageIsolated(
++      *bytes, data_decoder::mojom::ImageCodec::kDefault,
++      /*shrink_to_fit=*/true, kMaxDecodedBytes, gfx::Size(),
++      base::BindOnce(&OnDecoded, profile));
++}
++
++}  // namespace
++
++void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
++  registry->RegisterBooleanPref(kInitializedPref, false);
++  registry->RegisterBooleanPref(kMatchWallpaperPref, true);
++  registry->RegisterIntegerPref(kLastAppliedPref, 0);
++}
++
++std::optional<SkColor> DominantColor(const SkBitmap& bitmap) {
++  if (bitmap.isNull() || bitmap.width() <= 0 || bitmap.height() <= 0) {
++    return std::nullopt;
++  }
++  // Sample on a grid of at most ~64x64 points.
++  const int step_x = std::max(1, bitmap.width() / 64);
++  const int step_y = std::max(1, bitmap.height() / 64);
++  double total = 0, r = 0, g = 0, b = 0;
++  int samples = 0;
++  for (int y = 0; y < bitmap.height(); y += step_y) {
++    for (int x = 0; x < bitmap.width(); x += step_x) {
++      SkColor c = bitmap.getColor(x, y);
++      const double pr = SkColorGetR(c) / 255.0;
++      const double pg = SkColorGetG(c) / 255.0;
++      const double pb = SkColorGetB(c) / 255.0;
++      const double max = std::max({pr, pg, pb});
++      const double min = std::min({pr, pg, pb});
++      const double lightness = (max + min) / 2;
++      const double chroma = max - min;
++      const double saturation =
++          chroma == 0 ? 0 : chroma / (1 - std::abs(2 * lightness - 1));
++      // Favor vivid, mid-tone pixels; ignore grays, near-black and near-white.
++      const double weight = saturation * (1 - std::abs(2 * lightness - 1));
++      total += weight;
++      r += pr * weight;
++      g += pg * weight;
++      b += pb * weight;
++      ++samples;
++    }
++  }
++  if (samples == 0 || total / samples < 0.03) {
++    return std::nullopt;
++  }
++  return SkColorSetRGB(static_cast<int>(std::lround(255 * r / total)),
++                       static_cast<int>(std::lround(255 * g / total)),
++                       static_cast<int>(std::lround(255 * b / total)));
++}
++
++void Apply(Profile* profile) {
++  PrefService* prefs = profile->GetPrefs();
++  ThemeService* theme = ThemeServiceFactory::GetForProfile(profile);
++
++  if (!prefs->GetBoolean(kInitializedPref)) {
++    prefs->SetBoolean(kInitializedPref, true);
++    // New profiles start with Chromium's grayscale theme; replace it, but never
++    // override a theme the profile already has (extension theme, user color).
++    if (theme->GetThemeID().empty() && !theme->GetUserColor().has_value()) {
++      // SetIsGrayscale() clears the other theme prefs, so it must come first.
++      theme->SetIsGrayscale(false);
++      theme->SetUserColorAndBrowserColorVariant(
++          kFallbackColor, ui::mojom::BrowserColorVariant::kTonalSpot);
++      prefs->SetInteger(kLastAppliedPref, static_cast<int>(kFallbackColor));
++    }
++  }
++
++  base::FilePath path = DefaultWallpaperPath();
++  const base::CommandLine* cl = base::CommandLine::ForCurrentProcess();
++  if (cl->HasSwitch(kSwitch)) {
++    prefs->SetBoolean(kMatchWallpaperPref, true);
++    base::FilePath override_path = cl->GetSwitchValuePath(kSwitch);
++    if (!override_path.empty()) {
++      path = override_path;
++    }
++  }
++  if (!prefs->GetBoolean(kMatchWallpaperPref)) {
++    return;
++  }
++  base::ThreadPool::PostTaskAndReplyWithResult(
++      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
++      base::BindOnce(&ReadWallpaper, path),
++      base::BindOnce(&OnRead, profile->GetWeakPtr()));
++}
++
++}  // namespace helium_theme

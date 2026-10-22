@@ -1,0 +1,257 @@
+--- a/chrome/browser/ui/color/material_chrome_color_mixer.cc
++++ b/chrome/browser/ui/color/material_chrome_color_mixer.cc
+@@ -521,6 +521,11 @@
+   mixer[ui::kColorFrameInactive] = {ui::kColorFrameActive};
+   if (!dark_mode) {
+     mixer[ui::kColorFrameActive] = {ui::kColorSysBase};
++  } else {
++    // Tint the dark frame (sidebar and the gap around the page) with the theme
++    // accent so it follows the wallpaper instead of being near-black.
++    mixer[ui::kColorFrameActive] =
++        ui::AlphaBlend(ui::kColorSysPrimary, ui::kColorSysHeader, 0x28);
+   }
+ 
+   // Toolbar colors.
+--- a/chrome/browser/ui/color/material_tab_strip_color_mixer.cc
++++ b/chrome/browser/ui/color/material_tab_strip_color_mixer.cc
+@@ -33,9 +33,11 @@
+   ui::ColorMixer& mixer = provider->AddMixer();
+   mixer[kColorDetachedTabBackgroundActiveFrameActive] = {
+       dark_mode ? ui::kColorSysSurfaceVariant : ui::kColorSysBase};
+-  mixer[kColorTabBackgroundActiveFrameActive] = {kColorLocationBarBackground};
+-  mixer[kColorTabBackgroundActiveFrameInactive] = {
+-      kColorLocationBarBackground};
++  // The selected tab pill carries a hint of the theme accent.
++  mixer[kColorTabBackgroundActiveFrameActive] = ui::AlphaBlend(
++      ui::kColorSysPrimary, kColorLocationBarBackground, 0x38);
++  mixer[kColorTabBackgroundActiveFrameInactive] = ui::AlphaBlend(
++      ui::kColorSysPrimary, kColorLocationBarBackground, 0x38);
+ 
+   mixer[kColorTabBackgroundInactiveFrameActive] = ui::SetAlpha(
+       kColorTabBackgroundActiveFrameActive, SK_AlphaTRANSPARENT);
+--- a/chrome/browser/ui/views/tabs/vertical/workspace_switcher.cc
++++ b/chrome/browser/ui/views/tabs/vertical/workspace_switcher.cc
+@@ -3,27 +3,73 @@
+ #include <utility>
+ 
+ #include "base/functional/bind.h"
+-#include "base/i18n/case_conversion.h"
+-#include "base/task/single_thread_task_runner.h"
+ #include "base/strings/utf_string_conversions.h"
++#include "base/task/single_thread_task_runner.h"
+ #include "chrome/browser/helium_workspaces/helium_workspaces.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+-#include "chrome/browser/ui/color/chrome_color_id.h"
+ #include "components/prefs/pref_service.h"
++#include "components/vector_icons/vector_icons.h"
++#include "cc/paint/paint_flags.h"
++#include "third_party/skia/include/core/SkColor.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+ #include "ui/base/mojom/menu_source_type.mojom.h"
++#include "ui/color/color_id.h"
++#include "ui/color/color_provider.h"
++#include "ui/events/event_constants.h"
++#include "ui/events/keycodes/keyboard_codes.h"
++#include "ui/gfx/canvas.h"
+ #include "ui/gfx/geometry/rect.h"
+-#include "ui/views/background.h"
+-#include "ui/views/controls/button/label_button.h"
++#include "ui/views/controls/button/button.h"
++#include "ui/views/controls/button/image_button.h"
++#include "ui/views/controls/button/image_button_factory.h"
+ #include "ui/views/controls/menu/menu_runner.h"
+ #include "ui/views/layout/flex_layout_types.h"
+ #include "ui/views/view_class_properties.h"
+ 
+ namespace {
+-constexpr int kChipSize = 28;
+-constexpr int kChipRadius = 10;
++
++constexpr int kDotSize = 8;
++constexpr int kSelectedDotWidth = 20;
++constexpr int kDotSlotHeight = 24;
++constexpr int kDotSlotPadding = 8;
+ constexpr int kDeleteCommand = 1;
++
++// A simple shape button: a small dot, or a longer pill when selected. Colours
++// are theme tokens, so they follow the wallpaper theme.
++class WorkspaceDot : public views::Button {
++  METADATA_HEADER(WorkspaceDot, views::Button)
++
++ public:
++  WorkspaceDot(PressedCallback callback, bool selected, std::u16string name)
++      : views::Button(std::move(callback)), selected_(selected) {
++    SetTooltipText(std::move(name));
++    SetPreferredSize(gfx::Size(
++        (selected ? kSelectedDotWidth : kDotSize) + kDotSlotPadding,
++        kDotSlotHeight));
++    SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
++  }
++
++  void PaintButtonContents(gfx::Canvas* canvas) override {
++    cc::PaintFlags flags;
++    flags.setAntiAlias(true);
++    SkColor color = GetColorProvider()->GetColor(
++        selected_ ? ui::kColorSysPrimary : ui::kColorSysOnSurfaceSubtle);
++    flags.setColor(selected_ ? color : SkColorSetA(color, 0x99));
++    const int width = selected_ ? kSelectedDotWidth : kDotSize;
++    gfx::Rect rect(0, 0, width, kDotSize);
++    rect.set_origin(gfx::Point((this->width() - width) / 2,
++                               (height() - kDotSize) / 2));
++    canvas->DrawRoundRect(rect, kDotSize / 2, flags);
++  }
++
++ private:
++  const bool selected_;
++};
++
++BEGIN_METADATA(WorkspaceDot)
++END_METADATA
++
+ }  // namespace
+ 
+ WorkspaceSwitcher::WorkspaceSwitcher(BrowserWindowInterface* browser)
+@@ -42,6 +88,36 @@
+ 
+ WorkspaceSwitcher::~WorkspaceSwitcher() = default;
+ 
++void WorkspaceSwitcher::AddedToWidget() {
++  AddAccelerator(ui::Accelerator(ui::VKEY_RIGHT,
++                                 ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN));
++  AddAccelerator(ui::Accelerator(ui::VKEY_LEFT,
++                                 ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN));
++}
++
++bool WorkspaceSwitcher::CanHandleAccelerators() const {
++  return GetVisible();
++}
++
++bool WorkspaceSwitcher::AcceleratorPressed(const ui::Accelerator& accelerator) {
++  SwitchRelative(accelerator.key_code() == ui::VKEY_RIGHT ? 1 : -1);
++  return true;
++}
++
++void WorkspaceSwitcher::SwitchRelative(int delta) {
++  Profile* profile = browser_->GetProfile();
++  const std::vector<helium_workspaces::Info> all =
++      helium_workspaces::List(profile);
++  const std::string active = helium_workspaces::ActiveId(profile);
++  const int count = static_cast<int>(all.size());
++  for (int i = 0; i < count; ++i) {
++    if (all[i].id == active) {
++      helium_workspaces::Switch(browser_, all[(i + delta + count) % count].id);
++      return;
++    }
++  }
++}
++
+ void WorkspaceSwitcher::ScheduleRebuild() {
+   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+       FROM_HERE, base::BindOnce(&WorkspaceSwitcher::Rebuild,
+@@ -54,47 +130,29 @@
+   Profile* profile = browser_->GetProfile();
+   const std::string active = helium_workspaces::ActiveId(profile);
+ 
+-  auto add_chip = [&](std::u16string label, std::u16string tooltip,
+-                      base::RepeatingClosure action, bool selected) {
+-    auto chip = std::make_unique<views::LabelButton>(
+-        base::BindRepeating([](base::RepeatingClosure action,
+-                               const ui::Event&) { action.Run(); },
+-                            std::move(action)),
+-        std::move(label));
+-    chip->SetTooltipText(std::move(tooltip));
+-    chip->SetPreferredSize(gfx::Size(kChipSize, kChipSize));
+-    chip->SetMinSize(gfx::Size(kChipSize, kChipSize));
+-    // Both colours are theme tokens, so the chips follow the wallpaper theme.
+-    if (selected) {
+-      chip->SetBackground(views::CreateRoundedRectBackground(
+-          kColorTabBackgroundActiveFrameActive, kChipRadius));
+-    }
+-    chip->SetProperty(views::kMarginsKey, gfx::Insets::VH(1, 2));
+-    return AddChildView(std::move(chip));
+-  };
+-
+   for (const helium_workspaces::Info& info :
+        helium_workspaces::List(profile)) {
+-    std::u16string name = base::UTF8ToUTF16(info.name);
+-    std::u16string letter = base::i18n::ToUpper(name.substr(0, 1));
+-    views::View* chip = add_chip(
+-        letter, name,
++    auto dot = std::make_unique<WorkspaceDot>(
+         base::BindRepeating(
+             [](WorkspaceSwitcher* self, std::string id) {
+               helium_workspaces::Switch(self->browser_, id);
+             },
+             base::Unretained(this), info.id),
+-        info.id == active);
+-    chip->set_context_menu_controller(this);
+-    chips_.emplace_back(chip, info.id);
++        info.id == active, base::UTF8ToUTF16(info.name));
++    dot->set_context_menu_controller(this);
++    chips_.emplace_back(AddChildView(std::move(dot)), info.id);
+   }
+-  add_chip(u"+", u"New workspace",
+-           base::BindRepeating(
+-               [](WorkspaceSwitcher* self) {
+-                 helium_workspaces::Create(self->browser_);
+-               },
+-               base::Unretained(this)),
+-           false);
++
++  auto add = views::CreateVectorImageButtonWithNativeTheme(
++      base::BindRepeating(
++          [](WorkspaceSwitcher* self) {
++            helium_workspaces::Create(self->browser_);
++          },
++          base::Unretained(this)),
++      vector_icons::kAdd2Icon, 14);
++  add->SetTooltipText(u"New workspace (Ctrl+Alt+Left/Right switches)");
++  add->SetPreferredSize(gfx::Size(kDotSlotHeight, kDotSlotHeight));
++  AddChildView(std::move(add));
+   InvalidateLayout();
+ }
+ 
+--- a/chrome/browser/ui/views/tabs/vertical/workspace_switcher.h
++++ b/chrome/browser/ui/views/tabs/vertical/workspace_switcher.h
+@@ -8,6 +8,7 @@
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/weak_ptr.h"
+ #include "components/prefs/pref_change_registrar.h"
++#include "ui/base/accelerators/accelerator.h"
+ #include "ui/base/metadata/metadata_header_macros.h"
+ #include "ui/menus/simple_menu_model.h"
+ #include "ui/views/context_menu_controller.h"
+@@ -19,11 +20,13 @@
+ class MenuRunner;
+ }  // namespace views
+ 
+-// A row of round chips at the bottom of the sidebar, one per workspace, plus a
+-// "+" chip that creates a workspace. Clicking a chip switches to it; right-click
+-// offers deleting it. See helium_workspaces.h for what switching does.
++// A row of dots at the bottom of the sidebar, one per workspace (the selected
++// one is a longer pill), plus a "+" that creates a workspace. Click a dot to
++// switch, right-click to delete. Ctrl+Alt+Left/Right cycles workspaces. See
++// helium_workspaces.h for what switching does.
+ class WorkspaceSwitcher : public views::FlexLayoutView,
+                           public views::ContextMenuController,
++                          public ui::AcceleratorTarget,
+                           public ui::SimpleMenuModel::Delegate {
+   METADATA_HEADER(WorkspaceSwitcher, views::FlexLayoutView)
+ 
+@@ -36,6 +39,15 @@
+   // Prefs change while a chip's own click is running, so rebuild afterwards.
+   void ScheduleRebuild();
+ 
++  // views::View:
++  void AddedToWidget() override;
++
++  // ui::AcceleratorTarget:
++  bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
++  bool CanHandleAccelerators() const override;
++
++  void SwitchRelative(int delta);
++
+   // views::ContextMenuController:
+   void ShowContextMenuForViewImpl(
+       views::View* source,

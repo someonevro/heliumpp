@@ -1,0 +1,143 @@
+--- a/chrome/browser/helium_privacy_mode/helium_privacy_mode.cc
++++ b/chrome/browser/helium_privacy_mode/helium_privacy_mode.cc
+@@ -18,7 +18,10 @@
+ #include "components/content_settings/core/common/content_settings.h"
+ #include "components/content_settings/core/common/content_settings_types.h"
+ #include "components/content_settings/core/common/pref_names.h"
++#include "chrome/browser/accessibility/animation_policy_prefs.h"
+ #include "components/performance_manager/public/user_tuning/prefs.h"
++#include "components/spellcheck/browser/pref_names.h"
++#include "ui/gfx/animation/animation.h"
+ #include "components/pref_registry/pref_registry_syncable.h"
+ #include "base/values.h"
+ #include "components/prefs/pref_service.h"
+@@ -83,6 +86,16 @@
+   return profile->GetPrefs()->GetBoolean(kPerfPref);
+ }
+ 
++// Forces (or stops forcing) reduced motion for the whole browser UI. Every
++// RichAnimationDuration() caller then runs with zero duration.
++void ApplyReducedMotion(bool enabled) {
++  if (enabled) {
++    gfx::Animation::SetPrefersReducedMotionForTesting(true);
++  } else {
++    gfx::Animation::UpdatePrefersReducedMotion();
++  }
++}
++
+ void SetPerformanceMode(Profile* profile, bool enabled) {
+   namespace tuning = performance_manager::user_tuning::prefs;
+   PrefService* prefs = profile->GetPrefs();
+@@ -99,8 +112,15 @@
+     saved.Set("mem_min", local->GetInteger(
+                              tuning::kMemorySaverModeTimeBeforeDiscardInMinutes));
+     saved.Set("battery", local->GetInteger(tuning::kBatterySaverModeState));
++    saved.Set("anim_policy", prefs->GetString(prefs::kAnimationPolicy));
++    saved.Set("spell",
++              prefs->GetBoolean(spellcheck::prefs::kSpellCheckEnable));
+     prefs->SetDict(kPerfSavedPref, std::move(saved));
+ 
++    // Stop page animations (GIFs) after one loop and drop spellcheck.
++    prefs->SetString(prefs::kAnimationPolicy, kAnimationPolicyOnce);
++    prefs->SetBoolean(spellcheck::prefs::kSpellCheckEnable, false);
++
+     local->SetInteger(tuning::kMemorySaverModeState,
+                       static_cast<int>(tuning::MemorySaverModeState::kEnabled));
+     local->SetInteger(
+@@ -124,9 +144,16 @@
+     if (auto v = saved.FindInt("battery")) {
+       local->SetInteger(tuning::kBatterySaverModeState, *v);
+     }
++    if (const std::string* v = saved.FindString("anim_policy")) {
++      prefs->SetString(prefs::kAnimationPolicy, *v);
++    }
++    if (auto v = saved.FindBool("spell")) {
++      prefs->SetBoolean(spellcheck::prefs::kSpellCheckEnable, *v);
++    }
+     prefs->ClearPref(kPerfSavedPref);
+   }
+   prefs->SetBoolean(kPerfPref, enabled);
++  ApplyReducedMotion(enabled);
+ }
+ 
+ namespace {
+@@ -251,6 +278,9 @@
+     SetPerformanceMode(profile, cl->GetSwitchValueASCII("performance-mode") ==
+                                     "on");
+   }
++  if (IsPerformanceMode(profile)) {
++    ApplyReducedMotion(true);
++  }
+   ApplyStored(profile);
+ }
+ 
+--- a/chrome/browser/ui/views/frame/opaque_browser_frame_view.cc
++++ b/chrome/browser/ui/views/frame/opaque_browser_frame_view.cc
+@@ -30,6 +30,7 @@
+ #include "components/strings/grit/components_strings.h"
+ #include "content/public/browser/web_contents.h"
+ #include "third_party/skia/include/core/SkPath.h"
++#include "ui/gfx/animation/animation.h"
+ #include "ui/accessibility/ax_enums.mojom.h"
+ #include "ui/base/hit_test.h"
+ #include "ui/base/l10n/l10n_util.h"
+@@ -191,7 +192,8 @@
+ }
+ 
+ void OpaqueBrowserFrameView::SetUpCaptionButtonReveal() {
+-  reveal_animation_.SetSlideDuration(base::Milliseconds(160));
++  reveal_animation_.SetSlideDuration(
++      gfx::Animation::RichAnimationDuration(base::Milliseconds(160)));
+   reveal_animation_.Reset(0);
+   for (views::Button* button : {minimize_button_.get(), maximize_button_.get(),
+                                 restore_button_.get(), close_button_.get()}) {
+@@ -268,6 +270,9 @@
+   controls.Outset(kRevealMargin);
+   const bool on_controls =
+       reveal_animation_.IsShowing() && controls.Contains(point);
++  // Re-read each time: performance mode turns rich animations off.
++  reveal_animation_.SetSlideDuration(
++      gfx::Animation::RichAnimationDuration(base::Milliseconds(160)));
+   if (in_hot_zone || on_controls) {
+     reveal_hide_timer_.Stop();
+     reveal_animation_.Show();
+--- a/chrome/browser/ui/views/tabs/common/tab_view.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_view.cc
+@@ -68,6 +68,7 @@
+ #include "third_party/skia/include/core/SkPath.h"
+ #include "third_party/skia/include/core/SkPathBuilder.h"
+ #include "third_party/skia/include/core/SkRRect.h"
++#include "ui/gfx/animation/animation.h"
+ #include "ui/accessibility/ax_enums.mojom-shared.h"
+ #include "ui/base/l10n/l10n_util.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+@@ -1122,6 +1123,9 @@
+     select_animation_->SetSlideDuration(base::Milliseconds(200));
+     select_animation_->Reset(active_ ? 1.0 : 0.0);
+   } else if (active_ != was_active) {
++    // Performance mode turns rich animations off (zero duration).
++    select_animation_->SetSlideDuration(
++        gfx::Animation::RichAnimationDuration(base::Milliseconds(200)));
+     if (active_ && GetWidget()) {
+       gfx::Point origin;
+       views::View::ConvertPointToScreen(this, &origin);
+--- a/chrome/browser/resources/new_tab_page/app.html
++++ b/chrome/browser/resources/new_tab_page/app.html
+@@ -1,4 +1,4 @@
+-<div id="content">
++<div id="content" ?data-reduced="${this.performanceMode_}">
+   <div id="greeting">
+     <h1>${this.greeting_()}</h1>
+     <div class="sub">Where to today?</div>
+--- a/chrome/browser/resources/new_tab_page/app.css
++++ b/chrome/browser/resources/new_tab_page/app.css
+@@ -725,3 +725,9 @@
+   color: var(--color-new-tab-page-secondary-foreground);
+   font-size: 12px;
+ }
++
++/* Performance mode: no transitions on this page. */
++#content[data-reduced] * {
++  animation: none !important;
++  transition: none !important;
++}

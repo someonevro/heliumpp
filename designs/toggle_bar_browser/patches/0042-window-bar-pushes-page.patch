@@ -1,0 +1,100 @@
+--- a/chrome/browser/ui/views/frame/opaque_browser_frame_view.cc
++++ b/chrome/browser/ui/views/frame/opaque_browser_frame_view.cc
+@@ -5,6 +5,7 @@
+ #include "chrome/browser/ui/views/frame/opaque_browser_frame_view.h"
+ 
+ #include <algorithm>
++#include <cmath>
+ #include <utility>
+ 
+ #include "base/trace_event/trace_event.h"
+@@ -52,6 +53,7 @@
+ #include "chrome/browser/ui/side_panel/side_panel_ui.h"
+ #include "ui/views/background.h"
+ #include "ui/views/event_monitor.h"
++#include "ui/views/window/non_client_view.h"
+ #include "ui/views/controls/button/image_button.h"
+ #include "ui/views/controls/label.h"
+ #include "ui/views/metadata/view_factory.h"
+@@ -166,6 +168,8 @@
+ constexpr int kRevealHotZoneWidth = 320;
+ constexpr int kRevealHotZoneHeight = 22;
+ constexpr int kRevealMargin = 12;
++// Height of the bar that drops down and pushes the page.
++constexpr int kRevealBarHeight = 32;
+ 
+ bool OpaqueBrowserFrameView::ShouldAutoHideCaptionButtons() const {
+   static const bool disabled =
+@@ -204,8 +208,20 @@
+ }
+ 
+ void OpaqueBrowserFrameView::UpdateCaptionButtonReveal() {
+-  const double amount =
+-      ShouldAutoHideCaptionButtons() ? reveal_animation_.GetCurrentValue() : 1.0;
++  const bool auto_hide = ShouldAutoHideCaptionButtons();
++  const double amount = auto_hide ? reveal_animation_.GetCurrentValue() : 1.0;
++  // The bar grows from the top and pushes the page down by the same amount.
++  const int inset =
++      auto_hide && !GetWidget()->IsFullscreen()
++          ? static_cast<int>(std::lround(amount * kRevealBarHeight))
++          : 0;
++  if (inset != layout_->extra_top_inset()) {
++    layout_->SetExtraTopInset(inset);
++    InvalidateLayout();
++    if (auto* non_client_view = GetWidget()->non_client_view()) {
++      non_client_view->InvalidateLayout();
++    }
++  }
+   for (views::Button* button : {minimize_button_.get(), maximize_button_.get(),
+                                 restore_button_.get(), close_button_.get()}) {
+     if (!button || !button->layer()) {
+@@ -241,8 +257,12 @@
+   // The side panel's own close button sits in this corner; revealing the
+   // window controls over it made clicking it close the whole window.
+   auto* side_panel_ui = SidePanelUI::From(GetBrowserView()->browser());
++  // While the bar is open it also counts as part of the hot zone, so moving
++  // the pointer onto the bar's buttons keeps it open.
++  const int zone_height =
++      std::max(kRevealHotZoneHeight, layout_->extra_top_inset() + kRevealMargin);
+   const bool in_hot_zone = point.x() >= bounds.right() - kRevealHotZoneWidth &&
+-                           point.y() <= kRevealHotZoneHeight &&
++                           point.y() <= zone_height &&
+                            !(side_panel_ui && side_panel_ui->IsSidePanelShowing());
+   gfx::Rect controls = CaptionButtonsBounds();
+   controls.Outset(kRevealMargin);
+--- a/chrome/browser/ui/views/frame/opaque_browser_frame_view_layout.cc
++++ b/chrome/browser/ui/views/frame/opaque_browser_frame_view_layout.cc
+@@ -127,6 +127,10 @@
+ }
+ 
+ int OpaqueBrowserFrameViewLayout::NonClientTopHeight(bool restored) const {
++  return BaseNonClientTopHeight(restored) + extra_top_inset_;
++}
++
++int OpaqueBrowserFrameViewLayout::BaseNonClientTopHeight(bool restored) const {
+   if (!delegate_->ShouldShowWindowTitle()) {
+     return FrameTopBorderThickness(restored);
+   }
+--- a/chrome/browser/ui/views/frame/opaque_browser_frame_view_layout.h
++++ b/chrome/browser/ui/views/frame/opaque_browser_frame_view_layout.h
+@@ -86,6 +86,11 @@
+   // if the window was restored, regardless of its current state.
+   int NonClientTopHeight(bool restored) const;
+ 
++  // Extra height reserved at the top of the window. The frame view animates it
++  // to slide the window-controls bar in and push the page down.
++  void SetExtraTopInset(int inset) { extra_top_inset_ = inset; }
++  int extra_top_inset() const { return extra_top_inset_; }
++
+   // Returns the y-coordinate of the caption button when native frame buttons
+   // are disabled.  If |restored| is true, acts as if the window is restored
+   // regardless of the real mode.
+@@ -176,6 +181,8 @@
+   // The size of the window buttons. This does not count labels or other
+   // elements that should be counted in a minimal frame.
+   int minimum_size_for_buttons_ = 0;
++  int extra_top_inset_ = 0;
++  int BaseNonClientTopHeight(bool restored) const;
+ 
+  private:
+   friend class OpaqueBrowserFrameViewLayoutTest;

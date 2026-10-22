@@ -1,0 +1,22 @@
+--- a/ui/webui/resources/cr_components/most_visited/most_visited.ts
++++ b/ui/webui/resources/cr_components/most_visited/most_visited.ts
+@@ -16,7 +16,6 @@
+ import type {CrToastManagerElement} from '//resources/cr_elements/cr_toast/cr_toast_manager.js';
+ import {I18nMixinLit} from '//resources/cr_elements/i18n_mixin_lit.js';
+ import {assert} from '//resources/js/assert.js';
+-import {skColorToRgba} from '//resources/js/color_utils.js';
+ import {EventTracker} from '//resources/js/event_tracker.js';
+ import {FocusOutlineManager} from '//resources/js/focus_outline_manager.js';
+ import {loadTimeData} from '//resources/js/load_time_data.js';
+@@ -401,8 +400,9 @@
+   }
+ 
+   protected getBackgroundColorStyle_(): string {
+-    const skColor = this.theme ? this.theme.backgroundColor : null;
+-    return skColor ? skColorToRgba(skColor) : 'inherit';
++    // Translucent glass tile derived from the theme text colour instead of the
++    // opaque page background colour.
++    return 'color-mix(in oklab, var(--most-visited-text-color) 12%, transparent)';
+   }
+ 
+   // Adds "force-hover" class to the tile element positioned at `index`.

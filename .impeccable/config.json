@@ -1,0 +1,26 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "low-contrast",
+        "value": "*",
+        "files": [
+          "designs/ntp-v1/mock.html"
+        ],
+        "createdAt": "2026-10-21T12:15:43.326Z",
+        "reason": "model: computed WCAG ratios 6.08-11.31 for every text/background pair; hook cannot resolve CSS var() colours"
+      },
+      {
+        "rule": "low-contrast",
+        "value": "*",
+        "files": [
+          "designs/ntp-v3/mock.html"
+        ],
+        "createdAt": "2026-10-21T12:24:12.928Z",
+        "reason": "model: computed ratios 8.8-15.6 on the darkest page colour; hook cannot resolve var()/color-mix"
+      }
+    ]
+  }
+}

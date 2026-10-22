@@ -1,0 +1,35 @@
+--- a/chrome/browser/resources/new_tab_page/app.html
++++ b/chrome/browser/resources/new_tab_page/app.html
+@@ -12,7 +12,7 @@
+         <button role="radio" aria-checked="${this.privacyMode_ === m.id}"
+             ?data-selected="${this.privacyMode_ === m.id}"
+             data-mode="${m.id}" @click="${this.onPrivacyModeClick_}">
+-          ${m.label}
++          ${m.label}${m.id === 'medium' ? html`<span class="recommended">Recommended</span>` : ''}
+         </button>`)}
+     </div>
+     <div id="privacyNote">${this.privacyNote_()}</div>
+--- a/chrome/browser/resources/new_tab_page/app.css
++++ b/chrome/browser/resources/new_tab_page/app.css
+@@ -667,3 +667,10 @@
+   margin-top: 10px;
+   min-height: 1.4em;
+ }
++
++#privacySwitch .recommended {
++  font-size: 11px;
++  font-weight: 600;
++  margin-inline-start: 8px;
++  opacity: 0.85;
++}
+--- a/chrome/browser/resources/settings/privacy_page/privacy_page.html
++++ b/chrome/browser/resources/settings/privacy_page/privacy_page.html
+@@ -30,7 +30,7 @@
+         start-icon="privacy:lock"
+         class="hr"
+         label="Privacy level"
+-        sub-label="Choose between usability, medium and maximum privacy"
++        sub-label="Choose between usability, medium (recommended) and maximum privacy"
+         external
+         on-click="onPrivacyModeClick_">
+     </cr-link-row>

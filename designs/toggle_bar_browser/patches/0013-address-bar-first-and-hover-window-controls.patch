@@ -1,0 +1,240 @@
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+@@ -253,7 +253,7 @@
+ }
+ 
+ constexpr int kCenteredLocationBarMaxWidth = 700;
+-// Space between the navigation row and the address bar in the sidebar toolbar.
++// Space between the address bar and the navigation row in the sidebar toolbar.
+ constexpr int kSidebarLocationBarGap = 6;
+ 
+ struct CenteredLocationBarStep {
+@@ -1770,10 +1770,9 @@
+     const int side_margin =
+         GetLayoutConstant(LayoutConstant::kToolbarIconDefaultMargin) + 4;
+     const int bar_height = location_bar_view_->GetPreferredSize().height();
+-    const int bottom_margin =
+-        GetLayoutInsets(LayoutInset::TOOLBAR_INTERIOR_MARGIN).bottom();
+-    location_bar_view_->SetBounds(side_margin,
+-                                  height() - bottom_margin - bar_height,
++    const int top_margin =
++        GetLayoutInsets(LayoutInset::TOOLBAR_INTERIOR_MARGIN).top();
++    location_bar_view_->SetBounds(side_margin, top_margin,
+                                   std::max(0, width() - 2 * side_margin),
+                                   bar_height);
+   }
+@@ -2058,18 +2057,17 @@
+       interior_margin.set_right(0);
+     }
+   }
+-  // Sidebar toolbar: the flex layout only handles the first row (navigation
+-  // buttons, extensions, menu). The address bar is ignored by it and placed in a
+-  // second row at the bottom in Layout().
++  // Sidebar toolbar: the address bar is ignored by the flex layout and placed
++  // in the top row in Layout(); the flex layout handles the row below it
++  // (navigation buttons, extensions, menu).
+   const bool sidebar_toolbar = IsSidebarToolbar();
+   if (location_bar_view_) {
+     location_bar_view_->SetProperty(views::kViewIgnoredByLayoutKey,
+                                     sidebar_toolbar);
+     location_bar_view_->SetSidebarStyle(sidebar_toolbar);
+     if (sidebar_toolbar) {
+-      interior_margin.set_bottom(interior_margin.bottom() +
+-                                 kSidebarLocationBarGap +
+-                                 location_bar_view_->GetPreferredSize().height());
++      interior_margin.set_top(interior_margin.top() + kSidebarLocationBarGap +
++                              location_bar_view_->GetPreferredSize().height());
+     }
+   }
+   layout_manager_->SetInteriorMargin(interior_margin);
+--- a/chrome/browser/ui/views/frame/opaque_browser_frame_view.cc
++++ b/chrome/browser/ui/views/frame/opaque_browser_frame_view.cc
+@@ -47,6 +47,9 @@
+ #include "ui/gfx/image/image_skia.h"
+ #include "ui/gfx/image/image_skia_operations.h"
+ #include "ui/gfx/scoped_canvas.h"
++#include "base/command_line.h"
++#include "ui/gfx/geometry/transform.h"
++#include "ui/views/event_monitor.h"
+ #include "ui/views/controls/button/image_button.h"
+ #include "ui/views/controls/label.h"
+ #include "ui/views/metadata/view_factory.h"
+@@ -158,6 +161,104 @@
+ 
+ OpaqueBrowserFrameView::~OpaqueBrowserFrameView() = default;
+ 
++constexpr int kRevealHotZoneWidth = 200;
++constexpr int kRevealHotZoneHeight = 14;
++constexpr int kRevealMargin = 12;
++
++bool OpaqueBrowserFrameView::ShouldAutoHideCaptionButtons() const {
++  static const bool disabled =
++      base::CommandLine::ForCurrentProcess()->HasSwitch("no-sidebar-toolbar");
++  auto* controller =
++      HeliumLayoutStateController::From(GetBrowserView()->browser());
++  return !disabled && controller && controller->IsVerticalLayout() &&
++         !controller->IsZenModeEnabled();
++}
++
++gfx::Rect OpaqueBrowserFrameView::CaptionButtonsBounds() const {
++  gfx::Rect bounds;
++  for (views::Button* button : {minimize_button_.get(), maximize_button_.get(),
++                                restore_button_.get(), close_button_.get()}) {
++    if (button && button->GetVisible()) {
++      bounds.Union(button->bounds());
++    }
++  }
++  return bounds;
++}
++
++void OpaqueBrowserFrameView::SetUpCaptionButtonReveal() {
++  reveal_animation_.SetSlideDuration(base::Milliseconds(160));
++  reveal_animation_.Reset(0);
++  for (views::Button* button : {minimize_button_.get(), maximize_button_.get(),
++                                restore_button_.get(), close_button_.get()}) {
++    if (button) {
++      button->SetPaintToLayer();
++      button->layer()->SetFillsBoundsOpaquely(false);
++    }
++  }
++  UpdateCaptionButtonReveal();
++}
++
++void OpaqueBrowserFrameView::UpdateCaptionButtonReveal() {
++  const double amount =
++      ShouldAutoHideCaptionButtons() ? reveal_animation_.GetCurrentValue() : 1.0;
++  for (views::Button* button : {minimize_button_.get(), maximize_button_.get(),
++                                restore_button_.get(), close_button_.get()}) {
++    if (!button || !button->layer()) {
++      continue;
++    }
++    button->layer()->SetOpacity(amount);
++    gfx::Transform slide;
++    slide.Translate(0, -(1.0 - amount) * button->height());
++    button->layer()->SetTransform(slide);
++    // Hidden buttons must neither be clickable nor count as caption buttons in
++    // hit testing (see HitTestCaptionButton).
++    button->SetCanProcessEventsWithinSubtree(amount > 0.5);
++  }
++}
++
++void OpaqueBrowserFrameView::AddedToWidget() {
++  BrowserFrameView::AddedToWidget();
++  reveal_event_monitor_ = views::EventMonitor::CreateWindowMonitor(
++      this, GetWidget()->GetNativeWindow(),
++      {ui::EventType::kMouseMoved, ui::EventType::kMouseEntered,
++       ui::EventType::kMouseExited});
++  SetUpCaptionButtonReveal();
++}
++
++void OpaqueBrowserFrameView::OnEvent(const ui::Event& event) {
++  if (!event.IsMouseEvent() || !ShouldAutoHideCaptionButtons()) {
++    UpdateCaptionButtonReveal();
++    return;
++  }
++  const gfx::Point point =
++      gfx::ToFlooredPoint(event.AsMouseEvent()->root_location_f());
++  const gfx::Rect bounds = GetLocalBounds();
++  const bool in_hot_zone = point.x() >= bounds.right() - kRevealHotZoneWidth &&
++                           point.y() <= kRevealHotZoneHeight;
++  gfx::Rect controls = CaptionButtonsBounds();
++  controls.Outset(kRevealMargin);
++  const bool on_controls =
++      reveal_animation_.IsShowing() && controls.Contains(point);
++  if (in_hot_zone || on_controls) {
++    reveal_hide_timer_.Stop();
++    reveal_animation_.Show();
++  } else if (reveal_animation_.IsShowing() && !reveal_hide_timer_.IsRunning()) {
++    reveal_hide_timer_.Start(
++        FROM_HERE, base::Milliseconds(350),
++        base::BindOnce(&gfx::SlideAnimation::Hide,
++                       base::Unretained(&reveal_animation_)));
++  }
++}
++
++void OpaqueBrowserFrameView::AnimationProgressed(
++    const gfx::Animation* animation) {
++  UpdateCaptionButtonReveal();
++}
++
++void OpaqueBrowserFrameView::AnimationEnded(const gfx::Animation* animation) {
++  UpdateCaptionButtonReveal();
++}
++
+ void OpaqueBrowserFrameView::InitViews() {
+   web_app::AppBrowserController* controller =
+       web_app::AppBrowserController::From(GetBrowserView()->browser());
+--- a/chrome/browser/ui/views/frame/opaque_browser_frame_view.h
++++ b/chrome/browser/ui/views/frame/opaque_browser_frame_view.h
+@@ -8,6 +8,7 @@
+ #include <memory>
+ 
+ #include "base/memory/raw_ptr.h"
++#include "base/timer/timer.h"
+ #include "build/build_config.h"
+ #include "chrome/browser/ui/view_ids.h"
+ #include "chrome/browser/ui/views/frame/browser_frame_view.h"
+@@ -16,6 +17,9 @@
+ #include "chrome/browser/ui/views/frame/opaque_browser_frame_view_layout_delegate.h"
+ #include "chrome/browser/ui/views/tab_icon_view_model.h"
+ #include "ui/base/metadata/metadata_header_macros.h"
++#include "ui/events/event_observer.h"
++#include "ui/gfx/animation/animation_delegate.h"
++#include "ui/gfx/animation/slide_animation.h"
+ #include "ui/views/controls/button/button.h"
+ #include "ui/views/window/caption_button_types.h"
+ #include "ui/views/window/frame_view.h"
+@@ -34,6 +38,7 @@
+ }
+ 
+ namespace views {
++class EventMonitor;
+ class Button;
+ class FrameBackground;
+ class Label;
+@@ -41,7 +46,9 @@
+ 
+ class OpaqueBrowserFrameView : public BrowserFrameView,
+                                public TabIconViewModel,
+-                               public OpaqueBrowserFrameViewLayoutDelegate {
++                               public OpaqueBrowserFrameViewLayoutDelegate,
++                               public ui::EventObserver,
++                               public gfx::AnimationDelegate {
+   METADATA_HEADER(OpaqueBrowserFrameView, BrowserFrameView)
+ 
+  public:
+@@ -58,6 +65,17 @@
+   // constructor because it relies on virtual method calls.
+   void InitViews();
+ 
++  // views::View:
++  void AddedToWidget() override;
++
++  // ui::EventObserver: reveals the window controls when the pointer reaches the
++  // top-right corner of the window.
++  void OnEvent(const ui::Event& event) override;
++
++  // gfx::AnimationDelegate:
++  void AnimationProgressed(const gfx::Animation* animation) override;
++  void AnimationEnded(const gfx::Animation* animation) override;
++
+   // BrowserFrameView:
+   BrowserLayoutParams GetBrowserLayoutParams() const override;
+   int GetTopInset(bool restored) const override;
+@@ -220,6 +238,16 @@
+   raw_ptr<views::Button> restore_button_;
+   raw_ptr<views::Button> close_button_;
+ 
++  // With the sidebar toolbar the window controls stay hidden until the pointer
++  // reaches the top-right corner, then slide down.
++  bool ShouldAutoHideCaptionButtons() const;
++  void SetUpCaptionButtonReveal();
++  void UpdateCaptionButtonReveal();
++  gfx::Rect CaptionButtonsBounds() const;
++  std::unique_ptr<views::EventMonitor> reveal_event_monitor_;
++  gfx::SlideAnimation reveal_animation_{this};
++  base::OneShotTimer reveal_hide_timer_;
++
+   // The window icon and title.
+   raw_ptr<TabIconView> window_icon_;
+   raw_ptr<views::Label> window_title_;

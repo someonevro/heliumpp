@@ -1,0 +1,66 @@
+--- a/chrome/browser/ui/color/material_chrome_color_mixer.cc
++++ b/chrome/browser/ui/color/material_chrome_color_mixer.cc
+@@ -542,9 +542,13 @@
+       {ui::kColorSysStateDisabled}, {kColorToolbar})};
+   mixer[kColorToolbarButtonIconPressed] = {kColorToolbarButtonIconHovered};
+   mixer[kColorToolbarButtonText] = {ui::kColorSysOnSurfaceSecondary};
+-  mixer[kColorToolbarContentAreaSeparator] = {
+-      dark_mode ? ui::kColorSysStateHoverOnSubtle
+-                : ui::kColorSysSurfaceVariant};
++  if (dark_mode) {
++    // The page card's outline carries the theme accent.
++    mixer[kColorToolbarContentAreaSeparator] =
++        ui::AlphaBlend(ui::kColorSysPrimary, ui::kColorSysHeader, 0x50);
++  } else {
++    mixer[kColorToolbarContentAreaSeparator] = {ui::kColorSysSurfaceVariant};
++  }
+   mixer[kColorToolbarFeaturePromoHighlight] = {ui::kColorSysPrimary};
+   mixer[kColorToolbarIconContainerBorder] = {ui::kColorSysNeutralOutline};
+   mixer[kColorToolbarInkDropHover] = {ui::kColorSysStateHoverOnSubtle};
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+@@ -65,7 +65,12 @@
+ #include "ui/compositor/layer.h"
+ #include "ui/display/screen.h"
+ #include "ui/events/event.h"
++#include "cc/paint/paint_flags.h"
++#include "ui/color/color_id.h"
++#include "ui/color/color_provider.h"
++#include "ui/gfx/canvas.h"
+ #include "ui/gfx/geometry/point.h"
++#include "ui/gfx/skia_paint_util.h"
+ #include "ui/views/background.h"
+ #include "ui/views/controls/button/label_button.h"
+ #include "ui/views/controls/focus_ring.h"
+@@ -806,6 +811,21 @@
+       gfx::Insets::TLBR(top_padding, 0, padding, 0));
+ }
+ 
++// The sidebar is lit from the top by the theme accent, fading toward the
++// bottom, so it reads as tinted glass without needing compositor blur.
++void VerticalTabStripRegionView::OnPaintBackground(gfx::Canvas* canvas) {
++  BaseTabStripRegionView::OnPaintBackground(canvas);
++  if (zen_mode_floating_style_ || !GetColorProvider()) {
++    return;
++  }
++  const SkColor accent = GetColorProvider()->GetColor(ui::kColorSysPrimary);
++  cc::PaintFlags flags;
++  flags.setShader(gfx::CreateGradientShader(
++      gfx::Point(0, 0), gfx::Point(0, height()), SkColorSetA(accent, 0x30),
++      SkColorSetA(accent, 0x04)));
++  canvas->DrawRect(GetLocalBounds(), flags);
++}
++
+ void VerticalTabStripRegionView::SetSidebarLocationBar(
+     std::unique_ptr<views::View> location_bar) {
+   const int horizontal_padding =
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
+@@ -98,6 +98,7 @@
+ 
+   // views::View:
+   void AddedToWidget() override;
++  void OnPaintBackground(gfx::Canvas* canvas) override;
+   void RemovedFromWidget() override;
+   void Layout(PassKey) override;
+   views::View* GetDefaultFocusableChild() override;

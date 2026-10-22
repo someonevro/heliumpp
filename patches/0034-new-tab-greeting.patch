@@ -1,0 +1,66 @@
+--- a/chrome/browser/resources/new_tab_page/app.html
++++ b/chrome/browser/resources/new_tab_page/app.html
+@@ -1,4 +1,8 @@
+ <div id="content">
++  <div id="greeting">
++    <h1>${this.greeting_()}</h1>
++    <div class="sub">Where to today?</div>
++  </div>
+   ${this.lazyRender_ ? html`
+     ${this.shortcutsEnabled_ ? html`
+       <cr-most-visited id="mostVisited" .theme="${this.theme_?.mostVisited || null}"
+--- a/chrome/browser/resources/new_tab_page/app.css
++++ b/chrome/browser/resources/new_tab_page/app.css
+@@ -563,3 +563,36 @@
+     -webkit-mask-image: url(icons/link.svg);
+   }
+ }
++
++/* Browser-specific look: calm centred greeting, glow tinted by the theme accent. */
++:host::before {
++  background:
++    radial-gradient(70% 60% at 50% 40%,
++      color-mix(in oklab, var(--color-new-tab-page-focus-ring) 22%, transparent),
++      transparent 70%),
++    linear-gradient(rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.3));
++  content: '';
++  inset: 0;
++  pointer-events: none;
++  position: fixed;
++  z-index: 0;
++}
++
++#greeting {
++  margin-bottom: 30px;
++  text-align: center;
++}
++
++#greeting h1 {
++  font-size: clamp(34px, 5.4vw, 64px);
++  font-weight: 500;
++  letter-spacing: -0.02em;
++  color: var(--color-new-tab-page-primary-foreground);
++  margin: 0 0 10px;
++  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.35);
++}
++
++#greeting .sub {
++  font-size: clamp(16px, 1.8vw, 22px);
++  color: var(--color-new-tab-page-secondary-foreground);
++}
+--- a/chrome/browser/resources/new_tab_page/app.ts
++++ b/chrome/browser/resources/new_tab_page/app.ts
+@@ -1430,6 +1430,13 @@
+         (!!this.theme_.backgroundImage || !this.theme_.isGm3);
+   }
+ 
++  protected greeting_(): string {
++    const hour = new Date().getHours();
++    const part = hour < 5 ? 'Night' : hour < 12 ? 'Morning' :
++        hour < 18 ? 'Afternoon' : 'Evening';
++    return `Good ${part} User!`;
++  }
++
+   protected showThemeAttribution_(): boolean {
+     return !!this.theme_?.backgroundImage?.attributionUrl;
+   }

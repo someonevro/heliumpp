@@ -1,0 +1,277 @@
+--- a/chrome/browser/helium_theme/helium_theme.cc
++++ b/chrome/browser/helium_theme/helium_theme.cc
+@@ -34,6 +34,7 @@
+ #include "ui/base/mojom/themes.mojom.h"
+ #include "ui/native_theme/native_theme.h"
+ #include "ui/native_theme/native_theme_observer.h"
++#include "ui/gfx/color_utils.h"
+ #include "ui/gfx/geometry/size.h"
+ 
+ #if BUILDFLAG(IS_WIN)
+@@ -195,12 +196,33 @@
+   LOG(INFO) << "Applied desktop accent color " << std::hex << color;
+ }
+ 
+-void OnDecoded(base::WeakPtr<Profile> profile, const SkBitmap& bitmap) {
++std::optional<GradientColors>& DesktopGradient() {
++  static std::optional<GradientColors> colors;
++  return colors;
++}
++
++void SetDesktopGradient(std::optional<GradientColors> colors) {
++  if (DesktopGradient() != colors) {
++    DesktopGradient() = colors;
++    // Repaints the UI; only fires on a real change, so the watcher cannot loop.
++    ui::NativeTheme::GetInstanceForNativeUi()->NotifyOnNativeThemeUpdated();
++  }
++}
++
++// `fallback_accent` is the desktop's own accent, used when the wallpaper has no
++// color of its own.
++void OnDecoded(base::WeakPtr<Profile> profile,
++               std::optional<SkColor> fallback_accent,
++               const SkBitmap& bitmap) {
+   if (!profile || bitmap.isNull()) {
+     return;
+   }
++  SetDesktopGradient(ExtractGradientColors(bitmap));
+   std::optional<SkColor> color = DominantColor(bitmap);
+   if (!color) {
++    color = fallback_accent;
++  }
++  if (!color) {
+     LOG(INFO) << "Wallpaper has no usable accent color; keeping current theme";
+     return;
+   }
+@@ -208,15 +230,22 @@
+ }
+ 
+ void OnRead(base::WeakPtr<Profile> profile,
++            std::optional<SkColor> fallback_accent,
+             std::optional<std::vector<uint8_t>> bytes) {
+-  if (!profile || !bytes) {
+-    LOG(INFO) << "Wallpaper not found or unreadable; keeping current theme";
++  if (!profile) {
++    return;
++  }
++  if (!bytes) {
++    LOG(INFO) << "Wallpaper not found or unreadable";
++    if (fallback_accent) {
++      ApplyColor(profile.get(), *fallback_accent);
++    }
+     return;
+   }
+   data_decoder::DecodeImageIsolated(
+       *bytes, data_decoder::mojom::ImageCodec::kDefault,
+       /*shrink_to_fit=*/true, kMaxDecodedBytes, gfx::Size(),
+-      base::BindOnce(&OnDecoded, profile));
++      base::BindOnce(&OnDecoded, profile, fallback_accent));
+ }
+ 
+ // Where the desktop's colors come from this time.
+@@ -243,7 +272,8 @@
+   return source;
+ }
+ 
+-// The desktop's own accent wins; otherwise the wallpaper's dominant color.
++// The wallpaper's colors win (accent and the two-color fade); the desktop's own
++// accent is used when the wallpaper has none.
+ void OnSource(base::WeakPtr<Profile> profile, Source source) {
+   if (!profile) {
+     return;
+@@ -254,17 +284,16 @@
+     DesktopBackground() = source.background;
+     ui::NativeTheme::GetInstanceForNativeUi()->NotifyOnNativeThemeUpdated();
+   }
+-  if (source.accent) {
+-    ApplyColor(profile.get(), *source.accent);
+-    return;
+-  }
+   if (source.wallpaper.empty()) {
++    if (source.accent) {
++      ApplyColor(profile.get(), *source.accent);
++    }
+     return;
+   }
+   base::ThreadPool::PostTaskAndReplyWithResult(
+       FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+       base::BindOnce(&ReadWallpaper, source.wallpaper),
+-      base::BindOnce(&OnRead, profile));
++      base::BindOnce(&OnRead, profile, source.accent));
+ }
+ 
+ // Re-applies when the desktop changes: the system theme or accent (all
+@@ -325,6 +354,85 @@
+ 
+ }  // namespace
+ 
++std::optional<GradientColors> GetDesktopGradient() {
++  return DesktopGradient();
++}
++
++std::optional<GradientColors> ExtractGradientColors(const SkBitmap& bitmap) {
++  if (bitmap.isNull() || bitmap.width() <= 0 || bitmap.height() <= 0) {
++    return std::nullopt;
++  }
++  const int step_x = std::max(1, bitmap.width() / 64);
++  const int step_y = std::max(1, bitmap.height() / 64);
++  constexpr int kBins = 12;  // 30 degrees of hue each.
++  struct Bin {
++    double weight = 0, r = 0, g = 0, b = 0;
++  } bins[kBins];
++  std::vector<double> lightness;
++  double total = 0;
++  int samples = 0;
++  for (int y = 0; y < bitmap.height(); y += step_y) {
++    for (int x = 0; x < bitmap.width(); x += step_x) {
++      const SkColor c = bitmap.getColor(x, y);
++      color_utils::HSL hsl;
++      color_utils::SkColorToHSL(c, &hsl);
++      const double weight = hsl.s * (1 - std::abs(2 * hsl.l - 1));
++      Bin& bin = bins[std::min(kBins - 1, static_cast<int>(hsl.h * kBins))];
++      bin.weight += weight;
++      bin.r += SkColorGetR(c) * weight;
++      bin.g += SkColorGetG(c) * weight;
++      bin.b += SkColorGetB(c) * weight;
++      total += weight;
++      lightness.push_back(hsl.l);
++      ++samples;
++    }
++  }
++  if (samples == 0) {
++    return std::nullopt;
++  }
++  if (total / samples < 0.03) {
++    // Grayscale wallpaper: its darker and lighter tones.
++    std::sort(lightness.begin(), lightness.end());
++    const auto gray = [&](double fraction) {
++      const int v = static_cast<int>(
++          std::lround(255 * lightness[static_cast<size_t>(
++                                fraction * (lightness.size() - 1))]));
++      return SkColorSetRGB(v, v, v);
++    };
++    return GradientColors(gray(0.05), gray(0.95));
++  }
++  const auto bin_color = [&](const Bin& bin) {
++    return SkColorSetRGB(static_cast<int>(std::lround(bin.r / bin.weight)),
++                         static_cast<int>(std::lround(bin.g / bin.weight)),
++                         static_cast<int>(std::lround(bin.b / bin.weight)));
++  };
++  int first = 0;
++  for (int i = 1; i < kBins; ++i) {
++    if (bins[i].weight > bins[first].weight) {
++      first = i;
++    }
++  }
++  // The second color: the strongest hue at least 60 degrees from the first.
++  int second = -1;
++  for (int i = 0; i < kBins; ++i) {
++    const int distance = std::min((i - first + kBins) % kBins,
++                                  (first - i + kBins) % kBins);
++    if (distance >= 2 && bins[i].weight >= 0.25 * bins[first].weight &&
++        (second < 0 || bins[i].weight > bins[second].weight)) {
++      second = i;
++    }
++  }
++  const SkColor color_a = bin_color(bins[first]);
++  if (second >= 0) {
++    return GradientColors(color_a, bin_color(bins[second]));
++  }
++  // One hue family: pair it with a neighbouring hue.
++  color_utils::HSL hsl;
++  color_utils::SkColorToHSL(color_a, &hsl);
++  hsl.h = std::fmod(hsl.h + 40.0 / 360.0, 1.0);
++  return GradientColors(color_a, color_utils::HSLToSkColor(hsl, 255));
++}
++
+ std::optional<SkColor> GetDesktopBackground() {
+   return DesktopBackground();
+ }
+--- a/chrome/browser/helium_theme/helium_theme.h
++++ b/chrome/browser/helium_theme/helium_theme.h
+@@ -6,6 +6,7 @@
+ #define CHROME_BROWSER_HELIUM_THEME_HELIUM_THEME_H_
+ 
+ #include <optional>
++#include <utility>
+ 
+ #include "third_party/skia/include/core/SkColor.h"
+ 
+@@ -34,6 +35,14 @@
+ // nullopt when the platform has none. The browser frame is tinted from it.
+ std::optional<SkColor> GetDesktopBackground();
+ 
++// Two colors taken from the wallpaper that the browser frame fades between
++// (top-left to bottom-right), or nullopt before the wallpaper has been read.
++// A grayscale wallpaper gives two grays; a one-hue wallpaper gives that hue and
++// a neighbour. The painter darkens/lightens them to keep text readable.
++using GradientColors = std::pair<SkColor, SkColor>;
++std::optional<GradientColors> GetDesktopGradient();
++std::optional<GradientColors> ExtractGradientColors(const SkBitmap& bitmap);
++
+ // Saturation- and lightness-weighted average color of |bitmap|, or nullopt for
+ // images with no meaningful color (grayscale, nearly black or white).
+ std::optional<SkColor> DominantColor(const SkBitmap& bitmap);
+--- a/chrome/browser/ui/views/frame/themed_background.cc
++++ b/chrome/browser/ui/views/frame/themed_background.cc
+@@ -6,6 +6,7 @@
+ 
+ #include <optional>
+ 
++#include "chrome/browser/helium_theme/helium_theme.h"
+ #include "chrome/browser/themes/theme_properties.h"
+ #include "chrome/browser/ui/color/chrome_color_id.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+@@ -16,7 +17,10 @@
+ #include "ui/base/theme_provider.h"
+ #include "ui/color/color_id.h"
+ #include "ui/color/color_provider.h"
++#include "cc/paint/paint_flags.h"
+ #include "ui/gfx/canvas.h"
++#include "ui/gfx/color_utils.h"
++#include "ui/gfx/skia_paint_util.h"
+ 
+ namespace {
+ 
+@@ -114,10 +118,38 @@
+                                        ThemeChoice theme_choice) {
+   bool painted =
+       PaintThemeCustomImage(canvas, view, browser_view, theme_choice);
+-  if (!painted) {
+-    canvas->DrawColor(view->GetColorProvider()->GetColor(
+-        GetThemeChoiceInfo(theme_choice, view).second));
++  if (painted) {
++    return;
++  }
++  const SkColor base_color = view->GetColorProvider()->GetColor(
++      GetThemeChoiceInfo(theme_choice, view).second);
++  const std::optional<helium_theme::GradientColors> gradient =
++      helium_theme::GetDesktopGradient();
++  if (!gradient || !browser_view) {
++    canvas->DrawColor(base_color);
++    return;
+   }
++  // Two wallpaper colors fade into each other across the whole window, kept
++  // dark (or light, in light mode) so text stays readable.
++  const bool dark = color_utils::IsDark(base_color);
++  const auto adjust = [&](SkColor color) {
++    color_utils::HSL hsl;
++    color_utils::SkColorToHSL(color, &hsl);
++    // Squeeze the lightness into a band that keeps text readable but still
++    // keeps the two colors apart.
++    hsl.l = dark ? 0.07 + 0.25 * hsl.l : 0.70 + 0.28 * hsl.l;
++    hsl.s = std::min(hsl.s, 0.7);
++    return color_utils::HSLToSkColor(hsl, 255);
++  };
++  gfx::Point origin;
++  views::View::ConvertPointToTarget(view, browser_view, &origin);
++  cc::PaintFlags flags;
++  flags.setShader(gfx::CreateGradientShader(
++      gfx::Point(-origin.x(), -origin.y()),
++      gfx::Point(browser_view->width() - origin.x(),
++                 browser_view->height() - origin.y()),
++      adjust(gradient->first), adjust(gradient->second)));
++  canvas->DrawRect(view->GetLocalBounds(), flags);
+ }
+ 
+ std::optional<SkColor> ThemedBackground::GetBackgroundColor(

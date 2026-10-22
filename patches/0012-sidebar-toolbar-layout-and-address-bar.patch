@@ -1,0 +1,263 @@
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+@@ -253,6 +253,8 @@
+ }
+ 
+ constexpr int kCenteredLocationBarMaxWidth = 700;
++// Space between the navigation row and the address bar in the sidebar toolbar.
++constexpr int kSidebarLocationBarGap = 6;
+ 
+ struct CenteredLocationBarStep {
+   int min_toolbar_width;
+@@ -1673,7 +1675,8 @@
+       // back button) plus margins.
+       // TODO(crbug.com/40663413): Figure out why the height reports incorrectly
+       // on some installations.
+-      if (layout_manager_ && location_bar_->IsVisible()) {
++      if (layout_manager_ && location_bar_->IsVisible() &&
++          !IsSidebarToolbar()) {
+         const int max_height = std::max(location_bar_->PreferredSize().height(),
+                                         GetBackForwardButtonSize().height()) +
+                                layout_manager_->interior_margin().height();
+@@ -1701,7 +1704,8 @@
+       // back button) plus margins.
+       // TODO(crbug.com/40663413): Figure out why the height reports incorrectly
+       // on some installations.
+-      if (layout_manager_ && location_bar_->IsVisible()) {
++      if (layout_manager_ && location_bar_->IsVisible() &&
++          !IsSidebarToolbar()) {
+         const int max_height =
+             std::max(location_bar_->MinimumSize().height(),
+                      GetBackForwardButtonSize(/*minimum_size=*/true).height()) +
+@@ -1761,6 +1765,18 @@
+   // Call super implementation to ensure layout manager and child layouts
+   // happen.
+   LayoutSuperclass<AccessiblePaneView>(this);
++
++  if (IsSidebarToolbar() && location_bar_view_) {
++    const int side_margin =
++        GetLayoutConstant(LayoutConstant::kToolbarIconDefaultMargin) + 4;
++    const int bar_height = location_bar_view_->GetPreferredSize().height();
++    const int bottom_margin =
++        GetLayoutInsets(LayoutInset::TOOLBAR_INTERIOR_MARGIN).bottom();
++    location_bar_view_->SetBounds(side_margin,
++                                  height() - bottom_margin - bar_height,
++                                  std::max(0, width() - 2 * side_margin),
++                                  bar_height);
++  }
+ }
+ 
+ void ToolbarView::OnThemeChanged() {
+@@ -2042,6 +2058,20 @@
+       interior_margin.set_right(0);
+     }
+   }
++  // Sidebar toolbar: the flex layout only handles the first row (navigation
++  // buttons, extensions, menu). The address bar is ignored by it and placed in a
++  // second row at the bottom in Layout().
++  const bool sidebar_toolbar = IsSidebarToolbar();
++  if (location_bar_view_) {
++    location_bar_view_->SetProperty(views::kViewIgnoredByLayoutKey,
++                                    sidebar_toolbar);
++    location_bar_view_->SetSidebarStyle(sidebar_toolbar);
++    if (sidebar_toolbar) {
++      interior_margin.set_bottom(interior_margin.bottom() +
++                                 kSidebarLocationBarGap +
++                                 location_bar_view_->GetPreferredSize().height());
++    }
++  }
+   layout_manager_->SetInteriorMargin(interior_margin);
+ 
+   // Extend buttons to the window edge if we're either in a maximized or
+@@ -2283,6 +2313,15 @@
+   return controller && controller->IsDynamicLayout();
+ }
+ 
++bool ToolbarView::IsSidebarToolbar() const {
++  static const bool disabled =
++      base::CommandLine::ForCurrentProcess()->HasSwitch("no-sidebar-toolbar");
++  auto* controller =
++      HeliumLayoutStateController::From(browser_view_->browser());
++  return !disabled && display_mode_ == DisplayMode::kNormal && controller &&
++         controller->IsVerticalLayout() && !controller->IsZenModeEnabled();
++}
++
+ bool ToolbarView::IsVerticalLayout() const {
+   auto* controller =
+       HeliumLayoutStateController::From(browser_view_->browser());
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.h
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.h
+@@ -344,6 +344,9 @@
+ 
+   // Returns whether the Helium layout is Compact.
+   bool IsCompactLayout() const;
++  // True when the toolbar sits at the top of the vertical tab sidebar, laid out
++  // as two rows: navigation buttons, then the address bar.
++  bool IsSidebarToolbar() const;
+   bool IsDynamicLayout() const;
+   bool IsVerticalLayout() const;
+   bool IsVerticalTabsRightAligned() const;
+--- a/chrome/browser/ui/views/location_bar/location_bar_view.cc
++++ b/chrome/browser/ui/views/location_bar/location_bar_view.cc
+@@ -150,6 +150,9 @@
+ #include "ui/gfx/vector_icon_types.h"
+ #include "ui/menus/simple_menu_model.h"
+ #include "ui/views/accessibility/view_accessibility.h"
++#include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "components/vector_icons/vector_icons.h"
+ #include "ui/views/background.h"
+ #include "ui/views/border.h"
+ #include "ui/views/button_drag_utils.h"
+@@ -529,6 +532,14 @@
+   clear_all_button_ = AddChildView(std::move(clear_all_button));
+   RefreshClearAllButtonIcon();
+ 
++  auto copy_link_button = views::CreateVectorImageButtonWithNativeTheme(
++      base::BindRepeating(&LocationBarView::OnCopyLinkPressed,
++                          base::Unretained(this)),
++      vector_icons::kContentCopyIcon, 16);
++  copy_link_button->SetTooltipText(u"Copy link");
++  copy_link_button->SetVisible(false);
++  copy_link_button_ = AddChildView(std::move(copy_link_button));
++
+   auto ai_mode_hint_label = std::make_unique<views::Label>(
+       std::u16string(), CONTEXT_OMNIBOX_PRIMARY, views::style::STYLE_PRIMARY);
+   ai_mode_hint_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+@@ -561,9 +572,60 @@
+ }
+ 
+ int LocationBarView::GetBorderRadius() const {
++  if (sidebar_style_) {
++    return std::max(1, std::min(width(), height()) / 2);
++  }
+   return ComputeBorderRadius(size());
+ }
+ 
++void LocationBarView::SetSidebarStyle(bool enabled) {
++  if (sidebar_style_ == enabled) {
++    return;
++  }
++  sidebar_style_ = enabled;
++  UpdateCopyLinkButton();
++  InvalidateLayout();
++  SchedulePaint();
++}
++
++// The copy-link button shows only while the pointer is over the bar, the bar is
++// in the sidebar style, and the user is not typing.
++void LocationBarView::UpdateCopyLinkButton() {
++  if (!copy_link_button_) {
++    return;
++  }
++  const bool show = sidebar_style_ && IsMouseHovered() &&
++                    !omnibox_view_->HasFocus() &&
++                    !omnibox_controller_->IsPopupOpen();
++  if (copy_link_button_->GetVisible() != show) {
++    copy_link_button_->SetVisible(show);
++    InvalidateLayout();
++  }
++}
++
++void LocationBarView::OnCopyLinkPressed() {
++  if (!browser_) {
++    return;
++  }
++  chrome::ExecuteCommand(browser_, IDC_COPY_URL);
++  // Brief confirmation: swap the icon to a check mark.
++  views::SetImageFromVectorIconWithColor(
++      copy_link_button_, kCheckIcon, 16,
++      {ui::kColorIcon, ui::kColorIconDisabled});
++  copy_link_button_->SetTooltipText(u"Link copied");
++  copy_feedback_timer_.Start(
++      FROM_HERE, base::Seconds(1.5),
++      base::BindOnce(&LocationBarView::ResetCopyLinkIcon,
++                     base::Unretained(this)));
++}
++
++void LocationBarView::ResetCopyLinkIcon() {
++  views::SetImageFromVectorIconWithColor(
++      copy_link_button_, vector_icons::kContentCopyIcon, 16,
++      {ui::kColorIcon, ui::kColorIconDisabled});
++  copy_link_button_->SetTooltipText(u"Copy link");
++}
++
+ // static
+ int LocationBarView::ComputeBorderRadius(gfx::Size size) {
+   return ChromeLayoutProvider::Get()->GetCornerRadiusMetric(
+@@ -983,6 +1045,8 @@
+ 
+   add_trailing_decoration(clear_all_button_, /*intra_item_padding=*/0,
+                           /*edge_padding=*/trailing_decorations_edge_padding);
++  add_trailing_decoration(copy_link_button_, /*intra_item_padding=*/0,
++                          /*edge_padding=*/trailing_decorations_edge_padding);
+ 
+   // Perform layout.
+   int entry_width = width();
+@@ -1488,6 +1552,10 @@
+ 
+   if (is_popup_mode_) {
+     SetBackground(views::CreateSolidBackground(background_color_));
++  } else if (sidebar_style_ && border_color == SK_ColorTRANSPARENT) {
++    SetBackground(views::CreateRoundedRectBackground(
++        background_color_,
++        static_cast<float>(std::min(width(), height())) / 2));
+   } else {
+     SetBackground(CreateRoundRectBackground(
+         background_color_, border_color, size(),
+@@ -1793,10 +1861,12 @@
+ 
+ void LocationBarView::OnMouseMoved(const ui::MouseEvent& event) {
+   OnOmniboxHovered(true);
++  UpdateCopyLinkButton();
+ }
+ 
+ void LocationBarView::OnMouseExited(const ui::MouseEvent& event) {
+   OnOmniboxHovered(false);
++  UpdateCopyLinkButton();
+ }
+ 
+ void LocationBarView::ShowContextMenu(const gfx::Point& p,
+@@ -2147,6 +2217,7 @@
+ }
+ 
+ void LocationBarView::OnOmniboxHovered(bool is_hovering) {
++  UpdateCopyLinkButton();
+   if (is_hovering) {
+     // Only show the hover animation when omnibox is in unfocused steady state.
+     if (!omnibox_view_->HasFocus()) {
+--- a/chrome/browser/ui/views/location_bar/location_bar_view.h
++++ b/chrome/browser/ui/views/location_bar/location_bar_view.h
+@@ -17,6 +17,7 @@
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/weak_ptr.h"
+ #include "base/scoped_observation.h"
++#include "base/timer/timer.h"
+ #include "build/build_config.h"
+ #include "chrome/browser/ui/location_bar/location_bar.h"
+ #include "chrome/browser/ui/omnibox/omnibox_popup_state_manager.h"
+@@ -139,6 +140,10 @@
+ 
+   // Returns the location bar border radius in DIPs.
+   int GetBorderRadius() const;
++
++  // Pill-shaped bar with a copy-link button on hover; used when the toolbar sits
++  // in the vertical tab sidebar.
++  void SetSidebarStyle(bool enabled);
+   static int ComputeBorderRadius(gfx::Size size);
+ 
+   // Initializes the LocationBarView.
+@@ -602,6 +607,13 @@
+   // user to clear all text.
+   raw_ptr<views::ImageButton> clear_all_button_ = nullptr;
+ 
++  bool sidebar_style_ = false;
++  raw_ptr<views::ImageButton> copy_link_button_ = nullptr;
++  base::OneShotTimer copy_feedback_timer_;
++  void UpdateCopyLinkButton();
++  void OnCopyLinkPressed();
++  void ResetCopyLinkIcon();
++
+   // A label to show the AI Mode hint text.
+   raw_ptr<views::Label> ai_mode_hint_label_ = nullptr;
+ 

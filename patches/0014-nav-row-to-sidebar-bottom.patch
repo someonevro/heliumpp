@@ -1,0 +1,228 @@
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+@@ -82,6 +82,7 @@
+ #include "chrome/browser/ui/views/extensions/extensions_toolbar_coordinator.h"
+ #include "chrome/browser/ui/views/extensions/extensions_toolbar_desktop.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/frame/custom_corners_background.h"
+ #include "chrome/browser/ui/views/frame/horizontal_tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/frame/top_container_view.h"
+@@ -253,8 +254,6 @@
+ }
+ 
+ constexpr int kCenteredLocationBarMaxWidth = 700;
+-// Space between the address bar and the navigation row in the sidebar toolbar.
+-constexpr int kSidebarLocationBarGap = 6;
+ 
+ struct CenteredLocationBarStep {
+   int min_toolbar_width;
+@@ -1765,17 +1764,6 @@
+   // Call super implementation to ensure layout manager and child layouts
+   // happen.
+   LayoutSuperclass<AccessiblePaneView>(this);
+-
+-  if (IsSidebarToolbar() && location_bar_view_) {
+-    const int side_margin =
+-        GetLayoutConstant(LayoutConstant::kToolbarIconDefaultMargin) + 4;
+-    const int bar_height = location_bar_view_->GetPreferredSize().height();
+-    const int top_margin =
+-        GetLayoutInsets(LayoutInset::TOOLBAR_INTERIOR_MARGIN).top();
+-    location_bar_view_->SetBounds(side_margin, top_margin,
+-                                  std::max(0, width() - 2 * side_margin),
+-                                  bar_height);
+-  }
+ }
+ 
+ void ToolbarView::OnThemeChanged() {
+@@ -2057,18 +2045,26 @@
+       interior_margin.set_right(0);
+     }
+   }
+-  // Sidebar toolbar: the address bar is ignored by the flex layout and placed
+-  // in the top row in Layout(); the flex layout handles the row below it
+-  // (navigation buttons, extensions, menu).
++  // Sidebar toolbar: the address bar lives at the top of the vertical tab strip
++  // region, while this toolbar (navigation buttons, extensions, menu) is placed
++  // at the bottom of the sidebar by the browser view layout.
+   const bool sidebar_toolbar = IsSidebarToolbar();
+   if (location_bar_view_) {
+-    location_bar_view_->SetProperty(views::kViewIgnoredByLayoutKey,
+-                                    sidebar_toolbar);
+-    location_bar_view_->SetSidebarStyle(sidebar_toolbar);
+-    if (sidebar_toolbar) {
+-      interior_margin.set_top(interior_margin.top() + kSidebarLocationBarGap +
+-                              location_bar_view_->GetPreferredSize().height());
++    auto* region = browser_view_->vertical_tab_strip_region_view();
++    if (sidebar_toolbar && region && location_bar_view_->parent() == this) {
++      location_bar_child_index_ =
++          GetIndexOf(location_bar_view_).value_or(location_bar_child_index_);
++      region->SetSidebarLocationBar(RemoveChildViewT(location_bar_view_.get()));
++    } else if (!sidebar_toolbar && region &&
++               location_bar_view_->parent() != this) {
++      if (auto taken = region->TakeSidebarLocationBar()) {
++        AddChildViewAt(
++            std::unique_ptr<LocationBarView>(
++                static_cast<LocationBarView*>(taken.release())),
++            location_bar_child_index_);
++      }
+     }
++    location_bar_view_->SetSidebarStyle(sidebar_toolbar);
+   }
+   layout_manager_->SetInteriorMargin(interior_margin);
+ 
+--- a/chrome/browser/ui/views/frame/browser_view.h
++++ b/chrome/browser/ui/views/frame/browser_view.h
+@@ -284,6 +284,11 @@
+   // Returns either the Horizontal or Vertical TabStrip.
+   TabStripRegionView* tab_strip_view() const;
+ 
++  // The vertical tab strip region, which may not be the active tab strip.
++  VerticalTabStripRegionView* vertical_tab_strip_region_view() const {
++    return vertical_tab_strip_region_view_.get();
++  }
++
+   // Test only function. When the VerticalTabs feature is enabled,
+   // `vertical_tab_strip_container_` will have a value for normal tabbed
+   // browsers even if it is not the active TabStrip. Prefer to use
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
+@@ -57,6 +57,12 @@
+   METADATA_HEADER(VerticalTabStripRegionView, BaseTabStripRegionView)
+ 
+  public:
++
++  // Hosts the address bar above the tab list when the toolbar is shown in the
++  // sidebar. The region owns the view until TakeSidebarLocationBar().
++  void SetSidebarLocationBar(std::unique_ptr<views::View> location_bar);
++  std::unique_ptr<views::View> TakeSidebarLocationBar();
++
+   DECLARE_CLASS_CUSTOM_ELEMENT_EVENT_TYPE(kAnimationCompletedEvent);
+ 
+   // TODO(crbug.com/465833741): Replace constant with derived value based on
+@@ -233,6 +239,7 @@
+   bool zen_mode_floating_style_ = false;
+ 
+   raw_ptr<VerticalTabStripBottomContainer> bottom_button_container_ = nullptr;
++  raw_ptr<views::View> sidebar_location_bar_ = nullptr;
+   raw_ptr<views::View> gemini_button_ = nullptr;
+   raw_ptr<views::ResizeArea> resize_area_ = nullptr;
+   raw_ptr<ShadowFrameView> shadow_frame_ = nullptr;
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+@@ -795,12 +795,41 @@
+       gfx::Insets::TLBR(top_padding, 0, padding, 0));
+ }
+ 
++void VerticalTabStripRegionView::SetSidebarLocationBar(
++    std::unique_ptr<views::View> location_bar) {
++  const int horizontal_padding =
++      GetLayoutConstant(LayoutConstant::kVerticalTabStripHorizontalPadding);
++  sidebar_location_bar_ = AddChildViewAt(std::move(location_bar), 0);
++  sidebar_location_bar_->SetProperty(
++      views::kMarginsKey, gfx::Insets::TLBR(8, horizontal_padding, 2,
++                                            horizontal_padding));
++  sidebar_location_bar_->SetVisible(state_controller_->GetCollapseState() ==
++                                    tabs::VerticalTabStripCollapseState::kExpanded);
++  InvalidateLayout();
++}
++
++std::unique_ptr<views::View> VerticalTabStripRegionView::TakeSidebarLocationBar() {
++  if (!sidebar_location_bar_) {
++    return nullptr;
++  }
++  views::View* bar = sidebar_location_bar_.get();
++  sidebar_location_bar_ = nullptr;
++  bar->SetVisible(true);
++  InvalidateLayout();
++  return RemoveChildViewT(bar);
++}
++
+ void VerticalTabStripRegionView::OnCollapseStateChanged(
+     tabs::VerticalTabStripCollapseState state) {
+   // Apply padding immediately at the start of the animation by including
+   // the collapsing state.
+   bool collapsed = state != tabs::VerticalTabStripCollapseState::kExpanded;
+ 
++  // The address bar does not fit in the narrow, collapsed strip.
++  if (sidebar_location_bar_) {
++    sidebar_location_bar_->SetVisible(!collapsed);
++  }
++
+   UpdateResizeAreaVisibility();
+ 
+   resize_area_width_ = collapsed ? kCollapsedResizeAreaWidth : kResizeAreaWidth;
+--- a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
++++ b/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
+@@ -865,6 +865,17 @@
+   const BrowserLayoutParams top_container_parent_params = params;
+   const bool vertical_right_aligned =
+       delegate().IsVerticalTabStripRightAligned();
++  // Sidebar toolbar: the address bar sits inside the vertical tab strip region
++  // (top of the sidebar) and the toolbar (navigation buttons, extensions, menu)
++  // sits at the bottom of the sidebar column, below the tab strip.
++  const bool sidebar_toolbar =
++      IsSidebarToolbarEnabled() &&
++      layout_data_->tab_strip_type == TabStripType::kVertical &&
++      !zen.floating_vertical_tab_strip;
++  const int sidebar_toolbar_height =
++      sidebar_toolbar && delegate().IsToolbarVisible()
++          ? views().toolbar->GetPreferredSize().height()
++          : 0;
+ 
+   // Lay out horizontal tab strip region if present.
+   if (!dynamic_tab_strip &&
+@@ -935,11 +946,16 @@
+       if (zen.enabled) {
+         top_offset = ScaleExtent(top_offset, zen.top_chrome_ratio);
+       }
++      if (sidebar_toolbar) {
++        // The strip starts at the top of the window; the toolbar is below it.
++        top_offset = 0;
++      }
+ 
+       const int vertical_tab_strip_height =
+           std::max(0, params.visual_client_area.height() - top_offset -
+                           zen.vertical_tab_strip_top_padding -
+-                          zen.vertical_tab_strip_padding);
++                          zen.vertical_tab_strip_padding -
++                          sidebar_toolbar_height);
+       vertical_tab_strip_bounds = {
+           vertical_tab_strip_x,
+           params.visual_client_area.y() + top_offset +
+@@ -1042,10 +1058,6 @@
+         layout.AddChild(views().top_container, gfx::Rect());
+ 
+     // Calculate the params for laying out the top container.
+-    const bool sidebar_toolbar =
+-        IsSidebarToolbarEnabled() &&
+-        layout_data_->tab_strip_type == TabStripType::kVertical &&
+-        !zen.floating_vertical_tab_strip;
+     BrowserLayoutParams sidebar_toolbar_params = top_container_parent_params;
+     if (sidebar_toolbar) {
+       // Keep only the sidebar-wide column on the side of the tab strip.
+@@ -1068,6 +1080,24 @@
+     top_container_layout.bounds = GetTopContainerBoundsInParent(
+         top_container_local_bounds, parent_params);
+ 
++    if (sidebar_toolbar) {
++      // Only the toolbar is kept: hide the bookmarks bar and separator, shrink
++      // the container to the toolbar and put it at the bottom of the sidebar.
++      for (views::View* extra :
++           std::initializer_list<views::View*>{
++               views().bookmark_bar.get(),
++               views().top_container_separator.get()}) {
++        auto child = top_container_layout.children.find(extra);
++        if (child != top_container_layout.children.end()) {
++          child->second.bounds = gfx::Rect();
++          child->second.visibility = false;
++        }
++      }
++      top_container_layout.bounds.set_height(sidebar_toolbar_height);
++      top_container_layout.bounds.set_y(
++          parent_params.visual_client_area.bottom() - sidebar_toolbar_height);
++    }
++
+     if (layout_data_->tab_strip_type == TabStripType::kVertical &&
+         !zen.floating_vertical_tab_strip && !sidebar_toolbar) {
+       auto& top_container_children = top_container_layout.children;

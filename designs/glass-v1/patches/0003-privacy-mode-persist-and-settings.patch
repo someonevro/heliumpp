@@ -1,0 +1,189 @@
+--- a/chrome/browser/helium_privacy_mode/helium_privacy_mode.h
++++ b/chrome/browser/helium_privacy_mode/helium_privacy_mode.h
+@@ -6,12 +6,22 @@
+ 
+ class Profile;
+ 
++namespace user_prefs {
++class PrefRegistrySyncable;
++}
++
+ namespace helium_privacy_mode {
+ 
+-// Applies the cookie settings of the mode named by --privacy-mode=<mode>
+-// ("usability", "medium" or "maximum") to |profile|. Does nothing when the
+-// switch is absent; logs and ignores unknown values.
+-void ApplyFromCommandLine(Profile* profile);
++// Registers helium.privacy_mode ("" = no mode chosen, nothing is enforced).
++void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
++
++// If --privacy-mode=<mode> ("usability", "medium" or "maximum") is given, stores
++// it in helium.privacy_mode. Then enforces the stored mode on |profile|: cookies,
++// WebRTC IP handling, HTTPS mode, permission defaults, preloading and
++// background mode. Unknown modes are logged and ignored. Applied on every
++// profile start, so manual changes to these settings are reset at restart.
++// Referrer and fingerprinting (feature flags) are not handled yet.
++void Apply(Profile* profile);
+ 
+ }  // namespace helium_privacy_mode
+ 
+--- a/chrome/browser/helium_privacy_mode/helium_privacy_mode.cc
++++ b/chrome/browser/helium_privacy_mode/helium_privacy_mode.cc
+@@ -5,48 +5,106 @@
+ #include "base/command_line.h"
+ #include "base/logging.h"
+ #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
++#include "chrome/browser/prefetch/pref_names.h"
++#include "chrome/browser/preloading/preloading_prefs.h"
+ #include "chrome/browser/profiles/profile.h"
++#include "chrome/common/pref_names.h"
+ #include "components/content_settings/core/browser/cookie_settings.h"
+ #include "components/content_settings/core/browser/host_content_settings_map.h"
+ #include "components/content_settings/core/common/content_settings.h"
+ #include "components/content_settings/core/common/content_settings_types.h"
+ #include "components/content_settings/core/common/pref_names.h"
++#include "components/pref_registry/pref_registry_syncable.h"
+ #include "components/prefs/pref_service.h"
+ 
+ namespace helium_privacy_mode {
+ 
+ namespace {
++
+ constexpr char kSwitch[] = "privacy-mode";
++constexpr char kModePref[] = "helium.privacy_mode";
++
++enum class Permissions { kAsk, kAskRestricted, kBlock };
++
++struct Mode {
++  content_settings::CookieControlsMode third_party_cookies;
++  ContentSetting cookies;
++  const char* webrtc_ip_policy;
++  bool https_first;
++  bool https_only;
++  Permissions permissions;
++};
++
++bool GetMode(const std::string& name, Mode* mode) {
++  using content_settings::CookieControlsMode;
++  if (name == "usability") {
++    *mode = {CookieControlsMode::kIncognitoOnly, CONTENT_SETTING_ALLOW,
++             "default", true, false, Permissions::kAsk};
++  } else if (name == "medium") {
++    *mode = {CookieControlsMode::kBlockThirdParty, CONTENT_SETTING_ALLOW,
++             "default_public_interface_only", true, false,
++             Permissions::kAskRestricted};
++  } else if (name == "maximum") {
++    // SESSION_ONLY: cookies and site data are deleted when the browser closes.
++    *mode = {CookieControlsMode::kBlockThirdParty,
++             CONTENT_SETTING_SESSION_ONLY, "disable_non_proxied_udp", false,
++             true, Permissions::kBlock};
++  } else {
++    return false;
++  }
++  return true;
++}
++
+ }  // namespace
+ 
+-void ApplyFromCommandLine(Profile* profile) {
++void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
++  registry->RegisterStringPref(kModePref, std::string());
++}
++
++void Apply(Profile* profile) {
++  PrefService* prefs = profile->GetPrefs();
+   const base::CommandLine* cl = base::CommandLine::ForCurrentProcess();
+-  if (!cl->HasSwitch(kSwitch)) {
+-    return;
++  if (cl->HasSwitch(kSwitch)) {
++    Mode unused;
++    const std::string requested = cl->GetSwitchValueASCII(kSwitch);
++    if (GetMode(requested, &unused)) {
++      prefs->SetString(kModePref, requested);
++    } else {
++      LOG(WARNING) << "Ignoring unknown --" << kSwitch << "=" << requested;
++    }
+   }
+-  const std::string mode = cl->GetSwitchValueASCII(kSwitch);
+ 
+-  content_settings::CookieControlsMode third_party;
+-  ContentSetting cookies;
+-  if (mode == "usability") {
+-    third_party = content_settings::CookieControlsMode::kIncognitoOnly;
+-    cookies = CONTENT_SETTING_ALLOW;
+-  } else if (mode == "medium") {
+-    third_party = content_settings::CookieControlsMode::kBlockThirdParty;
+-    cookies = CONTENT_SETTING_ALLOW;
+-  } else if (mode == "maximum") {
+-    third_party = content_settings::CookieControlsMode::kBlockThirdParty;
+-    cookies = CONTENT_SETTING_SESSION_ONLY;  // deleted when the browser closes
+-  } else {
+-    LOG(WARNING) << "Ignoring unknown --" << kSwitch << "=" << mode;
++  const std::string name = prefs->GetString(kModePref);
++  Mode mode;
++  if (name.empty() || !GetMode(name, &mode)) {
+     return;
+   }
+ 
+-  profile->GetPrefs()->SetInteger(prefs::kCookieControlsMode,
+-                                  static_cast<int>(third_party));
+-  HostContentSettingsMapFactory::GetForProfile(profile)
+-      ->SetDefaultContentSetting(ContentSettingsType::COOKIES, cookies);
+-  LOG(INFO) << "Applied privacy mode: " << mode;
++  prefs->SetInteger(prefs::kCookieControlsMode,
++                    static_cast<int>(mode.third_party_cookies));
++  prefs->SetString(prefs::kWebRTCIPHandlingPolicy, mode.webrtc_ip_policy);
++  prefs->SetBoolean(prefs::kHttpsFirstBalancedMode, mode.https_first);
++  prefs->SetBoolean(prefs::kHttpsOnlyModeEnabled, mode.https_only);
++  prefs->SetInteger(
++      prefetch::prefs::kNetworkPredictionOptions,
++      static_cast<int>(prefetch::NetworkPredictionOptions::kDisabled));
++  prefs->SetBoolean(prefs::kBackgroundModeEnabled, false);
++  prefs->SetBoolean(prefs::kEnableQuietNotificationPermissionUi,
++                    mode.permissions == Permissions::kAskRestricted);
++
++  HostContentSettingsMap* map =
++      HostContentSettingsMapFactory::GetForProfile(profile);
++  map->SetDefaultContentSetting(ContentSettingsType::COOKIES, mode.cookies);
++  const ContentSetting sensitive = mode.permissions == Permissions::kBlock
++                                       ? CONTENT_SETTING_BLOCK
++                                       : CONTENT_SETTING_DEFAULT;
++  for (ContentSettingsType type :
++       {ContentSettingsType::GEOLOCATION, ContentSettingsType::NOTIFICATIONS,
++        ContentSettingsType::MEDIASTREAM_MIC,
++        ContentSettingsType::MEDIASTREAM_CAMERA}) {
++    map->SetDefaultContentSetting(type, sensitive);
++  }
++  LOG(INFO) << "Applied privacy mode: " << name;
+ }
+ 
+ }  // namespace helium_privacy_mode
+--- a/chrome/browser/profiles/profile_impl.cc
++++ b/chrome/browser/profiles/profile_impl.cc
+@@ -1206,7 +1206,7 @@
+   BrowserContextDependencyManager::GetInstance()->CreateBrowserContextServices(
+       this);
+ 
+-  helium_privacy_mode::ApplyFromCommandLine(this);
++  helium_privacy_mode::Apply(this);
+ 
+   FullBrowserTransitionManager::Get()->OnProfileCreated(this);
+ 
+--- a/chrome/browser/prefs/browser_prefs.cc
++++ b/chrome/browser/prefs/browser_prefs.cc
+@@ -38,6 +38,7 @@
+ #include "chrome/browser/glic/glic_pref_names.h"
+ #include "chrome/browser/glic/suggestions/contextual_cueing_prefs.h"
+ #include "chrome/browser/gpu/gpu_mode_manager.h"
++#include "chrome/browser/helium_privacy_mode/helium_privacy_mode.h"
+ #include "chrome/browser/hid/hid_policy_allowed_devices.h"
+ #include "chrome/browser/intranet_redirect_detector.h"
+ #include "chrome/browser/lifetime/browser_shutdown.h"
+@@ -1748,6 +1749,7 @@
+                           const std::string& locale) {
+   TRACE_EVENT0("browser", "chrome::RegisterProfilePrefs");
+   // User prefs. Please keep this list alphabetized.
++  helium_privacy_mode::RegisterProfilePrefs(registry);
+   AccessibilityLabelsService::RegisterProfilePrefs(registry);
+   registry->RegisterBooleanPref(prefs::kRendererAccessibilityEnabled, true);
+   AccessibilityUIMessageHandler::RegisterProfilePrefs(registry);

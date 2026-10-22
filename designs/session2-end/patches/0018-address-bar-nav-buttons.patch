@@ -1,0 +1,71 @@
+--- a/chrome/browser/ui/views/location_bar/location_bar_view.cc
++++ b/chrome/browser/ui/views/location_bar/location_bar_view.cc
+@@ -540,6 +540,28 @@
+   copy_link_button->SetVisible(false);
+   copy_link_button_ = AddChildView(std::move(copy_link_button));
+ 
++  // Back/forward/reload inside the bar, shown in the sidebar style only (the
++  // sidebar hides the regular navigation row).
++  auto add_nav_button = [&](const gfx::VectorIcon& icon, int command,
++                            std::u16string tooltip) {
++    auto button = views::CreateVectorImageButtonWithNativeTheme(
++        base::BindRepeating(
++            [](LocationBarView* bar, int command) {
++              if (bar->browser_) {
++                chrome::ExecuteCommand(bar->browser_, command);
++              }
++            },
++            base::Unretained(this), command),
++        icon, 16);
++    button->SetTooltipText(tooltip);
++    button->SetPreferredSize(gfx::Size(24, 24));
++    button->SetVisible(false);
++    nav_buttons_.push_back(AddChildView(std::move(button)));
++  };
++  add_nav_button(vector_icons::kArrowBackIcon, IDC_BACK, u"Back");
++  add_nav_button(vector_icons::kArrowForwardIcon, IDC_FORWARD, u"Forward");
++  add_nav_button(vector_icons::kRefreshIcon, IDC_RELOAD, u"Reload");
++
+   auto ai_mode_hint_label = std::make_unique<views::Label>(
+       std::u16string(), CONTEXT_OMNIBOX_PRIMARY, views::style::STYLE_PRIMARY);
+   ai_mode_hint_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+@@ -601,6 +623,14 @@
+     copy_link_button_->SetVisible(show);
+     InvalidateLayout();
+   }
++  // Hidden while typing to leave room for the text.
++  const bool show_nav = sidebar_style_ && !omnibox_view_->HasFocus();
++  for (views::ImageButton* button : nav_buttons_) {
++    if (button->GetVisible() != show_nav) {
++      button->SetVisible(show_nav);
++      InvalidateLayout();
++    }
++  }
+ }
+ 
+ void LocationBarView::OnCopyLinkPressed() {
+@@ -945,6 +975,14 @@
+   const int leading_intra_padding =
+       GetLayoutConstant(LayoutConstant::kLocationBarElementPadding);
+ 
++  for (views::ImageButton* button : nav_buttons_) {
++    if (button->GetVisible()) {
++      leading_decorations.AddDecoration(
++          vertical_padding, location_height, /*auto_collapse=*/false,
++          /*max_fraction=*/0, /*intra_item_padding=*/0, icon_left, button);
++    }
++  }
++
+   if (extension_debugger_warning_view_ &&
+       extension_debugger_warning_view_->GetVisible()) {
+     leading_decorations.AddDecoration(
+--- a/chrome/browser/ui/views/location_bar/location_bar_view.h
++++ b/chrome/browser/ui/views/location_bar/location_bar_view.h
+@@ -609,6 +609,7 @@
+ 
+   bool sidebar_style_ = false;
+   raw_ptr<views::ImageButton> copy_link_button_ = nullptr;
++  std::vector<raw_ptr<views::ImageButton>> nav_buttons_;
+   base::OneShotTimer copy_feedback_timer_;
+   void UpdateCopyLinkButton();
+   void OnCopyLinkPressed();

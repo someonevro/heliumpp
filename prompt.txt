@@ -1,0 +1,406 @@
+# Project: Build a Privacy-Focused Chromium Browser
+
+Act as my senior browser engineer, Chromium developer, UI/UX designer, and security engineer. Build a real, usable desktop browser inspired by Zen Browser, based on ungoogled-chromium, with privacy presets, effective ad blocking, and DRM support wherever legally and technically possible.
+
+I am a beginner. I want you to do the technical work autonomously wherever possible, including researching, coding, testing, debugging, and maintaining project documentation. Explain important decisions simply, but do not make me perform unnecessary manual work.
+
+## 1. Absolute workspace restriction
+
+**You may only create, modify, delete, build, or store project files inside:**
+
+`~/Projects/browser`
+
+Resolve this path to its absolute location before starting.
+
+- Never modify files outside this directory.
+- Never use another directory for source code, build output, caches, downloads, or temporary project files.
+- Do not modify system configuration, install system packages, change system settings, or run commands requiring elevated privileges without explaining the need and obtaining my permission.
+- Do not run destructive commands, broad cleanup commands, or commands that could affect unrelated projects.
+- Do not overwrite existing files without inspecting them first.
+- Keep Git repositories, source code, documentation, build scripts, logs, and project-specific dependencies inside this workspace.
+- If a tool or build system requires files outside the workspace, stop and explain the limitation before proceeding.
+- Do not download or compile the entire Chromium source tree without first evaluating the cost, storage requirements, build time, and a practical alternative.
+
+Use a dedicated project-local environment wherever practical. Inspect the existing workspace before making changes.
+
+## 2. Minimize Claude usage and costs
+
+I have Claude Pro and want this project to take as long as necessary. I do not need to finish in one week. Optimize for low usage, not speed.
+
+Use Sonnet 5.5 with Medium effort for routine work.
+
+Follow these rules:
+
+1. Research each major technical question once, using official documentation and source repositories wherever possible. Save the findings so you do not repeatedly investigate the same issues.
+2. Before coding, inspect the workspace and determine what already exists. Reuse working code instead of recreating it.
+3. Work in small, independently testable milestones.
+4. Implement only the next necessary milestone. Do not generate the entire application in one enormous response.
+5. Avoid unnecessary agent spawning, parallel investigations, repeated file reads, verbose explanations, speculative implementations, and repeated builds.
+6. Prefer incremental builds and targeted tests. Rebuild only what changed unless a full rebuild is necessary.
+7. Keep responses concise. Report what changed, what was tested, actual results, remaining issues, and the next action.
+8. Maintain a concise `PROJECT_STATUS.md` containing completed work, current state, decisions, known issues, commands, and the next task.
+9. Maintain an `ARCHITECTURE.md` documenting decisions and a `TODO.md` tracking milestones.
+10. When a session ends or usage becomes limited, save all progress and leave clear instructions for resuming. Never restart from scratch merely because a new session begins.
+11. Do not repeatedly ask me questions that can be answered through reasonable research. Choose sensible defaults and proceed when safe.
+12. Ask for my permission only when an important decision, security risk, irreversible action, external system change, or genuine blocker requires it.
+
+Do not use a more expensive model or high effort for routine tasks. If a difficult issue genuinely requires deeper reasoning, explain why before changing the approach.
+
+**Do not sacrifice correctness or security merely to save tokens.** The objective is to make steady progress over multiple weeks while minimizing unnecessary usage.
+
+## 3. Browser vision and architecture
+
+The intended foundation is ungoogled-chromium.
+
+The final application must be a genuine desktop browser that navigates real websites, not a mockup, simulated browser, or standalone webpage with fake controls.
+
+Before implementing the application, investigate:
+
+- Forking and patching ungoogled-chromium directly.
+- Using Chromium Embedded Framework (CEF).
+- Using an existing browser codebase or another maintainable Chromium integration.
+- The architecture used by Helium Browser, especially its Chromium modifications, extension support, and uBlock Origin integration.
+
+Compare feasibility, maintenance costs, build requirements, licensing, security, DRM, extension support, and UI flexibility.
+
+Do not silently substitute Electron, WebKit, or another browser engine. Explain any proposed alternative and its consequences before committing to it.
+
+Initially target Linux desktop systems, particularly Arch-based systems such as Omarchy and Debian/Ubuntu-based distributions. Keep the design extensible to Windows and macOS.
+
+Prefer open-source components and maintainable solutions. Document dependencies, licences, platform limitations, and upstream security maintenance requirements.
+
+Choose a distinctive project name if necessary, without copying another browser's branding.
+
+## 4. Zen-inspired interface
+
+Create an original, polished interface inspired by Zen Browser:
+
+- Vertical tab sidebar.
+- Compact address bar and navigation controls.
+- Multiple tabs, pinned tabs, tab groups, and workspaces where practical.
+- Split view and compact mode if feasible.
+- Light, dark, and system themes.
+- Smooth, restrained animations and rounded corners.
+- Clean new-tab page with search, bookmarks, pinned websites, and recently visited pages.
+- Working bookmarks, history, downloads, extensions, settings, and keyboard shortcuts.
+- Accessible controls and a layout that remains usable with many tabs open.
+
+Every implemented control must connect to real browser functionality. Do not present nonfunctional buttons as completed features.
+
+## 5. First-launch privacy selector
+
+On the first launch, show a polished onboarding screen offering these five privacy presets and one additional ad-blocking-only mode.
+
+The selected mode must persist across restarts and be changeable later through a simple setting. Show users what each mode actually enables.
+
+### Low — Familiar Browsing
+
+Target an approximate level of protection comparable to Firefox with uBlock Origin and sensible defaults.
+
+Provide effective ad and tracker blocking, basic third-party tracking protection, reasonable cookie restrictions, and good website compatibility. Avoid unnecessarily aggressive fingerprinting countermeasures.
+
+Do not claim exact equivalence to Firefox.
+
+### Medium — Recommended
+
+**This must be the highlighted default recommendation for ordinary users.**
+
+Provide strong ad and tracker blocking, malicious-domain protection, sensible third-party cookie restrictions, practical fingerprinting mitigations, reasonable referrer and permission policies, and minimal unnecessary background activity.
+
+Prioritize everyday usability, including video streaming, sign-in, banking, and web applications.
+
+This mode should balance privacy, security, compatibility, and performance.
+
+### High — Hardened Privacy
+
+Aim for a LibreWolf-inspired privacy philosophy using Chromium's actual capabilities.
+
+Provide more aggressive tracker blocking, stricter third-party cookie and storage restrictions, tighter referrer policies, restrictive permissions, available fingerprinting mitigations, and reduced unnecessary background activity.
+
+Warn users that some websites may malfunction and offer understandable site-specific exceptions.
+
+Do not claim feature parity with LibreWolf when Chromium lacks equivalent protections.
+
+### Ultra — Maximum Practical Privacy
+
+Provide the strongest practical privacy configuration without promising perfect anonymity.
+
+Use strict tracker blocking, aggressive cookie and storage partitioning, restrictive permissions and referrer policies, available fingerprinting protections, and minimization of optional telemetry and background network requests.
+
+Provide site-specific exceptions and clearly explain the trade-offs.
+
+Never disable essential certificate validation, security protections, or security updates just to claim maximum privacy.
+
+### Ad Blocking Only
+
+Enable effective ad blocking and basic malicious-domain protection while keeping other privacy settings close to normal browser defaults.
+
+Do not enable aggressive fingerprinting defenses or additional restrictions beyond baseline security unless the user explicitly chooses them.
+
+Explain that this mode does not offer the same privacy protection as the other presets.
+
+## 6. Real privacy enforcement
+
+These presets must change actual browser behavior. They must not be cosmetic labels.
+
+Build a centralized, declarative privacy configuration system with:
+
+- Explicit settings for every preset.
+- Persistent configuration and validation.
+- A visible summary of active protections.
+- A reset-to-preset option.
+- Immediate application where technically possible.
+- Restart notifications where necessary.
+- Site-specific exceptions.
+- Tests verifying that each preset produces the expected behavior.
+
+Identify which settings can be controlled through existing Chromium APIs, which require browser-level modifications, and which are impossible or unreliable.
+
+Document limitations instead of pretending unsupported controls work.
+
+## 7. Built-in ad blocking — important
+
+I want **uBlock Origin-level content blocking, similar to the integration in Helium Browser**, rather than a basic DNS blocker.
+
+Investigate Helium's public source code and its uBlock Origin integration before choosing an implementation.
+
+Evaluate:
+
+- Bundling and maintaining full uBlock Origin with appropriate Chromium extension support.
+- Supporting Manifest V2 where necessary, including the maintenance burden of Chromium patches.
+- Using uBlock Origin Lite or a suitable native content-blocking engine if full uBlock Origin is impractical.
+- Maintaining compatibility with modern Chromium releases.
+
+Do not assume these alternatives provide equivalent functionality. Explain their differences before deciding.
+
+The browser should provide:
+
+- Strong ad, tracker, and malicious-domain blocking.
+- Maintained filter lists with automatic updates.
+- Local filter-list caching.
+- Per-site blocking controls and allowlists.
+- A blocked-request counter and visible protection status.
+- Support in normal and supported private-browsing sessions.
+- Reasonable CPU, memory, and startup performance.
+
+Do not invent a replacement for uBlock Origin or copy its implementation without respecting its licence.
+
+Investigate extension APIs against the actual Chromium version selected. Keep filter-list updates independent of browser releases where practical.
+
+## 8. DRM and streaming
+
+I want DRM-protected websites to work out of the box wherever legally and technically possible.
+
+Investigate a legitimate Widevine Content Decryption Module integration and support for Encrypted Media Extensions.
+
+Aim to support services such as Netflix, Spotify Web Player, and YouTube, subject to their current technical and licensing requirements.
+
+Also investigate required codecs, audio support, hardware video decoding, and GPU acceleration.
+
+Provide a diagnostic page showing DRM status, codec availability, and missing dependencies.
+
+Do not pirate, reverse-engineer, bypass DRM, or redistribute proprietary components without permission.
+
+If Widevine cannot legally be bundled, implement the most convenient legitimate setup path available. Document any required user action and never claim that DRM works until it has actually been tested.
+
+## 9. Telemetry and background connections
+
+Audit the browser for:
+
+- Usage statistics and diagnostic reporting.
+- Telemetry and reporting mechanisms.
+- Background connections and automatic requests.
+- Predictive networking and prefetching.
+- Proprietary service integrations.
+- Update checks and component downloads.
+- Safe Browsing and certificate-related dependencies.
+
+Distinguish optional telemetry from essential security infrastructure. Make optional behavior configurable by privacy preset where possible.
+
+Maintain a concise privacy audit describing what network connections occur, why they occur, and which controls affect them.
+
+Do not disable certificate validation or security updates to achieve an inaccurate zero-telemetry claim.
+
+## 10. Essential browser functionality
+
+Implement and test these features incrementally:
+
+- Multiple tabs and vertical tab management.
+- Address bar, URL navigation, search, back, forward, reload, and stop.
+- Bookmarks, history, and downloads.
+- Private browsing.
+- Find-in-page.
+- Site permissions and cookie/site-data management.
+- Per-site privacy exceptions.
+- Configurable search engine.
+- Keyboard shortcuts and a proper settings interface.
+- Session restoration and crash recovery.
+- Bookmark and supported data import.
+- Extension support where practical.
+- Security updates and a maintainable release process.
+
+Preserve Chromium's sandbox and process isolation. Separate privileged browser UI from untrusted web content, validate IPC messages, use restrictive permissions, and never expose arbitrary filesystem or command execution to webpages.
+
+Document the threat model, limitations, and security maintenance process.
+
+## 11. Development phases
+
+### Phase 1 — Research
+
+Investigate the architecture, existing projects, Chromium build requirements, extension compatibility, uBlock Origin integration, DRM, codecs, licensing, and security implications.
+
+Save findings in `ARCHITECTURE.md`. Recommend the most realistic architecture based on evidence, not assumptions.
+
+### Phase 2 — Minimal working browser
+
+Build the smallest genuine browser prototype that launches on Linux, navigates real websites, supports multiple tabs, has a basic Zen-inspired UI, and persists configuration.
+
+### Phase 3 — Privacy system
+
+Implement onboarding, all five privacy presets, the ad-blocking-only mode, persistent settings, and verified enforcement.
+
+### Phase 4 — Everyday features
+
+Implement bookmarks, history, downloads, private browsing, permissions, settings, and session restoration.
+
+### Phase 5 — Blocking and media
+
+Integrate the selected content blocker, filter updates, DRM setup, codecs, hardware acceleration, and streaming diagnostics.
+
+### Phase 6 — Hardening and release
+
+Add automated tests, security checks, packaging, documentation, and a practical update process.
+
+Keep the application buildable at each milestone. Do not start a costly full Chromium build until the architecture and requirements justify it.
+
+## 12. Testing and reporting
+
+For every milestone:
+
+- Create real source files in the permitted workspace.
+- Run the tests that are practical in the environment.
+- Verify behavior instead of relying only on successful compilation.
+- Report actual results and unresolved problems.
+- Keep documentation and the project status current.
+- Give exact commands for any action I must perform manually.
+- Never claim a feature works if it has not been verified.
+
+Prefer automated tests and small, reproducible test cases. Avoid spending usage on repeated tests that provide no new information.
+
+If something is technically impossible or impractical, explain why and recommend the closest legitimate alternative.
+
+## 13. Start here
+
+**Do not begin by writing thousands of lines of code.**
+
+First:
+
+1. Inspect `~/Projects/browser` and its existing contents.
+2. Confirm the workspace restriction and identify the Linux environment and available resources.
+3. Research the relevant upstream projects and current APIs.
+4. Evaluate the practical architectures and their build costs.
+5. Investigate Helium's approach to uBlock Origin and Chromium extension compatibility.
+6. Identify the major risks around DRM, security, and ongoing Chromium maintenance.
+7. Write a concise architecture decision document and milestone plan.
+8. Begin only the smallest useful prototype after choosing an architecture.
+
+Do as much as you safely can without asking me to perform routine technical tasks. If a genuine blocker requires my intervention, explain exactly what is needed.
+
+**The priority is a real, secure, maintainable browser developed gradually, with minimal wasted Claude usage and all project work confined to `~/Projects/browser`.**
+
+
+## 14. Cross-Platform Strategy — Desktop and Mobile
+
+The long-term goal is to deliver this browser on all five major target platforms:
+
+- Linux
+- Windows
+- macOS
+- Android
+- iOS
+
+Cross-platform support is a core product requirement, not an optional future enhancement. However, do not promise identical features or a shared rendering engine on every platform when technical or platform restrictions prevent it.
+
+### Architecture requirements
+
+Before committing to the initial architecture, research and document the feasibility of every target platform.
+
+Investigate the official ungoogled-chromium platform repositories, Chromium's supported build targets, mobile browser requirements, extension support, DRM restrictions, and distribution requirements.
+
+The desktop application should use ungoogled-chromium wherever practical.
+
+For Android, investigate the official ungoogled-chromium Android project and determine how much of the desktop browser's privacy system, user interface, and configuration can be shared with a mobile implementation.
+
+For iOS, investigate Apple's current browser-engine requirements, available alternative-engine entitlements, App Store rules, and regional restrictions. Do not assume that an ungoogled-chromium engine can be shipped on iOS globally. If a WebKit-based implementation is required, assess whether a separate iOS browser can preserve the product's privacy philosophy and user experience.
+
+### Shared functionality
+
+Design the architecture so that the following components can be shared wherever practical:
+
+- Privacy preset definitions and configuration schema.
+- Ad-blocking rules and filter-list management.
+- Privacy and security policy definitions.
+- Settings data model.
+- Bookmarks, history, and user preferences where compatible.
+- Onboarding text and privacy explanations.
+- Design tokens, icons, and visual identity.
+- Tests for platform-independent logic.
+- Documentation and release procedures.
+
+Do not force shared code where platform-specific implementations are safer or more maintainable.
+
+### Platform-specific interfaces
+
+Create interfaces appropriate to each platform.
+
+Desktop:
+- Zen-inspired vertical tabs and workspaces.
+- Keyboard shortcuts, desktop window controls, downloads, and extensions where supported.
+
+Android:
+- Touch-friendly navigation and tab management.
+- Mobile-appropriate settings and privacy controls.
+- Battery, memory, and performance considerations.
+- Appropriate Android lifecycle and background behavior.
+
+iOS:
+- Native-feeling navigation and touch controls.
+- Platform-compliant browser engine and extension capabilities.
+- iOS-specific storage, permissions, privacy, and lifecycle behavior.
+
+Do not attempt to copy the desktop interface directly onto mobile screens.
+
+### Feature compatibility matrix
+
+Maintain a platform compatibility matrix covering:
+
+- Browser engine and rendering.
+- Privacy presets and enforcement.
+- Ad and tracker blocking.
+- Extension support.
+- DRM and streaming.
+- Codec and hardware acceleration support.
+- Bookmarks, history, and downloads.
+- Private browsing.
+- Tab synchronization, if implemented.
+- Security updates and distribution.
+
+For every feature, identify whether it is supported, partially supported, unsupported, or not yet tested on each platform.
+
+Do not advertise a feature on a platform until it has been implemented and verified there.
+
+### Development order
+
+Develop in stages:
+
+1. Research all five platforms and identify architectural constraints.
+2. Choose a maintainable architecture with explicit platform boundaries.
+3. Build and validate a working desktop prototype.
+4. Stabilize shared privacy, configuration, and content-blocking components.
+5. Investigate and implement the Android version.
+6. Investigate and implement the iOS version, including any required engine differences.
+7. Establish automated testing, packaging, signing, distribution, and security updates for every supported platform.
+
+Desktop development may be the first implementation milestone, but it must not create unnecessary architectural barriers to mobile development.
+
+Document all platform limitations honestly and propose legitimate alternatives where exact feature parity is impossible.

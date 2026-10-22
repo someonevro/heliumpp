@@ -1,0 +1,36 @@
+--- a/chrome/browser/ui/helium_isolated/helium_isolated_tabs.cc
++++ b/chrome/browser/ui/helium_isolated/helium_isolated_tabs.cc
+@@ -151,11 +151,32 @@
+     name = spec.substr(0, at);
+     url_text = spec.substr(at + 1);
+   }
++  std::string then_text;
++  const size_t bar = url_text.find('|');
++  if (bar != std::string::npos) {
++    then_text = url_text.substr(bar + 1);
++    url_text = url_text.substr(0, bar);
++  }
+   GURL url(url_text);
+-  if (url.is_valid() && url.SchemeIsHTTPOrHTTPS()) {
++  if (url.is_valid()) {
+     if (content::WebContents* contents =
+             OpenIsolatedTab(browser, url, name)) {
+       opened->push_back(contents->GetWeakPtr());
++      if (!then_text.empty()) {
++        // Test: simulate typing a URL into the tab a moment later.
++        base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
++            FROM_HERE,
++            base::BindOnce(
++                [](base::WeakPtr<content::WebContents> weak, std::string next) {
++                  if (weak) {
++                    weak->GetController().LoadURLWithParams(
++                        content::NavigationController::LoadURLParams(
++                            GURL(next)));
++                  }
++                },
++                contents->GetWeakPtr(), then_text),
++            base::Seconds(2));
++      }
+     }
+   }
+ }

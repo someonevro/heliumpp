@@ -1,0 +1,380 @@
+--- a/chrome/browser/helium_privacy_mode/helium_privacy_mode.cc
++++ b/chrome/browser/helium_privacy_mode/helium_privacy_mode.cc
+@@ -61,19 +61,10 @@
+   registry->RegisterStringPref(kModePref, std::string());
+ }
+ 
+-void Apply(Profile* profile) {
+-  PrefService* prefs = profile->GetPrefs();
+-  const base::CommandLine* cl = base::CommandLine::ForCurrentProcess();
+-  if (cl->HasSwitch(kSwitch)) {
+-    Mode unused;
+-    const std::string requested = cl->GetSwitchValueASCII(kSwitch);
+-    if (GetMode(requested, &unused)) {
+-      prefs->SetString(kModePref, requested);
+-    } else {
+-      LOG(WARNING) << "Ignoring unknown --" << kSwitch << "=" << requested;
+-    }
+-  }
++namespace {
+ 
++void ApplyStored(Profile* profile) {
++  PrefService* prefs = profile->GetPrefs();
+   const std::string name = prefs->GetString(kModePref);
+   Mode mode;
+   if (name.empty() || !GetMode(name, &mode)) {
+@@ -107,4 +98,27 @@
+   LOG(INFO) << "Applied privacy mode: " << name;
+ }
+ 
++}  // namespace
++
++bool SetMode(Profile* profile, const std::string& mode) {
++  Mode unused;
++  if (!GetMode(mode, &unused)) {
++    return false;
++  }
++  profile->GetPrefs()->SetString(kModePref, mode);
++  ApplyStored(profile);
++  return true;
++}
++
++void Apply(Profile* profile) {
++  const base::CommandLine* cl = base::CommandLine::ForCurrentProcess();
++  if (cl->HasSwitch(kSwitch)) {
++    const std::string requested = cl->GetSwitchValueASCII(kSwitch);
++    if (!SetMode(profile, requested)) {
++      LOG(WARNING) << "Ignoring unknown --" << kSwitch << "=" << requested;
++    }
++  }
++  ApplyStored(profile);
++}
++
+ }  // namespace helium_privacy_mode
+--- a/chrome/browser/helium_privacy_mode/helium_privacy_mode.h
++++ b/chrome/browser/helium_privacy_mode/helium_privacy_mode.h
+@@ -4,6 +4,8 @@
+ #ifndef CHROME_BROWSER_HELIUM_PRIVACY_MODE_HELIUM_PRIVACY_MODE_H_
+ #define CHROME_BROWSER_HELIUM_PRIVACY_MODE_HELIUM_PRIVACY_MODE_H_
+ 
++#include <string>
++
+ class Profile;
+ 
+ namespace user_prefs {
+@@ -23,6 +25,10 @@
+ // Referrer and fingerprinting (feature flags) are not handled yet.
+ void Apply(Profile* profile);
+ 
++// Stores |mode| ("usability", "medium" or "maximum") in helium.privacy_mode and
++// enforces it now. Returns false and changes nothing for an unknown mode.
++bool SetMode(Profile* profile, const std::string& mode);
++
+ }  // namespace helium_privacy_mode
+ 
+ #endif  // CHROME_BROWSER_HELIUM_PRIVACY_MODE_HELIUM_PRIVACY_MODE_H_
+--- a/chrome/browser/ui/webui/onboarding/onboarding_handler.cc
++++ b/chrome/browser/ui/webui/onboarding/onboarding_handler.cc
+@@ -11,6 +11,7 @@
+ #include "build/build_config.h"
+ #include "chrome/browser/browser_process.h"
+ #include "chrome/browser/extensions/webstore_install_with_prompt.h"
++#include "chrome/browser/helium_privacy_mode/helium_privacy_mode.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/profiles/profile_attributes_storage.h"
+ #include "chrome/browser/profiles/profile_manager.h"
+@@ -103,6 +104,10 @@
+       base::BindRepeating(&OnboardingMessageHandler::HandleSetPreference,
+                           base::Unretained(this)));
+   web_ui()->RegisterMessageCallback(
++      "setPrivacyMode",
++      base::BindRepeating(&OnboardingMessageHandler::HandleSetPrivacyMode,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
+       "acceptLatestSchema",
+       base::BindRepeating(&OnboardingMessageHandler::HandleAcceptSchema,
+                           base::Unretained(this)));
+@@ -256,6 +261,23 @@
+   }
+ }
+ 
++void OnboardingMessageHandler::HandleSetPrivacyMode(
++    const base::ListValue& args) {
++  if (args.size() != 2 || !args[0].is_string()) {
++    return;
++  }
++
++  AllowJavascript();
++
++  const auto& callback_id = args[0].GetString();
++  if (!args[1].is_string() ||
++      !helium_privacy_mode::SetMode(profile_, args[1].GetString())) {
++    return RejectJavascriptCallback(callback_id, "unknown privacy mode");
++  }
++
++  ResolveJavascriptCallback(callback_id, {});
++}
++
+ void OnboardingMessageHandler::HandleSetPreference(
+     const base::ListValue& args) {
+   if (args.size() == 0) {
+--- a/chrome/browser/ui/webui/onboarding/onboarding_handler.h
++++ b/chrome/browser/ui/webui/onboarding/onboarding_handler.h
+@@ -39,6 +39,7 @@
+   void HandleGetPreferences(const base::ListValue& args);
+   void HandleAcceptSchema(const base::ListValue& args);
+   void HandleSetPreference(const base::ListValue& args);
++  void HandleSetPrivacyMode(const base::ListValue& args);
+   void HandleGetProfileName(const base::ListValue& args);
+   void HandleSetProfileName(const base::ListValue& args);
+   void HandleGetExtensions(const base::ListValue& args);
+--- a/components/helium_onboarding/src/components/PageNavigation.svelte
++++ b/components/helium_onboarding/src/components/PageNavigation.svelte
+@@ -9,6 +9,7 @@
+     import { SvelteSet } from "svelte/reactivity";
+     import {
+         acceptLatestSchema,
++        setPrivacyMode,
+         askToBeDefault,
+         importableProfiles,
+         importDiscovery,
+@@ -22,6 +23,7 @@
+         userChoseHeliumAsDefault,
+         selectedProfiles,
+         previouslyImportedProfiles,
++        selectedPrivacyMode,
+     } from "../lib/onboarding-flow";
+ 
+     const visible = $derived(
+@@ -40,6 +42,10 @@
+ 
+     const doNext = async () => {
+         switch ($currentPage) {
++        case "PrivacyMode":
++            await setPrivacyMode($selectedPrivacyMode);
++            break;
++
+         case "HeliumServices":
+             // if the user pressed "next" on the HeliumServices page,
+             // then we mark consent (having seen the page) as true
+--- a/components/helium_onboarding/src/lib/browser/prefs.ts
++++ b/components/helium_onboarding/src/lib/browser/prefs.ts
+@@ -36,6 +36,10 @@
+     await cr.sendWithPromise('setPref', name, value);
+ }
+ 
++export const setPrivacyMode = async (mode: string): Promise<void> => {
++    await cr.sendWithPromise('setPrivacyMode', mode);
++}
++
+ export const acceptLatestSchema = () => {
+     chrome.send("acceptLatestSchema");
+ }
+--- a/components/helium_onboarding/src/lib/onboarding-flow.ts
++++ b/components/helium_onboarding/src/lib/onboarding-flow.ts
+@@ -10,6 +10,7 @@
+ 
+ export const flow = [
+     "Welcome",
++    "PrivacyMode",
+     "HeliumServices",
+     "SearchEngine",
+     "DataImport",
+@@ -72,6 +73,8 @@
+     hasSeenIntro.set(true);
+ }
+ 
++export const selectedPrivacyMode = writable("medium");
++
+ export const userChoseHeliumAsDefault = writable(true);
+ export const selectedProfiles = writable(new SvelteSet<number>());
+ export const previouslyImportedProfiles = writable(new SvelteSet<number>());
+--- a/components/helium_onboarding/src/pages/index.ts
++++ b/components/helium_onboarding/src/pages/index.ts
+@@ -1,4 +1,5 @@
+ export { default as Welcome } from "./Welcome.svelte";
++export { default as PrivacyMode } from "./PrivacyMode.svelte";
+ export { default as HeliumServices } from "./HeliumServices.svelte";
+ export { default as SearchEngine } from "./SearchEngine.svelte";
+ export { default as DataImport } from "./DataImport.svelte";
+--- /dev/null
++++ b/components/helium_onboarding/src/pages/PrivacyMode.svelte
+@@ -0,0 +1,178 @@
++<script lang="ts">
++    import { HeliumLogo } from "@imput/helium-prism";
++    import { currentPage, selectedPrivacyMode } from "../lib/onboarding-flow";
++    import presets from "../lib/presets.json";
++
++    import PageHeader from "../components/PageHeader.svelte";
++
++    type Setting = { label: string; effects: Record<string, string> };
++
++    const settings: Record<string, Setting> = presets.settings;
++    const modes: Record<string, Record<string, unknown>> = presets.presets;
++    const meta: Record<string, { name: string; tagline: string; tradeoff: string }> = presets.meta;
++
++    const visible = $derived($currentPage === "PrivacyMode");
++    const selected = $derived($selectedPrivacyMode);
++    // Only settings that have text are shown; optional telemetry is "off" in every mode.
++    const details = $derived(
++        Object.entries(modes[selected]).map(([key, value]) => ({
++            key,
++            label: settings[key].label,
++            effect: settings[key].effects[JSON.stringify(value)],
++        })).filter(item => item.effect)
++    );
++</script>
++
++<div id="privacy-mode-page" class="onboarding-page" class:visible>
++    <div class="scrollable-page">
++        <PageHeader
++            title="Choose your privacy level"
++            subtitle="uBlock Origin ad blocking is on in every mode. You can change this later."
++            Icon={HeliumLogo}
++            iconHeight="32px"
++        />
++        <div class="page-content">
++            <div class="mode-list" role="radiogroup" aria-label="Privacy level">
++                {#each presets.order as id (id)}
++                    <button
++                        type="button"
++                        role="radio"
++                        aria-checked={selected === id}
++                        class="mode-card"
++                        class:selected={selected === id}
++                        onclick={() => selectedPrivacyMode.set(id)}
++                    >
++                        <span class="mode-name">
++                            {meta[id].name}
++                            {#if id === presets.recommended}
++                                <span class="badge">Recommended</span>
++                            {/if}
++                        </span>
++                        <span class="mode-tagline">{meta[id].tagline}</span>
++                        <span class="mode-tradeoff">{meta[id].tradeoff}</span>
++                    </button>
++                {/each}
++            </div>
++
++            <div class="details" aria-live="polite">
++                <h3>What {meta[selected].name} does</h3>
++                <ul>
++                    {#each details as item (item.key)}
++                        <li>
++                            <strong>{item.label}</strong>
++                            <span>{item.effect}</span>
++                        </li>
++                    {/each}
++                </ul>
++                <p class="note">{presets.note}</p>
++            </div>
++        </div>
++    </div>
++</div>
++
++<style>
++    #privacy-mode-page {
++        --page-in-delay: 0.1s;
++    }
++
++    .mode-list {
++        display: flex;
++        flex-direction: column;
++        gap: 10px;
++        width: 100%;
++    }
++
++    .mode-card {
++        display: flex;
++        flex-direction: column;
++        gap: 4px;
++        width: 100%;
++        padding: 14px 16px;
++        text-align: start;
++        color: inherit;
++        font: inherit;
++        cursor: pointer;
++        background: var(--helium-elevated-5);
++        border: 2px solid var(--helium-elevated-10);
++        border-radius: 16px;
++        transition: border-color 0.15s, background 0.15s;
++    }
++
++    .mode-card:hover {
++        background: var(--helium-elevated-7);
++    }
++
++    .mode-card:focus-visible {
++        outline: 2px solid var(--helium-blue);
++        outline-offset: 2px;
++    }
++
++    .mode-card.selected {
++        border-color: var(--helium-blue);
++        background: var(--helium-elevated-10);
++    }
++
++    .mode-name {
++        font-weight: 600;
++        font-size: 1.05em;
++        display: flex;
++        align-items: center;
++        gap: 8px;
++    }
++
++    .badge {
++        font-size: 0.75em;
++        font-weight: 600;
++        padding: 2px 8px;
++        border-radius: 999px;
++        background: var(--helium-blue);
++        color: white;
++    }
++
++    .mode-tagline {
++        opacity: 0.9;
++    }
++
++    .mode-tradeoff {
++        opacity: 0.65;
++        font-size: 0.9em;
++    }
++
++    .details {
++        width: 100%;
++        padding: 14px 16px;
++        border-radius: 16px;
++        background: var(--helium-elevated-5);
++    }
++
++    .details h3 {
++        margin: 0 0 8px;
++        font-size: 1em;
++    }
++
++    .details ul {
++        list-style: none;
++        margin: 0;
++        padding: 0;
++        display: flex;
++        flex-direction: column;
++        gap: 10px;
++    }
++
++    .details li {
++        display: flex;
++        flex-direction: column;
++        gap: 2px;
++        font-size: 0.92em;
++    }
++
++    .details li span {
++        opacity: 0.75;
++    }
++
++    .note {
++        margin: 12px 0 0;
++        font-size: 0.85em;
++        opacity: 0.6;
++    }
++</style>

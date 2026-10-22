@@ -1,0 +1,46 @@
+--- a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
++++ b/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
+@@ -87,6 +87,9 @@
+ 
+ constexpr int kZenModeVTSPadding = 8;
+ 
++// Gap around the page card when vertical tabs are active.
++constexpr int kContentsCardGap = 8;
++
+ struct ZenModeLayoutState {
+   bool enabled = false;
+   bool floating_vertical_tab_strip = false;
+@@ -1440,11 +1443,18 @@
+     content_right =
+         std::min(content_right, browser_params.visual_client_area.right());
+   }
++  // With vertical tabs the page floats as a card: a gap on the top, right and
++  // bottom shows the frame colour (which follows the wallpaper theme).
++  gfx::Rect contents_bounds(content_left, params.visual_client_area.y(),
++                            content_right - content_left,
++                            params.visual_client_area.height());
++  if (layout_data_->tab_strip_type == TabStripType::kVertical &&
++      !is_fullscreen(layout_data_->window_state)) {
++    contents_bounds.Inset(gfx::Insets::TLBR(kContentsCardGap, 0,
++                                            kContentsCardGap, kContentsCardGap));
++  }
+   auto& contents_layout =
+-      layout.AddChild(views().multi_contents_view,
+-                      gfx::Rect(content_left, params.visual_client_area.y(),
+-                                content_right - content_left,
+-                                params.visual_client_area.height()));
++      layout.AddChild(views().multi_contents_view, contents_bounds);
+ 
+   // Maybe expand and clip the web contents to avoid issues during animation.
+   if (features::UseSidePanelFlyoverAnimation()) {
+--- a/chrome/browser/ui/views/helium/frame_corner_radius.cc
++++ b/chrome/browser/ui/views/helium/frame_corner_radius.cc
+@@ -8,7 +8,7 @@
+ #include "chrome/browser/ui/layout_constants.h"
+ 
+ int GetGenericFrameRadius() {
+-  return 8;
++  return 12;
+ }
+ 
+ #if !BUILDFLAG(IS_MAC)

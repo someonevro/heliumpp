@@ -1,0 +1,171 @@
+--- a/chrome/browser/ui/views/frame/privacy_toggle_view.h
++++ b/chrome/browser/ui/views/frame/privacy_toggle_view.h
+@@ -4,6 +4,7 @@
+ #include <string>
+ 
+ #include "base/memory/raw_ptr.h"
++#include "components/prefs/pref_change_registrar.h"
+ #include "ui/base/metadata/metadata_header_macros.h"
+ #include "ui/gfx/animation/animation_delegate.h"
+ #include "ui/gfx/animation/slide_animation.h"
+@@ -44,6 +45,8 @@
+   int selected_ = -1;
+   int from_ = -1;
+   bool restart_required_ = false;
++  bool writing_ = false;
++  PrefChangeRegistrar pref_registrar_;
+   gfx::SlideAnimation slide_{this};
+ };
+ 
+--- a/chrome/browser/ui/views/frame/privacy_toggle_view.cc
++++ b/chrome/browser/ui/views/frame/privacy_toggle_view.cc
+@@ -4,7 +4,9 @@
+ 
+ #include "cc/paint/paint_flags.h"
+ #include "chrome/browser/helium_privacy_mode/helium_privacy_mode.h"
++#include "base/functional/bind.h"
+ #include "chrome/browser/profiles/profile.h"
++#include "components/prefs/pref_service.h"
+ #include "ui/accessibility/ax_enums.mojom.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+ #include "ui/color/color_id.h"
+@@ -49,6 +51,16 @@
+   slide_.SetSlideDuration(base::Milliseconds(200));
+   slide_.SetTweenType(gfx::Tween::EASE_OUT);
+   Refresh();
++  // Follow changes made elsewhere (homepage switch, Settings, footer menu).
++  pref_registrar_.Init(profile_->GetPrefs());
++  pref_registrar_.Add("helium.privacy_mode",
++                      base::BindRepeating(
++                          [](PrivacyToggleView* view) {
++                            if (!view->writing_) {
++                              view->Refresh();
++                            }
++                          },
++                          base::Unretained(this)));
+ }
+ 
+ PrivacyToggleView::~PrivacyToggleView() = default;
+@@ -81,7 +93,11 @@
+     return;
+   }
+   bool restart = false;
+-  if (!helium_privacy_mode::SetMode(profile_, kLevels[index].id, &restart)) {
++  writing_ = true;
++  const bool ok =
++      helium_privacy_mode::SetMode(profile_, kLevels[index].id, &restart);
++  writing_ = false;
++  if (!ok) {
+     return;
+   }
+   from_ = selected_ < 0 ? index : selected_;
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+@@ -16,6 +16,7 @@
+ #include "base/metrics/user_metrics_action.h"
+ #include "base/time/time.h"
+ #include "chrome/browser/ui/actions/chrome_action_id.h"
++#include "chrome/browser/search/search.h"
+ #include "chrome/browser/ui/browser.h"
+ #include "chrome/browser/ui/views/frame/privacy_toggle_view.h"
+ #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
+@@ -867,6 +868,7 @@
+   }
+   if (privacy_toggle_) {
+     const bool show = expanded && !on_homepage_ && !location_bar_revealed_;
++    toggle_wanted_ = show;
+     if (show && !privacy_toggle_->GetVisible()) {
+       privacy_toggle_->Refresh();
+       // Fade in while sliding down a few pixels.
+@@ -881,8 +883,26 @@
+           .SetOpacity(privacy_toggle_, 1.0f, gfx::Tween::EASE_OUT)
+           .SetTransform(privacy_toggle_, gfx::Transform(),
+                         gfx::Tween::EASE_OUT);
+-    } else {
+-      privacy_toggle_->SetVisible(show);
++    } else if (show) {
++      privacy_toggle_->Refresh();
++    } else if (privacy_toggle_->GetVisible()) {
++      // Never show two switches at once: fade this one out and slide it up
++      // before hiding it (the homepage has its own).
++      gfx::Transform end;
++      end.Translate(0, -8);
++      views::AnimationBuilder()
++          .OnEnded(base::BindOnce(
++              [](VerticalTabStripRegionView* region) {
++                // Skip if the switch was wanted again while fading out.
++                if (region->privacy_toggle_ && !region->toggle_wanted_) {
++                  region->privacy_toggle_->SetVisible(false);
++                }
++              },
++              base::Unretained(this)))
++          .Once()
++          .SetDuration(base::Milliseconds(180))
++          .SetOpacity(privacy_toggle_, 0.0f, gfx::Tween::EASE_IN)
++          .SetTransform(privacy_toggle_, end, gfx::Tween::EASE_IN);
+     }
+   }
+   InvalidateLayout();
+@@ -894,8 +914,10 @@
+     return;
+   }
+   const GURL url = contents ? contents->GetVisibleURL() : GURL();
+-  on_homepage_ = url.SchemeIs("chrome") &&
+-                 (url.host() == "newtab" || url.host() == "new-tab-page");
++  on_homepage_ =
++      (url.SchemeIs("chrome") &&
++       (url.host() == "newtab" || url.host() == "new-tab-page")) ||
++      search::IsNTPOrRelatedURL(url, browser_view()->browser()->GetProfile());
+   UpdateSidebarSlot(state_controller_->GetCollapseState() ==
+                     tabs::VerticalTabStripCollapseState::kExpanded);
+ }
+--- a/chrome/browser/resources/new_tab_page/app.ts
++++ b/chrome/browser/resources/new_tab_page/app.ts
+@@ -551,9 +551,9 @@
+ 
+   override connectedCallback() {
+     super.connectedCallback();
+-    this.pageHandler_.getPrivacyMode().then(({mode}) => {
+-      this.privacyMode_ = mode;
+-    });
++    this.refreshPrivacyMode_();
++    document.addEventListener('visibilitychange', this.refreshPrivacyMode_);
++    window.addEventListener('focus', this.refreshPrivacyMode_);
+     realboxCanShowSecondarySideMediaQueryList.addEventListener(
+         'change', this.onRealboxCanShowSecondarySideChanged_);
+ 
+@@ -655,6 +655,8 @@
+ 
+   override disconnectedCallback() {
+     super.disconnectedCallback();
++    document.removeEventListener('visibilitychange', this.refreshPrivacyMode_);
++    window.removeEventListener('focus', this.refreshPrivacyMode_);
+     realboxCanShowSecondarySideMediaQueryList.removeEventListener(
+         'change', this.onRealboxCanShowSecondarySideChanged_);
+ 
+@@ -1468,6 +1470,15 @@
+     window.location.href = target;
+   }
+ 
++  // The level can be changed from the sidebar, Settings or the footer menu
++  // while this tab is in the background, so re-read it when shown again.
++  private refreshPrivacyMode_ = () => {
++    this.pageHandler_.getPrivacyMode().then(({mode}) => {
++      this.privacyMode_ = mode;
++      this.privacyRestart_ = false;
++    });
++  };
++
+   protected onPrivacyModeClick_(e: Event) {
+     const mode = (e.currentTarget as HTMLElement).dataset['mode'] || '';
+     this.pageHandler_.setPrivacyMode(mode).then(
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
+@@ -268,6 +268,7 @@
+   raw_ptr<views::View> sidebar_location_bar_ = nullptr;
+   raw_ptr<PrivacyToggleView> privacy_toggle_ = nullptr;
+   bool on_homepage_ = true;
++  bool toggle_wanted_ = false;
+   bool location_bar_revealed_ = false;
+   void UpdateSidebarSlot(bool expanded);
+   void RevealSidebarLocationBar();

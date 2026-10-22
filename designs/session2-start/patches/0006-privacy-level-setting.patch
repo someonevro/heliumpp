@@ -1,0 +1,219 @@
+--- a/chrome/browser/resources/settings/privacy_page/privacy_page.html
++++ b/chrome/browser/resources/settings/privacy_page/privacy_page.html
+@@ -26,6 +26,14 @@
+           role-description="$i18n{subpageArrowRoleDescription}">
+       </cr-link-row>
+     </template>
++    <cr-link-row id="privacyModeLinkRow"
++        start-icon="privacy:lock"
++        class="hr"
++        label="Privacy level"
++        sub-label="Choose between usability, medium and maximum privacy"
++        external
++        on-click="onPrivacyModeClick_">
++    </cr-link-row>
+     <template is="dom-if" if="[[false]]">
+     <cr-link-row id="thirdPartyCookiesLinkRow"
+         start-icon="privacy:cookie"
+--- a/chrome/browser/resources/settings/privacy_page/privacy_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/privacy_page.ts
+@@ -136,6 +136,12 @@
+     Router.getInstance().navigateTo(routes.COOKIES);
+   }
+ 
++  private onPrivacyModeClick_() {
++    this.interactedWithPage_();
++
++    window.open('chrome://setup/#privacy-mode', '_blank');
++  }
++
+   private onNoiseClick_() {
+     this.interactedWithPage_();
+ 
+--- a/chrome/browser/helium_privacy_mode/helium_privacy_mode.h
++++ b/chrome/browser/helium_privacy_mode/helium_privacy_mode.h
+@@ -30,6 +30,9 @@
+ // enforces it now. Returns false and changes nothing for an unknown mode.
+ // |restart_required| (optional) is set when fingerprinting/referrer feature
+ // flags changed; those are browser-wide (Local State) and read at startup.
++// Returns the stored mode name, or "" when none was chosen.
++std::string GetModeName(Profile* profile);
++
+ bool SetMode(Profile* profile,
+              const std::string& mode,
+              bool* restart_required = nullptr);
+--- a/chrome/browser/helium_privacy_mode/helium_privacy_mode.cc
++++ b/chrome/browser/helium_privacy_mode/helium_privacy_mode.cc
+@@ -155,6 +155,10 @@
+ 
+ }  // namespace
+ 
++std::string GetModeName(Profile* profile) {
++  return profile->GetPrefs()->GetString(kModePref);
++}
++
+ bool SetMode(Profile* profile,
+              const std::string& mode,
+              bool* restart_required) {
+--- a/chrome/browser/ui/webui/onboarding/onboarding_handler.cc
++++ b/chrome/browser/ui/webui/onboarding/onboarding_handler.cc
+@@ -104,6 +104,10 @@
+       base::BindRepeating(&OnboardingMessageHandler::HandleSetPreference,
+                           base::Unretained(this)));
+   web_ui()->RegisterMessageCallback(
++      "getPrivacyMode",
++      base::BindRepeating(&OnboardingMessageHandler::HandleGetPrivacyMode,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
+       "setPrivacyMode",
+       base::BindRepeating(&OnboardingMessageHandler::HandleSetPrivacyMode,
+                           base::Unretained(this)));
+@@ -261,6 +265,18 @@
+   }
+ }
+ 
++void OnboardingMessageHandler::HandleGetPrivacyMode(
++    const base::ListValue& args) {
++  if (args.size() != 1 || !args[0].is_string()) {
++    return;
++  }
++
++  AllowJavascript();
++  ResolveJavascriptCallback(
++      args[0].GetString(),
++      base::Value(helium_privacy_mode::GetModeName(profile_)));
++}
++
+ void OnboardingMessageHandler::HandleSetPrivacyMode(
+     const base::ListValue& args) {
+   if (args.size() != 2 || !args[0].is_string()) {
+--- a/chrome/browser/ui/webui/onboarding/onboarding_handler.h
++++ b/chrome/browser/ui/webui/onboarding/onboarding_handler.h
+@@ -40,6 +40,7 @@
+   void HandleAcceptSchema(const base::ListValue& args);
+   void HandleSetPreference(const base::ListValue& args);
+   void HandleSetPrivacyMode(const base::ListValue& args);
++  void HandleGetPrivacyMode(const base::ListValue& args);
+   void HandleGetProfileName(const base::ListValue& args);
+   void HandleSetProfileName(const base::ListValue& args);
+   void HandleGetExtensions(const base::ListValue& args);
+--- a/components/helium_onboarding/src/lib/browser/prefs.ts
++++ b/components/helium_onboarding/src/lib/browser/prefs.ts
+@@ -36,6 +36,11 @@
+     await cr.sendWithPromise('setPref', name, value);
+ }
+ 
++// "" when no mode has been chosen yet.
++export const getPrivacyMode = async (): Promise<string> => {
++    return await cr.sendWithPromise<string>('getPrivacyMode');
++}
++
+ // Resolves to true when the chosen mode needs a browser restart to fully apply.
+ export const setPrivacyMode = async (mode: string): Promise<boolean> => {
+     return await cr.sendWithPromise<boolean>('setPrivacyMode', mode);
+--- a/components/helium_onboarding/src/lib/onboarding-flow.ts
++++ b/components/helium_onboarding/src/lib/onboarding-flow.ts
+@@ -19,7 +19,10 @@
+     "Finish"
+ ] as const;
+ 
+-const index = writable(0);
++// chrome://setup/#privacy-mode shows only the privacy level chooser (opened from Settings).
++export const standalonePrivacyMode = window.location.hash === "#privacy-mode";
++
++const index = writable(standalonePrivacyMode ? flow.indexOf("PrivacyMode") : 0);
+ 
+ export const currentPage = derived(
+     index,
+--- a/components/helium_onboarding/src/App.svelte
++++ b/components/helium_onboarding/src/App.svelte
+@@ -9,9 +9,11 @@
+         flow,
+         hasSeenIntro,
+         ONBOARDING_INTRO_DELAY_MS,
++        standalonePrivacyMode,
+     } from "./lib/onboarding-flow";
+ 
+     import PageNavigation from "./components/PageNavigation.svelte";
++    import PrivacyModeSave from "./components/PrivacyModeSave.svelte";
+ 
+     const OUT_ANIMATION_DURATION = 200;
+ 
+@@ -76,7 +78,9 @@
+     {/if}
+ 
+     <!-- Keep navigation mounted on Finish so it can animate out. -->
+-    {#if $currentPage !== "Welcome"}
++    {#if standalonePrivacyMode}
++        <PrivacyModeSave />
++    {:else if $currentPage !== "Welcome"}
+         <PageNavigation />
+     {/if}
+ 
+--- /dev/null
++++ b/components/helium_onboarding/src/components/PrivacyModeSave.svelte
+@@ -0,0 +1,64 @@
++<script lang="ts">
++    import { onMount } from "svelte";
++    import { Button, IconCheck, Spinner } from "@imput/helium-prism";
++    import { getPrivacyMode, setPrivacyMode } from "../lib/browser";
++    import { selectedPrivacyMode } from "../lib/onboarding-flow";
++
++    let working = $state(false);
++    let status = $state("");
++
++    onMount(async () => {
++        const current = await getPrivacyMode();
++        if (current) {
++            selectedPrivacyMode.set(current);
++        }
++    });
++
++    const save = async () => {
++        working = true;
++        try {
++            const restart = await setPrivacyMode($selectedPrivacyMode);
++            status = restart
++                ? "Saved. Restart the browser to fully apply fingerprinting and referrer protection."
++                : "Saved.";
++        } catch {
++            status = "Could not save the privacy level.";
++        } finally {
++            working = false;
++        }
++    };
++</script>
++
++<div class="save-bar">
++    <Button primary disabled={working} onclick={save}>
++        {#if working}
++            <Spinner size={18} />
++        {:else}
++            <IconCheck />
++        {/if}
++        Save
++    </Button>
++    <p aria-live="polite">{status}</p>
++</div>
++
++<style>
++    .save-bar {
++        position: fixed;
++        bottom: 24px;
++        left: 50%;
++        transform: translateX(-50%);
++        z-index: 9;
++        display: flex;
++        flex-direction: column;
++        align-items: center;
++        gap: 8px;
++        max-width: 560px;
++        text-align: center;
++    }
++
++    p {
++        margin: 0;
++        font-size: 0.9em;
++        opacity: 0.8;
++    }
++</style>

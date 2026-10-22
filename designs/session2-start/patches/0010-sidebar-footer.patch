@@ -1,0 +1,185 @@
+--- a/chrome/browser/ui/views/tabs/vertical/BUILD.gn
++++ b/chrome/browser/ui/views/tabs/vertical/BUILD.gn
+@@ -10,6 +10,7 @@
+     "top_container_button.h",
+     "vertical_new_tab_button.h",
+     "vertical_tab_strip_bottom_container.h",
++    "vertical_tab_strip_footer.h",
+     "vertical_tab_strip_expand_on_hover_lock.h",
+     "vertical_tab_strip_focus_swipe_controller.h",
+     "vertical_tab_strip_scroll_bar.h",
+@@ -40,6 +41,7 @@
+     "top_container_button.cc",
+     "vertical_new_tab_button.cc",
+     "vertical_tab_strip_bottom_container.cc",
++    "vertical_tab_strip_footer.cc",
+     "vertical_tab_strip_expand_on_hover_lock.cc",
+     "vertical_tab_strip_focus_swipe_controller.cc",
+     "vertical_tab_strip_scroll_bar.cc",
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+@@ -51,6 +51,7 @@
+ #include "chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h"
+ #include "chrome/browser/ui/views/tabs/shared/drop_arrow.h"
+ #include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h"
++#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_footer.h"
+ #include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_focus_swipe_controller.h"
+ #include "chrome/browser/ui/web_applications/app_browser_controller.h"
+ #include "chrome/grit/generated_resources.h"
+@@ -84,6 +85,8 @@
+ constexpr int kKeyboardResizeWidth = 50;
+ constexpr int kSnapDistance = 15;
+ constexpr int kBottomContainerGap = 2;
++// Space above the first tab so the list does not hug the toolbar.
++constexpr int kTabListTopGap = 8;
+ constexpr int kDefaultWidthSnapDistance = 6;
+ 
+ // Shadow is used in expand-on-hover mode. Shadow radius and opacity are dynamic
+@@ -140,6 +143,22 @@
+       gfx::Insets::TLBR(kBottomContainerGap, region_horizontal_padding,
+                         0, region_horizontal_padding));
+ 
++  // Pushes the footer to the bottom of the strip.
++  auto* spacer = AddChildView(std::make_unique<views::View>());
++  spacer->SetProperty(
++      views::kFlexBehaviorKey,
++      views::FlexSpecification(views::LayoutOrientation::kVertical,
++                               views::MinimumFlexSizeRule::kScaleToZero,
++                               views::MaximumFlexSizeRule::kUnbounded));
++
++  // Quick access to settings, extensions, downloads, history and bookmarks.
++  auto* footer = AddChildView(std::make_unique<VerticalTabStripFooter>(
++      state_controller_, browser_view->browser()));
++  footer->SetProperty(
++      views::kMarginsKey,
++      gfx::Insets::TLBR(kBottomContainerGap, region_horizontal_padding,
++                        kBottomContainerGap, region_horizontal_padding));
++
+   gemini_button_ = AddChildView(std::make_unique<views::View>());
+ 
+   resize_area_ = AddChildView(std::make_unique<views::ResizeArea>(this));
+@@ -717,7 +736,7 @@
+       views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToMinimum,
+                                views::MaximumFlexSizeRule::kPreferred));
+   tab_strip_view()->SetProperty(views::kMarginsKey,
+-                               gfx::Insets::TLBR(0, 0, kBottomContainerGap, 0));
++                               gfx::Insets::TLBR(kTabListTopGap, 0, kBottomContainerGap, 0));
+ 
+   // Pre-set the animation values to the appropriate state.
+   auto* const animation_controller =
+--- /dev/null
++++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_footer.h
+@@ -0,0 +1,43 @@
++#ifndef CHROME_BROWSER_UI_VIEWS_TABS_VERTICAL_VERTICAL_TAB_STRIP_FOOTER_H_
++#define CHROME_BROWSER_UI_VIEWS_TABS_VERTICAL_VERTICAL_TAB_STRIP_FOOTER_H_
++
++#include <string_view>
++
++#include "base/callback_list.h"
++#include "base/memory/raw_ptr.h"
++#include "ui/base/metadata/metadata_header_macros.h"
++#include "ui/views/layout/flex_layout_view.h"
++
++class BrowserWindowInterface;
++
++namespace gfx {
++struct VectorIcon;
++}
++
++namespace tabs {
++class VerticalTabStripStateController;
++enum class VerticalTabStripCollapseState;
++}  // namespace tabs
++
++// A row of icon buttons at the bottom of the vertical tab strip that opens
++// settings, extensions, downloads, history and the bookmark manager. Laid out
++// horizontally when the strip is expanded and vertically when it is collapsed.
++class VerticalTabStripFooter : public views::FlexLayoutView {
++  METADATA_HEADER(VerticalTabStripFooter, views::FlexLayoutView)
++
++ public:
++  VerticalTabStripFooter(tabs::VerticalTabStripStateController* state_controller,
++                         BrowserWindowInterface* browser);
++  ~VerticalTabStripFooter() override;
++
++ private:
++  void AddButton(const gfx::VectorIcon& icon,
++                 int command_id,
++                 std::u16string_view tooltip);
++  void OnCollapseStateChanged(tabs::VerticalTabStripCollapseState state);
++
++  raw_ptr<BrowserWindowInterface> browser_ = nullptr;
++  base::CallbackListSubscription collapsed_state_change_subscription_;
++};
++
++#endif  // CHROME_BROWSER_UI_VIEWS_TABS_VERTICAL_VERTICAL_TAB_STRIP_FOOTER_H_
+--- /dev/null
++++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_footer.cc
+@@ -0,0 +1,67 @@
++#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_footer.h"
++
++#include <string>
++
++#include "base/functional/bind.h"
++#include "chrome/app/chrome_command_ids.h"
++#include "chrome/app/vector_icons/vector_icons.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
++#include "components/vector_icons/vector_icons.h"
++#include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/views/controls/button/image_button.h"
++#include "ui/views/controls/button/image_button_factory.h"
++#include "ui/views/layout/flex_layout_types.h"
++#include "ui/views/view_class_properties.h"
++
++namespace {
++constexpr int kIconSize = 18;
++}  // namespace
++
++VerticalTabStripFooter::VerticalTabStripFooter(
++    tabs::VerticalTabStripStateController* state_controller,
++    BrowserWindowInterface* browser)
++    : browser_(browser) {
++  SetMainAxisAlignment(views::LayoutAlignment::kCenter);
++  SetCrossAxisAlignment(views::LayoutAlignment::kCenter);
++
++  AddButton(vector_icons::kSettingsIcon, IDC_OPTIONS, u"Settings");
++  AddButton(vector_icons::kChromeExtensionIcon, IDC_MANAGE_EXTENSIONS,
++            u"Extensions");
++  AddButton(vector_icons::kDownloadIcon, IDC_SHOW_DOWNLOADS, u"Downloads");
++  AddButton(vector_icons::kHistoryIcon, IDC_SHOW_HISTORY, u"History");
++  AddButton(kBookmarkManagerIcon, IDC_SHOW_BOOKMARK_MANAGER, u"Bookmarks");
++
++  OnCollapseStateChanged(state_controller->GetCollapseState());
++  collapsed_state_change_subscription_ =
++      state_controller->RegisterOnCollapseChanged(base::BindRepeating(
++          &VerticalTabStripFooter::OnCollapseStateChanged,
++          base::Unretained(this)));
++}
++
++VerticalTabStripFooter::~VerticalTabStripFooter() = default;
++
++void VerticalTabStripFooter::AddButton(const gfx::VectorIcon& icon,
++                                       int command_id,
++                                       std::u16string_view tooltip) {
++  auto button = views::CreateVectorImageButtonWithNativeTheme(
++      base::BindRepeating(
++          [](BrowserWindowInterface* browser, int command_id) {
++            chrome::ExecuteCommand(browser, command_id);
++          },
++          browser_, command_id),
++      icon, kIconSize);
++  button->SetTooltipText(std::u16string(tooltip));
++  button->SetProperty(views::kMarginsKey, gfx::Insets::VH(2, 2));
++  AddChildView(std::move(button));
++}
++
++void VerticalTabStripFooter::OnCollapseStateChanged(
++    tabs::VerticalTabStripCollapseState state) {
++  SetOrientation(state == tabs::VerticalTabStripCollapseState::kExpanded
++                     ? views::LayoutOrientation::kHorizontal
++                     : views::LayoutOrientation::kVertical);
++}
++
++BEGIN_METADATA(VerticalTabStripFooter)
++END_METADATA

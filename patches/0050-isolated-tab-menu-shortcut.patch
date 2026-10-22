@@ -1,0 +1,80 @@
+--- a/chrome/app/chrome_command_ids.h
++++ b/chrome/app/chrome_command_ids.h
+@@ -52,6 +52,7 @@
+ #define IDC_NEW_WINDOW                  34000
+ #define IDC_NEW_INCOGNITO_WINDOW        34001
+ #define IDC_NEW_ISOLATED_WINDOW         34002
++#define IDC_HELIUM_NEW_ISOLATED_TAB     34990
+ #define IDC_CLOSE_WINDOW                34012
+ #define IDC_NEW_TAB                     34014
+ #define IDC_CLOSE_TAB                   34015
+--- a/chrome/browser/ui/browser_command_controller.cc
++++ b/chrome/browser/ui/browser_command_controller.cc
+@@ -57,6 +57,7 @@
+ #include "chrome/browser/ui/actions/command_action_updater.h"
+ #include "chrome/browser/ui/browser_actions.h"
+ #include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/helium_isolated/helium_isolated_tabs.h"
+ #include "chrome/browser/ui/browser_element_identifiers.h"
+ #include "chrome/browser/ui/browser_select_file_dialog_controller.h"
+ #include "chrome/browser/ui/browser_window.h"
+@@ -550,7 +551,8 @@
+ 
+   return command_id == IDC_CLOSE_TAB || command_id == IDC_CLOSE_WINDOW ||
+          command_id == IDC_NEW_INCOGNITO_WINDOW ||
+-         command_id == IDC_NEW_ISOLATED_WINDOW || command_id == IDC_NEW_TAB ||
++         command_id == IDC_NEW_ISOLATED_WINDOW ||
++         command_id == IDC_HELIUM_NEW_ISOLATED_TAB || command_id == IDC_NEW_TAB ||
+          command_id == IDC_NEW_WINDOW || command_id == IDC_RESTORE_TAB ||
+          command_id == IDC_SELECT_NEXT_TAB ||
+          command_id == IDC_SELECT_PREVIOUS_TAB ||
+@@ -766,6 +768,11 @@
+     case IDC_NEW_ISOLATED_WINDOW:
+       NewIncognitoWindow(profile());
+       break;
++    case IDC_HELIUM_NEW_ISOLATED_TAB:
++      // Own in-memory storage for this tab; start blank and ready to type.
++      helium_isolated::OpenIsolatedTab(browser_, GURL("about:blank"));
++      FocusLocationBar(browser_);
++      break;
+     case IDC_CLOSE_WINDOW:
+       base::RecordAction(base::UserMetricsAction("CloseWindowByKey"));
+       CloseWindow(browser_);
+@@ -2158,6 +2165,8 @@
+ 
+   command_updater->UpdateCommandEnabled(IDC_NEW_ISOLATED_WINDOW,
+                                         isolated_mode_enabled);
++  command_updater->UpdateCommandEnabled(IDC_HELIUM_NEW_ISOLATED_TAB,
++                                        !profile->IsOffTheRecord());
+ 
+   const bool forced_incognito =
+       incognito_availability == policy::IncognitoModeAvailability::kForced;
+--- a/chrome/browser/ui/toolbar/app_menu_model.cc
++++ b/chrome/browser/ui/toolbar/app_menu_model.cc
+@@ -1827,6 +1827,15 @@
+         GetIndexOfCommandId(IDC_NEW_INCOGNITO_WINDOW).value(),
+         kIncognitoMenuItem);
+ 
++    // Helium: a tab with its own private storage, right below Incognito.
++    if (!browser_->GetProfile()->IsOffTheRecord()) {
++      AddItemWithIcon(
++          IDC_HELIUM_NEW_ISOLATED_TAB, u"New isolated tab",
++          ui::ImageModel::FromVectorIcon(
++              vector_icons::kDomainIcon, ui::kColorMenuIcon,
++              ui::SimpleMenuModel::kDefaultIconSize));
++    }
++
+     bool isolated_mode_enabled =
+         enterprise_isolated_mode::IsolatedModeReplacesIncognito(
+             browser_->GetProfile());
+--- a/chrome/browser/ui/accelerator_table.cc
++++ b/chrome/browser/ui/accelerator_table.cc
+@@ -223,6 +223,8 @@
+ #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
+     {ui::VKEY_N, ui::EF_SHIFT_DOWN | ui::EF_PLATFORM_ACCELERATOR,
+      IDC_NEW_INCOGNITO_WINDOW},
++    {ui::VKEY_N, ui::EF_ALT_DOWN | ui::EF_PLATFORM_ACCELERATOR,
++     IDC_HELIUM_NEW_ISOLATED_TAB},
+     {ui::VKEY_T, ui::EF_PLATFORM_ACCELERATOR, IDC_NEW_TAB},
+     {ui::VKEY_N, ui::EF_PLATFORM_ACCELERATOR, IDC_NEW_WINDOW},
+     {ui::VKEY_T, ui::EF_SHIFT_DOWN | ui::EF_PLATFORM_ACCELERATOR,

@@ -1,0 +1,99 @@
+--- a/chrome/browser/ui/webui/onboarding/onboarding_handler.cc
++++ b/chrome/browser/ui/webui/onboarding/onboarding_handler.cc
+@@ -275,14 +275,14 @@
+ 
+ void OnboardingMessageHandler::HandleSetTabLayout(
+     const base::ListValue& args) {
+-  if (args.size() != 2 || !args[0].is_string()) {
++  if (args.size() != 3 || !args[0].is_string()) {
+     return;
+   }
+ 
+   AllowJavascript();
+ 
+   const auto& callback_id = args[0].GetString();
+-  if (!args[1].is_string()) {
++  if (!args[1].is_string() || !args[2].is_bool()) {
+     return RejectJavascriptCallback(callback_id, "invalid layout");
+   }
+ 
+@@ -297,6 +297,8 @@
+   }
+ 
+   pref_service_->SetInteger(::prefs::kHeliumLayout, std::to_underlying(type));
++  // Compact mode: Helium's "zen mode" (tabs and toolbar auto-hide).
++  pref_service_->SetBoolean(::prefs::kHeliumZenMode, args[2].GetBool());
+   ResolveJavascriptCallback(callback_id, {});
+ }
+ 
+--- a/components/helium_onboarding/src/lib/browser/prefs.ts
++++ b/components/helium_onboarding/src/lib/browser/prefs.ts
+@@ -37,8 +37,9 @@
+ }
+ 
+ // "horizontal" (classic top tab strip) or "vertical" (sidebar tabs).
+-export const setTabLayout = async (layout: string): Promise<void> => {
+-    await cr.sendWithPromise('setTabLayout', layout);
++// |compact| turns on Helium's zen mode (tabs and toolbar auto-hide).
++export const setTabLayout = async (layout: string, compact: boolean): Promise<void> => {
++    await cr.sendWithPromise('setTabLayout', layout, compact);
+ }
+ 
+ // "" when no mode has been chosen yet.
+--- a/components/helium_onboarding/src/lib/onboarding-flow.ts
++++ b/components/helium_onboarding/src/lib/onboarding-flow.ts
+@@ -79,6 +79,7 @@
+ 
+ export const selectedPrivacyMode = writable("medium");
+ export const selectedTabLayout = writable("vertical");
++export const selectedCompactMode = writable(false);
+ export const privacyModeNeedsRestart = writable(false);
+ 
+ export const userChoseHeliumAsDefault = writable(true);
+--- a/components/helium_onboarding/src/components/PageNavigation.svelte
++++ b/components/helium_onboarding/src/components/PageNavigation.svelte
+@@ -27,6 +27,7 @@
+         selectedPrivacyMode,
+         privacyModeNeedsRestart,
+         selectedTabLayout,
++        selectedCompactMode,
+     } from "../lib/onboarding-flow";
+ 
+     const visible = $derived(
+@@ -50,7 +51,7 @@
+             break;
+ 
+         case "TabLayout":
+-            await setTabLayout($selectedTabLayout);
++            await setTabLayout($selectedTabLayout, $selectedCompactMode);
+             break;
+ 
+         case "HeliumServices":
+--- a/components/helium_onboarding/src/pages/TabLayout.svelte
++++ b/components/helium_onboarding/src/pages/TabLayout.svelte
+@@ -1,6 +1,10 @@
+ <script lang="ts">
+-    import { HeliumLogo } from "@imput/helium-prism";
+-    import { currentPage, selectedTabLayout } from "../lib/onboarding-flow";
++    import { HeliumLogo, Toggle } from "@imput/helium-prism";
++    import {
++        currentPage,
++        selectedCompactMode,
++        selectedTabLayout,
++    } from "../lib/onboarding-flow";
+ 
+     import PageHeader from "../components/PageHeader.svelte";
+ 
+@@ -49,6 +53,12 @@
+                     </button>
+                 {/each}
+             </div>
++            <Toggle
++                name="Compact mode"
++                desc="Hides the tabs and toolbar until you move the mouse to the edge of the window, for more room for pages."
++                checked={$selectedCompactMode}
++                onchange={(enabled) => selectedCompactMode.set(enabled)}
++            />
+         </div>
+     </div>
+ </div>

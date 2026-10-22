@@ -1,0 +1,366 @@
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -1520,6 +1520,8 @@
+ 
+   if (is_mac) {
+     sources += [
++      "helium_theme/helium_theme_mac.h",
++      "helium_theme/helium_theme_mac.mm",
+       "app_controller_mac.mm",
+       "browser_process_platform_part_mac.mm",
+       "chrome_browser_application_mac.mm",
+--- a/chrome/browser/helium_theme/helium_theme.cc
++++ b/chrome/browser/helium_theme/helium_theme.cc
+@@ -3,17 +3,25 @@
+ #include <algorithm>
+ #include <cmath>
+ #include <string>
++#include <tuple>
+ #include <utility>
+ #include <vector>
+ 
+ #include "base/command_line.h"
+ #include "base/environment.h"
+ #include "base/files/file_path.h"
++#include "base/files/file_path_watcher.h"
+ #include "base/files/file_util.h"
+ #include "base/functional/bind.h"
+ #include "base/logging.h"
+ #include "base/memory/weak_ptr.h"
++#include "base/scoped_observation.h"
++#include "base/no_destructor.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/strings/string_split.h"
++#include "base/strings/string_util.h"
+ #include "base/task/thread_pool.h"
++#include "base/timer/timer.h"
+ #include "build/build_config.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/themes/theme_service.h"
+@@ -24,8 +32,20 @@
+ #include "services/data_decoder/public/mojom/image_decoder.mojom.h"
+ #include "third_party/skia/include/core/SkBitmap.h"
+ #include "ui/base/mojom/themes.mojom.h"
++#include "ui/native_theme/native_theme.h"
++#include "ui/native_theme/native_theme_observer.h"
+ #include "ui/gfx/geometry/size.h"
+ 
++#if BUILDFLAG(IS_WIN)
++#include <windows.h>
++
++#include "base/win/registry.h"
++#endif
++
++#if BUILDFLAG(IS_MAC)
++#include "chrome/browser/helium_theme/helium_theme_mac.h"
++#endif
++
+ namespace helium_theme {
+ 
+ namespace {
+@@ -43,9 +63,10 @@
+ // The decoder shrinks the image to fit; plenty for estimating a color.
+ constexpr uint64_t kMaxDecodedBytes = 4 * 1024 * 1024;
+ 
+-base::FilePath DefaultWallpaperPath() {
+ #if BUILDFLAG(IS_LINUX)
+-  // Omarchy keeps a symlink to the current wallpaper here.
++// Omarchy keeps the current desktop theme and wallpaper under
++// $XDG_STATE_HOME/omarchy/current.
++base::FilePath OmarchyCurrentDir() {
+   std::optional<std::string> state_home =
+       base::Environment::Create()->GetVar("XDG_STATE_HOME");
+   base::FilePath base_dir;
+@@ -54,12 +75,71 @@
+   } else {
+     base_dir = base::GetHomeDir().Append(".local/state");
+   }
+-  return base_dir.Append("omarchy/current/background");
++  return base_dir.Append("omarchy/current");
++}
++#endif
++
++base::FilePath DefaultWallpaperPath() {
++#if BUILDFLAG(IS_LINUX)
++  return OmarchyCurrentDir().Append("background");
++#elif BUILDFLAG(IS_WIN)
++  wchar_t buffer[MAX_PATH] = {};
++  if (SystemParametersInfoW(SPI_GETDESKWALLPAPER, MAX_PATH, buffer, 0)) {
++    return base::FilePath(buffer);
++  }
++  return base::FilePath();
++#elif BUILDFLAG(IS_MAC)
++  return helium_theme::MacDesktopWallpaperPath();
+ #else
+   return base::FilePath();
+ #endif
+ }
+ 
++// The desktop's own accent color, when the platform has one: the Omarchy theme's
++// `accent` (colors.toml) on Linux, the Windows accent color, the macOS accent
++// color. Runs on a blocking thread. Not verified on Windows or macOS yet.
++std::optional<SkColor> DesktopAccentColor() {
++#if BUILDFLAG(IS_LINUX)
++  std::string toml;
++  if (!base::ReadFileToString(OmarchyCurrentDir().Append("theme/colors.toml"),
++                              &toml)) {
++    return std::nullopt;
++  }
++  for (std::string_view line : base::SplitStringPiece(
++           toml, "\n", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY)) {
++    if (!line.starts_with("accent")) {
++      continue;
++    }
++    const size_t open = line.find('"');
++    const size_t close = open == std::string_view::npos
++                             ? std::string_view::npos
++                             : line.find('"', open + 1);
++    if (close == std::string_view::npos || close - open != 8 ||
++        line[open + 1] != '#') {
++      return std::nullopt;
++    }
++    uint32_t rgb = 0;
++    if (!base::HexStringToUInt(line.substr(open + 2, 6), &rgb)) {
++      return std::nullopt;
++    }
++    return SkColorSetRGB((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
++  }
++  return std::nullopt;
++#elif BUILDFLAG(IS_WIN)
++  base::win::RegKey key(HKEY_CURRENT_USER,
++                        L"Software\\Microsoft\\Windows\\DWM", KEY_READ);
++  DWORD abgr = 0;
++  if (!key.Valid() || key.ReadValueDW(L"AccentColor", &abgr) != ERROR_SUCCESS) {
++    return std::nullopt;
++  }
++  return SkColorSetRGB(abgr & 0xFF, (abgr >> 8) & 0xFF, (abgr >> 16) & 0xFF);
++#elif BUILDFLAG(IS_MAC)
++  return helium_theme::MacSystemAccentColor();
++#else
++  return std::nullopt;
++#endif
++}
++
+ std::optional<std::vector<uint8_t>> ReadWallpaper(const base::FilePath& path) {
+   if (path.empty()) {
+     return std::nullopt;
+@@ -84,12 +164,21 @@
+   return *user_color == last || *user_color == kFallbackColor;
+ }
+ 
+-void OnDecoded(base::WeakPtr<Profile> profile, const SkBitmap& bitmap) {
+-  if (!profile || bitmap.isNull()) {
++void ApplyColor(Profile* profile, SkColor color) {
++  if (!CanReplaceTheme(profile)) {
++    LOG(INFO) << "Theme was chosen by the user; not applying desktop color";
+     return;
+   }
+-  if (!CanReplaceTheme(profile.get())) {
+-    LOG(INFO) << "Theme was chosen by the user; not applying wallpaper accent";
++  ThemeService* theme = ThemeServiceFactory::GetForProfile(profile);
++  theme->SetIsGrayscale(false);
++  theme->SetUserColorAndBrowserColorVariant(
++      color, ui::mojom::BrowserColorVariant::kTonalSpot);
++  profile->GetPrefs()->SetInteger(kLastAppliedPref, static_cast<int>(color));
++  LOG(INFO) << "Applied desktop accent color " << std::hex << color;
++}
++
++void OnDecoded(base::WeakPtr<Profile> profile, const SkBitmap& bitmap) {
++  if (!profile || bitmap.isNull()) {
+     return;
+   }
+   std::optional<SkColor> color = DominantColor(bitmap);
+@@ -97,12 +186,7 @@
+     LOG(INFO) << "Wallpaper has no usable accent color; keeping current theme";
+     return;
+   }
+-  ThemeService* theme = ThemeServiceFactory::GetForProfile(profile.get());
+-  theme->SetIsGrayscale(false);
+-  theme->SetUserColorAndBrowserColorVariant(
+-      *color, ui::mojom::BrowserColorVariant::kTonalSpot);
+-  profile->GetPrefs()->SetInteger(kLastAppliedPref, static_cast<int>(*color));
+-  LOG(INFO) << "Applied wallpaper accent color " << std::hex << *color;
++  ApplyColor(profile.get(), *color);
+ }
+ 
+ void OnRead(base::WeakPtr<Profile> profile,
+@@ -117,6 +201,97 @@
+       base::BindOnce(&OnDecoded, profile));
+ }
+ 
++// Where the desktop's colors come from this time.
++struct Source {
++  std::optional<SkColor> accent;
++  base::FilePath wallpaper;
++};
++
++Source ReadSource(base::FilePath wallpaper_override) {
++  Source source;
++  if (wallpaper_override.empty()) {
++    source.accent = DesktopAccentColor();
++    source.wallpaper = DefaultWallpaperPath();
++  } else {
++    source.wallpaper = wallpaper_override;
++  }
++  return source;
++}
++
++// The desktop's own accent wins; otherwise the wallpaper's dominant color.
++void OnSource(base::WeakPtr<Profile> profile, Source source) {
++  if (!profile) {
++    return;
++  }
++  if (source.accent) {
++    ApplyColor(profile.get(), *source.accent);
++    return;
++  }
++  if (source.wallpaper.empty()) {
++    return;
++  }
++  base::ThreadPool::PostTaskAndReplyWithResult(
++      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
++      base::BindOnce(&ReadWallpaper, source.wallpaper),
++      base::BindOnce(&OnRead, profile));
++}
++
++// Re-applies when the desktop changes: the system theme or accent (all
++// platforms, via NativeTheme) and Omarchy's theme switch (the symlinks in its
++// "current" directory change). shortcut: tracks the last profile that applied,
++// which is fine while a single profile is open.
++class DesktopWatcher : public ui::NativeThemeObserver {
++ public:
++  void Start(base::WeakPtr<Profile> profile, base::FilePath wallpaper_override) {
++    profile_ = profile;
++    wallpaper_override_ = std::move(wallpaper_override);
++    if (started_) {
++      return;
++    }
++    started_ = true;
++    observation_.Observe(ui::NativeTheme::GetInstanceForNativeUi());
++#if BUILDFLAG(IS_LINUX)
++    if (wallpaper_override_.empty()) {
++      std::ignore = watcher_.Watch(
++          OmarchyCurrentDir(), base::FilePathWatcher::Type::kNonRecursive,
++          base::BindRepeating(&DesktopWatcher::OnFileChanged,
++                              base::Unretained(this)));
++    }
++#endif
++  }
++
++  void Reload() {
++    if (!profile_) {
++      return;
++    }
++    base::ThreadPool::PostTaskAndReplyWithResult(
++        FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
++        base::BindOnce(&ReadSource, wallpaper_override_),
++        base::BindOnce(&OnSource, profile_));
++  }
++
++ private:
++  void OnNativeThemeUpdated(ui::NativeTheme*) override { Schedule(); }
++  void OnFileChanged(const base::FilePath&, bool) { Schedule(); }
++  void Schedule() {
++    timer_.Start(FROM_HERE, base::Milliseconds(600),
++                 base::BindOnce(&DesktopWatcher::Reload, base::Unretained(this)));
++  }
++
++  base::WeakPtr<Profile> profile_;
++  base::FilePath wallpaper_override_;
++  bool started_ = false;
++  base::OneShotTimer timer_;
++  base::FilePathWatcher watcher_;
++  base::ScopedObservation<ui::NativeTheme, ui::NativeThemeObserver>
++      observation_{this};
++};
++
++DesktopWatcher& Watcher() {
++  static base::NoDestructor<DesktopWatcher> watcher;
++  return *watcher;
++}
++
+ }  // namespace
+ 
+ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
+@@ -180,22 +355,17 @@
+     }
+   }
+ 
+-  base::FilePath path = DefaultWallpaperPath();
++  base::FilePath wallpaper_override;
+   const base::CommandLine* cl = base::CommandLine::ForCurrentProcess();
+   if (cl->HasSwitch(kSwitch)) {
+     prefs->SetBoolean(kMatchWallpaperPref, true);
+-    base::FilePath override_path = cl->GetSwitchValuePath(kSwitch);
+-    if (!override_path.empty()) {
+-      path = override_path;
+-    }
++    wallpaper_override = cl->GetSwitchValuePath(kSwitch);
+   }
+   if (!prefs->GetBoolean(kMatchWallpaperPref)) {
+     return;
+   }
+-  base::ThreadPool::PostTaskAndReplyWithResult(
+-      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+-      base::BindOnce(&ReadWallpaper, path),
+-      base::BindOnce(&OnRead, profile->GetWeakPtr()));
++  Watcher().Start(profile->GetWeakPtr(), wallpaper_override);
++  Watcher().Reload();
+ }
+ 
+ }  // namespace helium_theme
+--- /dev/null
++++ b/chrome/browser/helium_theme/helium_theme_mac.h
+@@ -0,0 +1,20 @@
++#ifndef CHROME_BROWSER_HELIUM_THEME_HELIUM_THEME_MAC_H_
++#define CHROME_BROWSER_HELIUM_THEME_HELIUM_THEME_MAC_H_
++
++#include <optional>
++
++#include "base/files/file_path.h"
++#include "third_party/skia/include/core/SkColor.h"
++
++namespace helium_theme {
++
++// The user's macOS accent color (System Settings > Appearance), sRGB.
++// Not verified on macOS yet.
++std::optional<SkColor> MacSystemAccentColor();
++
++// The main screen's desktop picture, or an empty path.
++base::FilePath MacDesktopWallpaperPath();
++
++}  // namespace helium_theme
++
++#endif  // CHROME_BROWSER_HELIUM_THEME_HELIUM_THEME_MAC_H_
+--- /dev/null
++++ b/chrome/browser/helium_theme/helium_theme_mac.mm
+@@ -0,0 +1,29 @@
++#include "chrome/browser/helium_theme/helium_theme_mac.h"
++
++#import <AppKit/AppKit.h>
++
++#include "base/strings/sys_string_conversions.h"
++
++namespace helium_theme {
++
++std::optional<SkColor> MacSystemAccentColor() {
++  NSColor* color = [[NSColor controlAccentColor]
++      colorUsingColorSpace:[NSColorSpace sRGBColorSpace]];
++  if (!color) {
++    return std::nullopt;
++  }
++  return SkColorSetRGB(static_cast<int>(color.redComponent * 255 + 0.5),
++                       static_cast<int>(color.greenComponent * 255 + 0.5),
++                       static_cast<int>(color.blueComponent * 255 + 0.5));
++}
++
++base::FilePath MacDesktopWallpaperPath() {
++  NSURL* url = [[NSWorkspace sharedWorkspace]
++      desktopImageURLForScreen:[NSScreen mainScreen]];
++  if (!url || !url.isFileURL) {
++    return base::FilePath();
++  }
++  return base::FilePath(base::SysNSStringToUTF8(url.path));
++}
++
++}  // namespace helium_theme
