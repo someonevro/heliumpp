@@ -13,6 +13,21 @@
 
 > **Early development.** Only Linux desktop builds exist. Many features are implemented but not yet verified in a real window; see [Status](#status) for what has actually been tested.
 
+## Download
+
+Experimental Linux x86_64 AppImage: **[Helium++ 0.19.4.1 alpha](https://github.com/someonevro/heliumpp/releases/tag/v0.19.4.1-alpha)**
+
+```bash
+chmod +x heliumpp-0.19.4.1-x86_64.AppImage
+./heliumpp-0.19.4.1-x86_64.AppImage
+```
+
+It has only been tested headless. Normal desktop launch, other distros and the in-browser updater are unverified (the update URL is not set in this build).
+
+## Vibecoded
+
+This browser is vibecoded: the patches, scripts and documentation were written with an AI coding assistant (Claude Code), directed by a beginner in browser development. It has not had an independent security review or audit. Do not rely on it for anything where your safety depends on it, and read the [status table](#status) to see what has actually been tested.
+
 ## What this repository is
 
 This repository does **not** contain the Chromium source tree. It holds the Helium++ changes on top of Helium:
