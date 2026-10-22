@@ -1,0 +1,200 @@
+--- a/chrome/browser/ui/helium_isolated/helium_isolated_tabs.h
++++ b/chrome/browser/ui/helium_isolated/helium_isolated_tabs.h
+@@ -2,6 +2,7 @@
+ #define CHROME_BROWSER_UI_HELIUM_ISOLATED_HELIUM_ISOLATED_TABS_H_
+ 
+ #include <optional>
++#include <string>
+ 
+ #include "content/public/browser/storage_partition_config.h"
+ 
+@@ -19,7 +20,11 @@
+ // storage area (cookies, local storage, IndexedDB, cache, service workers).
+ // Nothing is shared with other tabs or written to disk, and everything is
+ // deleted when the tab closes.
+-void OpenIsolatedTab(BrowserWindowInterface* browser, const GURL& url);
++// |partition_name| is only for tests: tabs given the same name share a storage
++// area (an empty name picks a fresh random one).
++content::WebContents* OpenIsolatedTab(BrowserWindowInterface* browser,
++                                      const GURL& url,
++                                      const std::string& partition_name = "");
+ 
+ // The private storage area of |contents| / |site_instance|, or nullopt when it
+ // uses normal storage.
+@@ -34,8 +39,10 @@
+ // times.
+ void MaybeAttachWiper(content::WebContents* contents);
+ 
+-// Test hook: when --helium-isolated-tabs=<url>,<url>... is present, opens each
++// Test hook: when --helium-isolated-tabs=<[name@]url>,... is present, opens each
+ // URL in its own isolated tab a few seconds after the first window shows.
++// --helium-isolated-close-after=<s> closes those tabs after <s> seconds, and
++// --helium-isolated-tabs-late=<[name@]url>,... opens more tabs afterwards.
+ void MaybeOpenStartupTabs();
+ 
+ }  // namespace helium_isolated
+--- a/chrome/browser/ui/helium_isolated/helium_isolated_tabs.cc
++++ b/chrome/browser/ui/helium_isolated/helium_isolated_tabs.cc
+@@ -10,12 +10,14 @@
+ #include "base/functional/callback_helpers.h"
+ #include "base/location.h"
+ #include "base/no_destructor.h"
++#include "base/strings/string_number_conversions.h"
+ #include "base/strings/string_split.h"
+ #include "base/task/single_thread_task_runner.h"
+ #include "base/time/time.h"
+ #include "base/uuid.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/tabs/tab_enums.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "content/public/browser/browser_context.h"
+@@ -110,13 +112,17 @@
+   }
+ }
+ 
+-void OpenIsolatedTab(BrowserWindowInterface* browser, const GURL& url) {
++content::WebContents* OpenIsolatedTab(BrowserWindowInterface* browser,
++                                      const GURL& url,
++                                      const std::string& partition_name) {
+   Profile* profile = browser->GetProfile();
+   // A new, unique, in-memory partition for this tab only.
+   const content::StoragePartitionConfig config =
+       content::StoragePartitionConfig::Create(
+           profile, kPartitionDomain,
+-          base::Uuid::GenerateRandomV4().AsLowercaseString(),
++          partition_name.empty()
++              ? base::Uuid::GenerateRandomV4().AsLowercaseString()
++              : partition_name,
+           /*in_memory=*/true);
+   auto site_instance = content::SiteInstance::CreateForFixedStoragePartition(
+       profile, url, config);
+@@ -128,8 +134,64 @@
+                                                 /*foreground=*/true);
+   raw->GetController().LoadURLWithParams(
+       content::NavigationController::LoadURLParams(url));
++  return raw;
+ }
+ 
++namespace {
++
++// "name@url" or "url".
++void OpenSpec(BrowserWindowInterface* browser,
++              const std::string& spec,
++              std::vector<base::WeakPtr<content::WebContents>>* opened) {
++  std::string name;
++  std::string url_text = spec;
++  const size_t at = spec.find('@');
++  if (at != std::string::npos &&
++      spec.substr(0, at).find_first_of(":/") == std::string::npos) {
++    name = spec.substr(0, at);
++    url_text = spec.substr(at + 1);
++  }
++  GURL url(url_text);
++  if (url.is_valid() && url.SchemeIsHTTPOrHTTPS()) {
++    if (content::WebContents* contents =
++            OpenIsolatedTab(browser, url, name)) {
++      opened->push_back(contents->GetWeakPtr());
++    }
++  }
++}
++
++void OpenSpecs(const std::string& specs,
++               std::vector<base::WeakPtr<content::WebContents>>* opened) {
++  BrowserWindowInterface* browser =
++      GetLastActiveBrowserWindowInterfaceWithAnyProfile();
++  if (!browser) {
++    return;
++  }
++  for (const auto& spec : base::SplitString(specs, ",", base::TRIM_WHITESPACE,
++                                            base::SPLIT_WANT_NONEMPTY)) {
++    OpenSpec(browser, spec, opened);
++  }
++}
++
++void CloseAll(std::vector<base::WeakPtr<content::WebContents>> opened) {
++  BrowserWindowInterface* browser =
++      GetLastActiveBrowserWindowInterfaceWithAnyProfile();
++  if (!browser) {
++    return;
++  }
++  for (const auto& weak : opened) {
++    if (!weak) {
++      continue;
++    }
++    const int index = browser->GetTabStripModel()->GetIndexOfWebContents(weak.get());
++    if (index != TabStripModel::kNoTab) {
++      browser->GetTabStripModel()->CloseWebContentsAt(index, CLOSE_NONE);
++    }
++  }
++}
++
++}  // namespace
++
+ void MaybeOpenStartupTabs() {
+   static bool done = false;
+   const base::CommandLine* cl = base::CommandLine::ForCurrentProcess();
+@@ -137,25 +199,43 @@
+     return;
+   }
+   done = true;
+-  const std::string value = cl->GetSwitchValueASCII(kStartupSwitch);
+-  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+-      FROM_HERE, base::BindOnce(
+-                     [](std::string value) {
+-                       BrowserWindowInterface* browser =
+-                           GetLastActiveBrowserWindowInterfaceWithAnyProfile();
+-                       if (!browser) {
+-                         return;
+-                       }
+-                       for (const auto& part :
+-                            base::SplitString(value, ",", base::TRIM_WHITESPACE,
+-                                              base::SPLIT_WANT_NONEMPTY)) {
+-                         GURL url(part);
+-                         if (url.is_valid() && url.SchemeIsHTTPOrHTTPS()) {
+-                           OpenIsolatedTab(browser, url);
+-                         }
+-                       }
+-                     },
+-                     value),
++  const std::string specs = cl->GetSwitchValueASCII(kStartupSwitch);
++  const std::string late = cl->GetSwitchValueASCII("helium-isolated-tabs-late");
++  int close_after = 0;
++  base::StringToInt(cl->GetSwitchValueASCII("helium-isolated-close-after"),
++                    &close_after);
++  auto runner = base::SingleThreadTaskRunner::GetCurrentDefault();
++  // Opened at +3 s; the list is shared with the closing task.
++  runner->PostDelayedTask(
++      FROM_HERE,
++      base::BindOnce(
++          [](std::string specs, std::string late, int close_after,
++             scoped_refptr<base::SingleThreadTaskRunner> runner) {
++            auto opened =
++                std::make_unique<std::vector<base::WeakPtr<content::WebContents>>>();
++            OpenSpecs(specs, opened.get());
++            if (close_after > 0) {
++              runner->PostDelayedTask(
++                  FROM_HERE,
++                  base::BindOnce(
++                      [](std::vector<base::WeakPtr<content::WebContents>>
++                             opened) { CloseAll(std::move(opened)); },
++                      *opened),
++                  base::Seconds(close_after));
++            }
++            if (!late.empty()) {
++              runner->PostDelayedTask(
++                  FROM_HERE,
++                  base::BindOnce(
++                      [](std::string late) {
++                        std::vector<base::WeakPtr<content::WebContents>> unused;
++                        OpenSpecs(late, &unused);
++                      },
++                      late),
++                  base::Seconds(close_after > 0 ? close_after + 3 : 12));
++            }
++          },
++          specs, late, close_after, runner),
+       base::Seconds(3));
+ }
+ 

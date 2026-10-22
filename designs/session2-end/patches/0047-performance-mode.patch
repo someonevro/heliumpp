@@ -1,0 +1,267 @@
+--- a/chrome/browser/helium_privacy_mode/helium_privacy_mode.h
++++ b/chrome/browser/helium_privacy_mode/helium_privacy_mode.h
+@@ -33,6 +33,11 @@
+ // Returns the stored mode name, or "" when none was chosen.
+ std::string GetModeName(Profile* profile);
+ 
++// Performance mode: memory saver (aggressive), energy saver always on, and the
++// previous values are remembered so turning it off restores them.
++bool IsPerformanceMode(Profile* profile);
++void SetPerformanceMode(Profile* profile, bool enabled);
++
+ bool SetMode(Profile* profile,
+              const std::string& mode,
+              bool* restart_required = nullptr);
+--- a/chrome/browser/helium_privacy_mode/helium_privacy_mode.cc
++++ b/chrome/browser/helium_privacy_mode/helium_privacy_mode.cc
+@@ -18,7 +18,9 @@
+ #include "components/content_settings/core/common/content_settings.h"
+ #include "components/content_settings/core/common/content_settings_types.h"
+ #include "components/content_settings/core/common/pref_names.h"
++#include "components/performance_manager/public/user_tuning/prefs.h"
+ #include "components/pref_registry/pref_registry_syncable.h"
++#include "base/values.h"
+ #include "components/prefs/pref_service.h"
+ #include "components/webui/flags/pref_service_flags_storage.h"
+ 
+@@ -64,8 +66,67 @@
+ 
+ }  // namespace
+ 
++namespace {
++constexpr char kPerfPref[] = "helium.performance_mode";
++constexpr char kPerfSavedPref[] = "helium.performance_saved";
++// How long a background tab stays loaded in performance mode.
++constexpr int kPerfDiscardMinutes = 5;
++}  // namespace
++
+ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
+   registry->RegisterStringPref(kModePref, std::string());
++  registry->RegisterBooleanPref(kPerfPref, false);
++  registry->RegisterDictionaryPref(kPerfSavedPref);
++}
++
++bool IsPerformanceMode(Profile* profile) {
++  return profile->GetPrefs()->GetBoolean(kPerfPref);
++}
++
++void SetPerformanceMode(Profile* profile, bool enabled) {
++  namespace tuning = performance_manager::user_tuning::prefs;
++  PrefService* prefs = profile->GetPrefs();
++  // These are browser-wide (local state) prefs.
++  PrefService* local = g_browser_process->local_state();
++  if (enabled == prefs->GetBoolean(kPerfPref)) {
++    return;
++  }
++  if (enabled) {
++    base::DictValue saved;
++    saved.Set("mem_state", local->GetInteger(tuning::kMemorySaverModeState));
++    saved.Set("mem_aggr",
++              local->GetInteger(tuning::kMemorySaverModeAggressiveness));
++    saved.Set("mem_min", local->GetInteger(
++                             tuning::kMemorySaverModeTimeBeforeDiscardInMinutes));
++    saved.Set("battery", local->GetInteger(tuning::kBatterySaverModeState));
++    prefs->SetDict(kPerfSavedPref, std::move(saved));
++
++    local->SetInteger(tuning::kMemorySaverModeState,
++                      static_cast<int>(tuning::MemorySaverModeState::kEnabled));
++    local->SetInteger(
++        tuning::kMemorySaverModeAggressiveness,
++        static_cast<int>(tuning::MemorySaverModeAggressiveness::kAggressive));
++    local->SetInteger(tuning::kMemorySaverModeTimeBeforeDiscardInMinutes,
++                      kPerfDiscardMinutes);
++    local->SetInteger(tuning::kBatterySaverModeState,
++                      static_cast<int>(tuning::BatterySaverModeState::kEnabled));
++  } else {
++    const base::DictValue& saved = prefs->GetDict(kPerfSavedPref);
++    if (auto v = saved.FindInt("mem_state")) {
++      local->SetInteger(tuning::kMemorySaverModeState, *v);
++    }
++    if (auto v = saved.FindInt("mem_aggr")) {
++      local->SetInteger(tuning::kMemorySaverModeAggressiveness, *v);
++    }
++    if (auto v = saved.FindInt("mem_min")) {
++      local->SetInteger(tuning::kMemorySaverModeTimeBeforeDiscardInMinutes, *v);
++    }
++    if (auto v = saved.FindInt("battery")) {
++      local->SetInteger(tuning::kBatterySaverModeState, *v);
++    }
++    prefs->ClearPref(kPerfSavedPref);
++  }
++  prefs->SetBoolean(kPerfPref, enabled);
+ }
+ 
+ namespace {
+@@ -185,6 +246,11 @@
+       LOG(WARNING) << "Ignoring unknown --" << kSwitch << "=" << requested;
+     }
+   }
++  // Test hook: --performance-mode=on|off.
++  if (cl->HasSwitch("performance-mode")) {
++    SetPerformanceMode(profile, cl->GetSwitchValueASCII("performance-mode") ==
++                                    "on");
++  }
+   ApplyStored(profile);
+ }
+ 
+--- a/chrome/browser/ui/webui/new_tab_page/new_tab_page.mojom
++++ b/chrome/browser/ui/webui/new_tab_page/new_tab_page.mojom
+@@ -176,6 +176,9 @@
+   GetPrivacyMode() => (string mode);
+   // Sets the privacy mode. |success| is false for an unknown mode.
+   SetPrivacyMode(string mode) => (bool success, bool restart_required);
++  // Performance mode (lighter on memory and battery).
++  GetPerformanceMode() => (bool enabled);
++  SetPerformanceMode(bool enabled);
+   // Gets current doodle if there is one.
+   GetDoodle() => (Doodle? doodle);
+   // Called when a module the given id is dismissed.
+--- a/chrome/browser/ui/webui/new_tab_page/new_tab_page_handler.h
++++ b/chrome/browser/ui/webui/new_tab_page/new_tab_page_handler.h
+@@ -127,6 +127,8 @@
+   // new_tab_page::mojom::PageHandler:
+   void SetMostVisitedSettings(ntp_tiles::TileType type, bool visible) override;
+   void GetMostVisitedSettings(GetMostVisitedSettingsCallback callback) override;
++  void GetPerformanceMode(GetPerformanceModeCallback callback) override;
++  void SetPerformanceMode(bool enabled) override;
+   void GetPrivacyMode(GetPrivacyModeCallback callback) override;
+   void SetPrivacyMode(const std::string& mode,
+                       SetPrivacyModeCallback callback) override;
+--- a/chrome/browser/ui/webui/new_tab_page/new_tab_page_handler.cc
++++ b/chrome/browser/ui/webui/new_tab_page/new_tab_page_handler.cc
+@@ -633,6 +633,15 @@
+   std::move(callback).Run(type, visible);
+ }
+ 
++void NewTabPageHandler::GetPerformanceMode(
++    GetPerformanceModeCallback callback) {
++  std::move(callback).Run(helium_privacy_mode::IsPerformanceMode(profile_));
++}
++
++void NewTabPageHandler::SetPerformanceMode(bool enabled) {
++  helium_privacy_mode::SetPerformanceMode(profile_, enabled);
++}
++
+ void NewTabPageHandler::GetPrivacyMode(GetPrivacyModeCallback callback) {
+   std::move(callback).Run(helium_privacy_mode::GetModeName(profile_));
+ }
+--- a/chrome/browser/resources/new_tab_page/app.html
++++ b/chrome/browser/resources/new_tab_page/app.html
+@@ -16,6 +16,19 @@
+         </button>`)}
+     </div>
+     <div id="privacyNote">${this.privacyNote_()}</div>
++    <div id="performanceRow">
++      <button id="performanceSwitch" role="switch"
++          aria-checked="${this.performanceMode_}"
++          aria-label="Performance mode"
++          ?data-on="${this.performanceMode_}"
++          @click="${this.onPerformanceClick_}">
++        <span class="knob"></span>
++      </button>
++      <div>
++        <div class="title">Performance mode</div>
++        <div class="desc">${this.performanceNote_()}</div>
++      </div>
++    </div>
+   </div>
+   ${this.lazyRender_ ? html`
+     ${this.shortcutsEnabled_ ? html`
+--- a/chrome/browser/resources/new_tab_page/app.css
++++ b/chrome/browser/resources/new_tab_page/app.css
+@@ -674,3 +674,54 @@
+   margin-inline-start: 8px;
+   opacity: 0.85;
+ }
++
++#performanceRow {
++  align-items: center;
++  display: flex;
++  gap: 12px;
++  margin: 22px auto 0;
++  text-align: start;
++  width: fit-content;
++}
++
++#performanceSwitch {
++  background: color-mix(in oklab, var(--color-new-tab-page-primary-foreground) 18%, transparent);
++  border: 0;
++  border-radius: 999px;
++  cursor: pointer;
++  flex: none;
++  height: 22px;
++  padding: 0;
++  position: relative;
++  transition: background 0.2s;
++  width: 40px;
++}
++
++#performanceSwitch .knob {
++  background: var(--color-new-tab-page-primary-foreground);
++  border-radius: 50%;
++  height: 16px;
++  left: 3px;
++  position: absolute;
++  top: 3px;
++  transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
++  width: 16px;
++}
++
++#performanceSwitch[data-on] {
++  background: color-mix(in oklab, var(--color-new-tab-page-focus-ring) 55%, transparent);
++}
++
++#performanceSwitch[data-on] .knob {
++  transform: translateX(18px);
++}
++
++#performanceRow .title {
++  color: var(--color-new-tab-page-primary-foreground);
++  font-size: 14px;
++}
++
++#performanceRow .desc {
++  color: var(--color-new-tab-page-secondary-foreground);
++  font-size: 12px;
++}
+--- a/chrome/browser/resources/new_tab_page/app.ts
++++ b/chrome/browser/resources/new_tab_page/app.ts
+@@ -243,6 +243,7 @@
+ 
+       realboxShown_: {type: Boolean},
+       privacyMode_: {type: String},
++      performanceMode_: {type: Boolean},
+       privacyRestart_: {type: Boolean},
+ 
+       /**
+@@ -395,6 +396,7 @@
+   protected accessor singleColoredLogo_: boolean = false;
+   protected accessor realboxShown_: boolean = false;
+   protected accessor privacyMode_: string = '';
++  protected accessor performanceMode_: boolean = false;
+   protected accessor privacyRestart_: boolean = false;
+   protected readonly privacyModes_ = [
+     {id: 'usability', label: 'Low'},
+@@ -1477,8 +1479,22 @@
+       this.privacyMode_ = mode;
+       this.privacyRestart_ = false;
+     });
++    this.pageHandler_.getPerformanceMode().then(({enabled}) => {
++      this.performanceMode_ = enabled;
++    });
+   };
+ 
++  protected onPerformanceClick_() {
++    this.performanceMode_ = !this.performanceMode_;
++    this.pageHandler_.setPerformanceMode(this.performanceMode_);
++  }
++
++  protected performanceNote_(): string {
++    return this.performanceMode_ ?
++        'On: background tabs sleep after 5 minutes and energy saver stays on.' :
++        'Off: normal behavior.';
++  }
++
+   protected onPrivacyModeClick_(e: Event) {
+     const mode = (e.currentTarget as HTMLElement).dataset['mode'] || '';
+     this.pageHandler_.setPrivacyMode(mode).then(

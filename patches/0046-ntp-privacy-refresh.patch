@@ -1,0 +1,40 @@
+--- a/chrome/browser/resources/new_tab_page/app.ts
++++ b/chrome/browser/resources/new_tab_page/app.ts
+@@ -551,9 +551,9 @@
+ 
+   override connectedCallback() {
+     super.connectedCallback();
+-    this.pageHandler_.getPrivacyMode().then(({mode}) => {
+-      this.privacyMode_ = mode;
+-    });
++    this.refreshPrivacyMode_();
++    document.addEventListener('visibilitychange', this.refreshPrivacyMode_);
++    window.addEventListener('focus', this.refreshPrivacyMode_);
+     realboxCanShowSecondarySideMediaQueryList.addEventListener(
+         'change', this.onRealboxCanShowSecondarySideChanged_);
+ 
+@@ -655,6 +655,8 @@
+ 
+   override disconnectedCallback() {
+     super.disconnectedCallback();
++    document.removeEventListener('visibilitychange', this.refreshPrivacyMode_);
++    window.removeEventListener('focus', this.refreshPrivacyMode_);
+     realboxCanShowSecondarySideMediaQueryList.removeEventListener(
+         'change', this.onRealboxCanShowSecondarySideChanged_);
+ 
+@@ -1468,6 +1470,15 @@
+     window.location.href = target;
+   }
+ 
++  // The level can be changed from the sidebar, Settings or the footer menu
++  // while this tab is in the background, so re-read it when shown again.
++  private refreshPrivacyMode_ = () => {
++    this.pageHandler_.getPrivacyMode().then(({mode}) => {
++      this.privacyMode_ = mode;
++      this.privacyRestart_ = false;
++    });
++  };
++
+   protected onPrivacyModeClick_(e: Event) {
+     const mode = (e.currentTarget as HTMLElement).dataset['mode'] || '';
+     this.pageHandler_.setPrivacyMode(mode).then(

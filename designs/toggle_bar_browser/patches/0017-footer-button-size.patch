@@ -1,0 +1,22 @@
+--- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_footer.cc
++++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_footer.cc
+@@ -16,6 +16,7 @@
+ 
+ namespace {
+ constexpr int kIconSize = 18;
++constexpr int kButtonSize = 28;
+ }  // namespace
+ 
+ VerticalTabStripFooter::VerticalTabStripFooter(
+@@ -52,7 +53,10 @@
+           browser_, command_id),
+       icon, kIconSize);
+   button->SetTooltipText(std::u16string(tooltip));
+-  button->SetProperty(views::kMarginsKey, gfx::Insets::VH(2, 2));
++  // The row must fit the default sidebar width (~190 px); the flex layout hides
++  // whatever does not fit.
++  button->SetPreferredSize(gfx::Size(kButtonSize, kButtonSize));
++  button->SetProperty(views::kMarginsKey, gfx::Insets::VH(1, 0));
+   AddChildView(std::move(button));
+ }
+ 

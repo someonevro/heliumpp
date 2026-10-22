@@ -1,0 +1,21 @@
+--- a/chrome/browser/ui/views/frame/browser_view.cc
++++ b/chrome/browser/ui/views/frame/browser_view.cc
+@@ -361,6 +361,7 @@
+ #include "ui/views/accessibility/view_accessibility.h"
+ #include "ui/views/accessibility/view_accessibility_utils.h"
+ #include "ui/views/animation/compositor_animation_runner.h"
++#include "ui/views/background.h"
+ #include "ui/views/bubble/bubble_dialog_delegate_view.h"
+ #include "ui/views/controls/button/menu_button.h"
+ #include "ui/views/controls/textfield/textfield.h"
+@@ -1007,6 +1008,10 @@
+   SetShowIcon(::ShouldShowWindowIcon(
+       browser_.get(), AppUsesWindowControlsOverlay(), AppUsesTabbed()));
+ 
++  // The page card floats with a gap around it (see the tabbed layout); the gap
++  // must show the frame color, not the transparent window behind it.
++  SetBackground(views::CreateSolidBackground(kColorToolbar));
++
+   // Layout deferral during startup is only intended for normal browser windows
+   // (which experience redundant layout passes while loading the WebUI toolbar).
+   // Non-normal windows (popups, app windows, etc.) do not use the WebUI toolbar

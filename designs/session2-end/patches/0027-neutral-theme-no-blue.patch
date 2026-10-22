@@ -1,0 +1,36 @@
+--- a/chrome/browser/helium_theme/helium_theme.cc
++++ b/chrome/browser/helium_theme/helium_theme.cc
+@@ -189,6 +189,16 @@
+     return;
+   }
+   ThemeService* theme = ThemeServiceFactory::GetForProfile(profile);
++  // A neutral seed must not go through the tonal-spot palette: Material gives
++  // gray a blue hue and would tint the whole UI blue. Use the grayscale theme.
++  color_utils::HSL hsl;
++  color_utils::SkColorToHSL(color, &hsl);
++  if (hsl.s < 0.15) {
++    theme->SetIsGrayscale(true);
++    profile->GetPrefs()->SetInteger(kLastAppliedPref, 0);
++    LOG(INFO) << "Desktop accent is neutral; using the grayscale theme";
++    return;
++  }
+   theme->SetIsGrayscale(false);
+   theme->SetUserColorAndBrowserColorVariant(
+       color, ui::mojom::BrowserColorVariant::kTonalSpot);
+@@ -489,12 +499,11 @@
+     prefs->SetBoolean(kInitializedPref, true);
+     // New profiles start with Chromium's grayscale theme; replace it, but never
+     // override a theme the profile already has (extension theme, user color).
++    // No colored fallback any more: it read as blue. New profiles stay on the
++    // neutral grayscale theme until a desktop color is found.
+     if (theme->GetThemeID().empty() && !theme->GetUserColor().has_value()) {
+-      // SetIsGrayscale() clears the other theme prefs, so it must come first.
+-      theme->SetIsGrayscale(false);
+-      theme->SetUserColorAndBrowserColorVariant(
+-          kFallbackColor, ui::mojom::BrowserColorVariant::kTonalSpot);
+-      prefs->SetInteger(kLastAppliedPref, static_cast<int>(kFallbackColor));
++      theme->SetIsGrayscale(true);
++      prefs->SetInteger(kLastAppliedPref, 0);
+     }
+   }
+ 

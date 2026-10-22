@@ -1,0 +1,1 @@
+toggle_bar_browser: state with sidebar privacy toggle bar (patches 0001-0046). src/ holds the as-built copies of the files touched by 0044 and 0046. Restore: re-apply patches 0044 and 0046 or copy src/ over build/src.

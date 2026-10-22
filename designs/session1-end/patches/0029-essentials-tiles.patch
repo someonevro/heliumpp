@@ -1,0 +1,51 @@
+--- a/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc
++++ b/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc
+@@ -411,12 +411,14 @@
+ 
+     // When we are in collapsed state, only one child should be shown per row.
+     // During collapse animation and other cases, fit as many as possible.
++    // Essentials are tiles: at most four per row.
++    constexpr int kMaxTilesPerRow = 4;
+     children_on_row = std::max(
+         1,
+-        std::min(children_on_row,
+-                 static_cast<int>(std::floor((available_width - child_width) /
+-                                             (child_width + kTabPadding)) +
+-                                  1)));
++        std::min({children_on_row, kMaxTilesPerRow,
++                  static_cast<int>(std::floor((available_width - child_width) /
++                                              (child_width + kTabPadding)) +
++                                   1)}));
+ 
+     // Allocate extra space to the tabs.
+     available_width -=
+@@ -429,6 +431,10 @@
+     gfx::Rect bounds =
+         gfx::Rect(child->GetPreferredSize(views::SizeBounds(child_width, {})));
+     bounds.set_width(child_width);
++    if (!contains_split) {
++      // Square tiles.
++      bounds.set_height(child_width);
++    }
+ 
+     auto drag_data = GetVisualDataForDraggedView(*child);
+     const bool should_show_child = !(drag_data && drag_data->should_hide);
+--- a/chrome/browser/ui/views/tabs/common/vertical_tab_style_views.cc
++++ b/chrome/browser/ui/views/tabs/common/vertical_tab_style_views.cc
+@@ -179,6 +179,16 @@
+     flags.setColor(GetCurrentTabBackgroundColor(
+         TabStyle::TabSelectionState::kActive));
+     canvas->DrawRect(gfx::ScaleToEnclosingRect(pill, scale), flags);
++  } else if (delegate_->IsPinned() &&
++             selection_state == TabStyle::TabSelectionState::kInactive &&
++             !fill_id.has_value() && !hovered) {
++    // Essentials tiles carry a faint fill even when not selected.
++    cc::PaintFlags flags;
++    flags.setAntiAlias(true);
++    flags.setColor(SkColorSetA(SK_ColorWHITE, 0x14));
++    canvas->DrawRect(gfx::ScaleToEnclosingRect(
++                         delegate_->GetView()->GetLocalBounds(), scale),
++                     flags);
+   } else if (ShouldPaintTabBackgroundColor(selection_state,
+                                            fill_id.has_value(), hovered)) {
+     cc::PaintFlags flags;

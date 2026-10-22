@@ -1,0 +1,11 @@
+# big or third-party
+build/
+research/
+windows-compile/
+# secrets / binaries
+*.key
+*.pem
+*.AppImage
+*.pub.hex
+*.png
+__pycache__/

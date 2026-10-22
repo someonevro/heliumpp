@@ -1,0 +1,76 @@
+--- a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
++++ b/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
+@@ -9,6 +9,7 @@
+ #include <optional>
+ #include <utility>
+ 
++#include "base/command_line.h"
+ #include "base/check.h"
+ #include "base/functional/bind.h"
+ #include "base/i18n/rtl.h"
+@@ -70,6 +71,16 @@
+ // Minimum area next to caption buttons to use as a grab handle.
+ constexpr int kVerticalTabsGrabHandleSize = 40;
+ 
++// In the vertical tab layout, the toolbar (back/forward/reload, address bar,
++// ...) sits at the top of the sidebar column instead of spanning the window, so
++// the page uses the full height. --no-sidebar-toolbar restores the full-width
++// toolbar.
++bool IsSidebarToolbarEnabled() {
++  static const bool enabled =
++      !base::CommandLine::ForCurrentProcess()->HasSwitch("no-sidebar-toolbar");
++  return enabled;
++}
++
+ // Overlap the caption-button exclusion so the toolbar can sit flush
+ // against the frame controls when it is the top-most row.
+ constexpr int kTopToolbarExclusion = 10;
+@@ -1031,10 +1042,24 @@
+         layout.AddChild(views().top_container, gfx::Rect());
+ 
+     // Calculate the params for laying out the top container.
++    const bool sidebar_toolbar =
++        IsSidebarToolbarEnabled() &&
++        layout_data_->tab_strip_type == TabStripType::kVertical &&
++        !zen.floating_vertical_tab_strip;
++    BrowserLayoutParams sidebar_toolbar_params = top_container_parent_params;
++    if (sidebar_toolbar) {
++      // Keep only the sidebar-wide column on the side of the tab strip.
++      sidebar_toolbar_params.InsetHorizontal(
++          std::max(0, top_container_parent_params.visual_client_area.width() -
++                          vertical_tab_strip_bounds.width()),
++          /*leading=*/vertical_right_aligned);
++    }
+     const BrowserLayoutParams& parent_params =
+-        layout_data_->tab_strip_type == TabStripType::kVertical
+-            ? top_container_parent_params
+-            : params;
++        sidebar_toolbar
++            ? sidebar_toolbar_params
++            : layout_data_->tab_strip_type == TabStripType::kVertical
++                  ? top_container_parent_params
++                  : params;
+     auto top_container_params =
+         parent_params.InLocalCoordinates(parent_params.visual_client_area);
+ 
+@@ -1044,7 +1069,7 @@
+         top_container_local_bounds, parent_params);
+ 
+     if (layout_data_->tab_strip_type == TabStripType::kVertical &&
+-        !zen.floating_vertical_tab_strip) {
++        !zen.floating_vertical_tab_strip && !sidebar_toolbar) {
+       auto& top_container_children = top_container_layout.children;
+       auto bookmarks_child = top_container_children.find(views().bookmark_bar);
+       if (bookmarks_child != top_container_children.end() &&
+@@ -1088,7 +1113,10 @@
+       }
+     }
+ 
+-    params.SetTop(top_container_layout.bounds.bottom());
++    // With the sidebar toolbar the page keeps the full window height.
++    if (!sidebar_toolbar) {
++      params.SetTop(top_container_layout.bounds.bottom());
++    }
+ 
+     if (zen.enabled) {
+       AdjustTopContainerForZenMode(top_container_layout, params,

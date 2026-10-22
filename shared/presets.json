@@ -1,0 +1,247 @@
+{
+  "version": 2,
+  "recommended": "medium",
+  "settings": {
+    "malicious_domains": {
+      "values": [
+        false,
+        true
+      ],
+      "ordinal": false,
+      "enforcement": "blocker-config",
+      "floor": true,
+      "label": "Block known malicious sites",
+      "effects": {
+        "true": "Known malware and phishing domains are blocked using uBlock Origin's default lists. This build has no Chromium Safe Browsing, so it is weaker than Chrome's protection. Always on."
+      }
+    },
+    "third_party_cookies": {
+      "values": [
+        "allow",
+        "block_incognito",
+        "block"
+      ],
+      "ordinal": true,
+      "enforcement": "chromium-pref",
+      "label": "Third-party cookies",
+      "effects": {
+        "\"allow\"": "Allowed. Most compatible, but ad networks can follow you across sites.",
+        "\"block_incognito\"": "Blocked in private windows only. Normal windows still allow them.",
+        "\"block\"": "Blocked everywhere. Stops most cross-site tracking; a few embedded logins or payment widgets may break."
+      }
+    },
+    "session_only_cookies": {
+      "values": [
+        false,
+        true
+      ],
+      "ordinal": true,
+      "enforcement": "chromium-pref",
+      "label": "Keep cookies after closing",
+      "effects": {
+        "false": "Cookies are kept, so you stay logged in to sites between sessions.",
+        "true": "All cookies and site data are deleted when you close the browser. You log in again every time."
+      }
+    },
+    "storage_partitioning": {
+      "values": [
+        "default",
+        "strict"
+      ],
+      "ordinal": true,
+      "enforcement": "chromium-feature",
+      "label": "Third-party storage isolation",
+      "effects": {
+        "\"default\"": "Chromium's standard isolation of third-party storage.",
+        "\"strict\"": "Strictest third-party storage isolation Chromium offers. Exact extra effect over the default is not yet verified."
+      }
+    },
+    "referrer": {
+      "values": [
+        "default",
+        "trim_cross_origin",
+        "origin_only_cross_origin",
+        "none_cross_origin"
+      ],
+      "ordinal": true,
+      "enforcement": "chromium-patch",
+      "label": "Referrer (which page you came from)",
+      "effects": {
+        "\"default\"": "Sites see the page you came from, as normal.",
+        "\"trim_cross_origin\"": "Other sites only see your origin, not the full address. Needs restart.",
+        "\"origin_only_cross_origin\"": "Other sites only see the site name. Needs restart.",
+        "\"none_cross_origin\"": "Other sites get no referrer at all. Some sites that check it will break. Needs restart.",
+        "trim_cross_origin": "Chromium's standard: other sites only see your site name, not the full address of the page you came from.",
+        "none_cross_origin": "Other sites get no referrer at all. Some sites that check it (logins, downloads, embedded media) will break. Needs restart."
+      }
+    },
+    "fingerprinting": {
+      "values": [
+        "off",
+        "basic",
+        "strong"
+      ],
+      "ordinal": true,
+      "enforcement": "chromium-patch",
+      "label": "Fingerprinting protection",
+      "effects": {
+        "\"off\"": "No extra protection.",
+        "\"basic\"": "Adds tiny random noise to canvas and audio readouts so sites cannot build a stable fingerprint from them. Needs restart.",
+        "\"strong\"": "Basic protection plus noise on layout and text measurements and fewer browser details exposed. Some sites may look slightly off. Cannot make you anonymous. Needs restart.",
+        "strong": "Basic protection plus noise on layout and text measurements, fewer browser details exposed, and your computer reports a fixed small number of CPU cores. Some sites may look slightly off. Cannot make you anonymous. Needs restart."
+      }
+    },
+    "permissions": {
+      "values": [
+        "ask",
+        "ask_restricted",
+        "block"
+      ],
+      "ordinal": true,
+      "enforcement": "chromium-pref",
+      "label": "Site permissions (camera, location, ...)",
+      "effects": {
+        "\"ask\"": "Sites may ask for permissions as normal.",
+        "\"ask_restricted\"": "Sites must ask, and intrusive prompts like notifications are limited.",
+        "\"block\"": "Sensitive permissions are blocked by default. Allow them per site if needed."
+      }
+    },
+    "background_activity": {
+      "values": [
+        "normal",
+        "reduced",
+        "minimal"
+      ],
+      "ordinal": true,
+      "enforcement": "chromium-pref",
+      "label": "Background activity",
+      "effects": {
+        "\"normal\"": "Normal.",
+        "\"reduced\"": "Fewer background tasks while the browser is idle.",
+        "\"minimal\"": "Browser does not run in the background after you close it, and background tasks are cut to the minimum."
+      }
+    },
+    "prefetch_predictive": {
+      "values": [
+        true,
+        false
+      ],
+      "ordinal": true,
+      "enforcement": "chromium-pref",
+      "label": "Preloading pages",
+      "effects": {
+        "true": "Pages may be loaded before you click, which is faster but contacts sites you did not visit.",
+        "false": "Pages are not loaded until you open them."
+      }
+    },
+    "webrtc_ip": {
+      "values": [
+        "default",
+        "public_only",
+        "proxy_only"
+      ],
+      "ordinal": true,
+      "enforcement": "chromium-pref",
+      "label": "WebRTC IP leaks",
+      "effects": {
+        "\"default\"": "Normal WebRTC behavior; calls can reveal your local network addresses.",
+        "\"public_only\"": "WebRTC only uses your public connection, hiding local addresses. Video calls still work.",
+        "\"proxy_only\"": "WebRTC only works through a proxy. Calls may fail without one."
+      }
+    },
+    "https_mode": {
+      "values": [
+        "off",
+        "first",
+        "strict"
+      ],
+      "ordinal": true,
+      "enforcement": "chromium-pref",
+      "label": "HTTPS",
+      "effects": {
+        "\"off\"": "Plain HTTP is allowed without a warning.",
+        "\"first\"": "Tries HTTPS first and warns before falling back to HTTP.",
+        "\"strict\"": "Only HTTPS. Plain HTTP sites need a manual exception."
+      }
+    },
+    "optional_telemetry": {
+      "values": [
+        true,
+        false
+      ],
+      "ordinal": true,
+      "enforcement": "build-flag",
+      "label": "Optional telemetry",
+      "effects": {
+        "false": "Off. Optional usage and diagnostic reporting is disabled in every mode."
+      }
+    }
+  },
+  "presets": {
+    "usability": {
+      "malicious_domains": true,
+      "third_party_cookies": "block_incognito",
+      "session_only_cookies": false,
+      "storage_partitioning": "default",
+      "referrer": "trim_cross_origin",
+      "fingerprinting": "basic",
+      "permissions": "ask",
+      "background_activity": "reduced",
+      "prefetch_predictive": false,
+      "webrtc_ip": "default",
+      "https_mode": "first",
+      "optional_telemetry": false
+    },
+    "medium": {
+      "malicious_domains": true,
+      "third_party_cookies": "block",
+      "session_only_cookies": false,
+      "storage_partitioning": "strict",
+      "referrer": "trim_cross_origin",
+      "fingerprinting": "basic",
+      "permissions": "ask_restricted",
+      "background_activity": "reduced",
+      "prefetch_predictive": false,
+      "webrtc_ip": "public_only",
+      "https_mode": "first",
+      "optional_telemetry": false
+    },
+    "maximum": {
+      "malicious_domains": true,
+      "third_party_cookies": "block",
+      "session_only_cookies": true,
+      "storage_partitioning": "strict",
+      "referrer": "none_cross_origin",
+      "fingerprinting": "strong",
+      "permissions": "block",
+      "background_activity": "minimal",
+      "prefetch_predictive": false,
+      "webrtc_ip": "proxy_only",
+      "https_mode": "strict",
+      "optional_telemetry": false
+    }
+  },
+  "order": [
+    "usability",
+    "medium",
+    "maximum"
+  ],
+  "meta": {
+    "usability": {
+      "name": "Prioritize usability",
+      "tagline": "Ad blocking with the fewest broken sites.",
+      "tradeoff": "Least protection against cross-site tracking and fingerprinting."
+    },
+    "medium": {
+      "name": "Medium privacy",
+      "tagline": "Recommended. Strong privacy that rarely breaks sites.",
+      "tradeoff": "A few embedded widgets may need an exception."
+    },
+    "maximum": {
+      "name": "Maximum privacy",
+      "tagline": "Strictest settings this browser can enforce.",
+      "tradeoff": "Cookies are deleted on close, so you log in each time; some sites will break."
+    }
+  },
+  "note": "All modes include uBlock Origin with its default settings. Not a promise of anonymity."
+}

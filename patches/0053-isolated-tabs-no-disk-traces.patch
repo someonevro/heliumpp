@@ -1,0 +1,151 @@
+--- a/chrome/browser/helium_privacy_mode/helium_privacy_mode.h
++++ b/chrome/browser/helium_privacy_mode/helium_privacy_mode.h
+@@ -7,6 +7,9 @@
+ #include <string>
+ 
+ class Profile;
++namespace content {
++class WebContents;
++}
+ 
+ namespace user_prefs {
+ class PrefRegistrySyncable;
+@@ -36,6 +39,10 @@
+ // Performance mode: memory saver (aggressive), energy saver always on, and the
+ // previous values are remembered so turning it off restores them.
+ bool IsPerformanceMode(Profile* profile);
++
++// True for a tab that has its own private (isolated) storage area. Such tabs
++// must not be written to history, session files or other disk databases.
++bool IsIsolatedWebContents(content::WebContents* contents);
+ void SetPerformanceMode(Profile* profile, bool enabled);
+ 
+ bool SetMode(Profile* profile,
+--- a/chrome/browser/helium_privacy_mode/helium_privacy_mode.cc
++++ b/chrome/browser/helium_privacy_mode/helium_privacy_mode.cc
+@@ -13,6 +13,11 @@
+ #include "chrome/browser/preloading/preloading_prefs.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/common/pref_names.h"
++#include "content/public/browser/browser_context.h"
++#include "content/public/browser/site_instance.h"
++#include "content/public/browser/storage_partition.h"
++#include "content/public/browser/storage_partition_config.h"
++#include "content/public/browser/web_contents.h"
+ #include "components/content_settings/core/browser/cookie_settings.h"
+ #include "components/content_settings/core/browser/host_content_settings_map.h"
+ #include "components/content_settings/core/common/content_settings.h"
+@@ -82,6 +87,17 @@
+   registry->RegisterDictionaryPref(kPerfSavedPref);
+ }
+ 
++bool IsIsolatedWebContents(content::WebContents* contents) {
++  if (!contents) {
++    return false;
++  }
++  content::SiteInstance* site_instance = contents->GetSiteInstance();
++  return site_instance && contents->GetBrowserContext()
++                                  ->GetStoragePartition(site_instance)
++                                  ->GetConfig()
++                                  .partition_domain() == "heliumisolated";
++}
++
+ bool IsPerformanceMode(Profile* profile) {
+   return profile->GetPrefs()->GetBoolean(kPerfPref);
+ }
+--- a/chrome/browser/history/history_tab_helper.cc
++++ b/chrome/browser/history/history_tab_helper.cc
+@@ -2,6 +2,7 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include "chrome/browser/helium_privacy_mode/helium_privacy_mode.h"
+ #include "chrome/browser/history/history_tab_helper.h"
+ 
+ #include <optional>
+@@ -648,6 +649,10 @@
+   if (profile->IsOffTheRecord()) {
+     return nullptr;
+   }
++  // Isolated tabs leave nothing behind: no history, titles or visit times.
++  if (helium_privacy_mode::IsIsolatedWebContents(web_contents())) {
++    return nullptr;
++  }
+ 
+   return HistoryServiceFactory::GetForProfile(
+       profile, ServiceAccessType::IMPLICIT_ACCESS);
+--- a/chrome/browser/sessions/session_service_base.cc
++++ b/chrome/browser/sessions/session_service_base.cc
+@@ -2,6 +2,7 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include "chrome/browser/helium_privacy_mode/helium_privacy_mode.h"
+ #include "chrome/browser/sessions/session_service_base.h"
+ 
+ #include <stddef.h>
+@@ -273,6 +274,10 @@
+ }
+ 
+ void SessionServiceBase::TabInserted(WebContents* contents) {
++  // Isolated tabs are never saved for session restore.
++  if (helium_privacy_mode::IsIsolatedWebContents(contents)) {
++    return;
++  }
+   sessions::SessionTabHelper* session_tab_helper =
+       sessions::SessionTabHelper::FromWebContents(contents);
+   if (!ShouldTrackChangesToWindow(session_tab_helper->window_id())) {
+@@ -609,6 +614,9 @@
+     IdToRange* tab_to_available_range) {
+   DCHECK(tab);
+   DCHECK(window_id.is_valid());
++  if (helium_privacy_mode::IsIsolatedWebContents(tab)) {
++    return;
++  }
+ 
+   sessions::SessionTabHelper* session_tab_helper =
+       sessions::SessionTabHelper::FromWebContents(tab);
+--- a/components/sessions/content/session_tab_helper.cc
++++ b/components/sessions/content/session_tab_helper.cc
+@@ -9,6 +9,10 @@
+ #include "components/sessions/content/session_tab_helper_delegate.h"
+ #include "components/sessions/core/serialized_navigation_entry.h"
+ #include "components/sessions/core/serialized_user_agent_override.h"
++#include "content/public/browser/storage_partition_config.h"
++#include "content/public/browser/storage_partition.h"
++#include "content/public/browser/site_instance.h"
++#include "content/public/browser/browser_context.h"
+ #include "content/public/browser/navigation_controller.h"
+ #include "content/public/browser/navigation_details.h"
+ #include "content/public/browser/web_contents.h"
+@@ -113,6 +117,15 @@
+ }
+ 
+ SessionTabHelperDelegate* SessionTabHelper::GetDelegate() {
++  // Helium: tabs with a private (isolated) storage area are never recorded.
++  content::SiteInstance* site_instance = web_contents()->GetSiteInstance();
++  if (site_instance && web_contents()
++                               ->GetBrowserContext()
++                               ->GetStoragePartition(site_instance)
++                               ->GetConfig()
++                               .partition_domain() == "heliumisolated") {
++    return nullptr;
++  }
+   return delegate_lookup_ ? delegate_lookup_.Run(web_contents()) : nullptr;
+ }
+ 
+--- a/components/segmentation_platform/public/features.cc
++++ b/components/segmentation_platform/public/features.cc
+@@ -11,9 +11,11 @@
+ 
+ namespace segmentation_platform::features {
+ 
++// Helium: off. The segmentation platform keeps a local database of visited
++// URLs (ukm_db) for on-device ML that this browser does not use.
+ BASE_FEATURE(kSegmentationPlatformFeature,
+              "SegmentationPlatform",
+-             base::FEATURE_ENABLED_BY_DEFAULT);
++             base::FEATURE_DISABLED_BY_DEFAULT);
+ 
+ BASE_FEATURE(kSegmentationPlatformUkmEngine,
+ 

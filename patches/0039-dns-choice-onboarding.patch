@@ -1,0 +1,430 @@
+--- a/chrome/browser/ui/webui/onboarding/onboarding_handler.cc
++++ b/chrome/browser/ui/webui/onboarding/onboarding_handler.cc
+@@ -11,7 +11,11 @@
+ #include "base/strings/utf_string_conversions.h"
+ #include "base/values.h"
+ #include "build/build_config.h"
++#include "base/strings/string_util.h"
+ #include "chrome/browser/browser_process.h"
++#include "net/base/ip_address.h"
++#include "url/gurl.h"
++#include "url/url_constants.h"
+ #include "chrome/browser/extensions/webstore_install_with_prompt.h"
+ #include "chrome/browser/helium_privacy_mode/helium_privacy_mode.h"
+ #include "chrome/browser/ui/helium/helium_layout_state_controller.h"
+@@ -120,6 +124,14 @@
+       base::BindRepeating(&OnboardingMessageHandler::HandleSetPrivacyMode,
+                           base::Unretained(this)));
+   web_ui()->RegisterMessageCallback(
++      "getDns",
++      base::BindRepeating(&OnboardingMessageHandler::HandleGetDns,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "setDns",
++      base::BindRepeating(&OnboardingMessageHandler::HandleSetDns,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
+       "acceptLatestSchema",
+       base::BindRepeating(&OnboardingMessageHandler::HandleAcceptSchema,
+                           base::Unretained(this)));
+@@ -333,6 +345,98 @@
+   ResolveJavascriptCallback(callback_id, base::Value(restart_required));
+ }
+ 
++namespace {
++
++constexpr char kCloudflareDnsTemplate[] = "https://1.1.1.1/dns-query";
++constexpr char kGoogleDnsTemplate[] = "https://8.8.8.8/dns-query";
++
++// Turns what the user typed into an encrypted-DNS (DoH) URL template, or ""
++// when it is not usable. A bare IP address becomes https://<ip>/dns-query.
++std::string NormalizeCustomDns(const std::string& input) {
++  std::string text(base::TrimWhitespaceASCII(input, base::TRIM_ALL));
++  if (text.empty() || text.size() > 512 ||
++      text.find_first_of(" \t\r\n") != std::string::npos) {
++    return std::string();
++  }
++  net::IPAddress ip;
++  if (ip.AssignFromIPLiteral(text)) {
++    return "https://" + (ip.IsIPv6() ? "[" + text + "]" : text) + "/dns-query";
++  }
++  GURL url(text);
++  if (!url.is_valid() || !url.SchemeIs(url::kHttpsScheme) ||
++      url.host().empty() || url.has_username() || url.has_password()) {
++    return std::string();
++  }
++  return text;
++}
++
++}  // namespace
++
++// Encrypted DNS is configured with the same local-state prefs as Settings >
++// Security > "Use secure DNS", so both places always agree.
++void OnboardingMessageHandler::HandleGetDns(const base::ListValue& args) {
++  if (args.size() != 1 || !args[0].is_string()) {
++    return;
++  }
++  AllowJavascript();
++
++  PrefService* local_state = g_browser_process->local_state();
++  const std::string mode = local_state->GetString(prefs::kDnsOverHttpsMode);
++  const std::string templates =
++      local_state->GetString(prefs::kDnsOverHttpsTemplates);
++
++  std::string choice = "system";
++  std::string custom;
++  if (mode == "secure") {
++    if (templates == kCloudflareDnsTemplate) {
++      choice = "cloudflare";
++    } else if (templates == kGoogleDnsTemplate) {
++      choice = "google";
++    } else {
++      choice = "custom";
++      custom = templates;
++    }
++  }
++  base::DictValue result;
++  result.Set("choice", choice);
++  result.Set("custom", custom);
++  ResolveJavascriptCallback(args[0].GetString(), result);
++}
++
++void OnboardingMessageHandler::HandleSetDns(const base::ListValue& args) {
++  if (args.size() != 3 || !args[0].is_string()) {
++    return;
++  }
++  AllowJavascript();
++  const auto& callback_id = args[0].GetString();
++  if (!args[1].is_string() || !args[2].is_string()) {
++    return RejectJavascriptCallback(callback_id, "bad arguments");
++  }
++
++  const std::string& choice = args[1].GetString();
++  std::string mode = "secure";
++  std::string templates;
++  if (choice == "cloudflare") {
++    templates = kCloudflareDnsTemplate;
++  } else if (choice == "google") {
++    templates = kGoogleDnsTemplate;
++  } else if (choice == "system") {
++    mode = "off";
++  } else if (choice == "custom") {
++    templates = NormalizeCustomDns(args[2].GetString());
++    if (templates.empty()) {
++      return RejectJavascriptCallback(callback_id, "invalid DNS address");
++    }
++  } else {
++    return RejectJavascriptCallback(callback_id, "unknown DNS choice");
++  }
++
++  PrefService* local_state = g_browser_process->local_state();
++  local_state->SetString(prefs::kDnsOverHttpsTemplates, templates);
++  local_state->SetString(prefs::kDnsOverHttpsMode, mode);
++  ResolveJavascriptCallback(callback_id, base::Value(templates));
++}
++
+ void OnboardingMessageHandler::HandleSetPreference(
+     const base::ListValue& args) {
+   if (args.size() == 0) {
+--- a/chrome/browser/ui/webui/onboarding/onboarding_handler.h
++++ b/chrome/browser/ui/webui/onboarding/onboarding_handler.h
+@@ -40,6 +40,8 @@
+   void HandleAcceptSchema(const base::ListValue& args);
+   void HandleSetPreference(const base::ListValue& args);
+   void HandleSetPrivacyMode(const base::ListValue& args);
++  void HandleGetDns(const base::ListValue& args);
++  void HandleSetDns(const base::ListValue& args);
+   void HandleGetPrivacyMode(const base::ListValue& args);
+   void HandleSetTabLayout(const base::ListValue& args);
+   void HandleGetProfileName(const base::ListValue& args);
+--- a/components/helium_onboarding/src/lib/onboarding-flow.ts
++++ b/components/helium_onboarding/src/lib/onboarding-flow.ts
+@@ -11,6 +11,7 @@
+ export const flow = [
+     "Welcome",
+     "PrivacyMode",
++    "Dns",
+     "TabLayout",
+     "HeliumServices",
+     "SearchEngine",
+@@ -79,6 +80,9 @@
+ 
+ export const selectedPrivacyMode = writable("medium");
+ export const selectedTabLayout = writable("vertical");
++// Encrypted DNS provider: 1.1.1.1 is the recommended default.
++export const selectedDns = writable("cloudflare");
++export const customDns = writable("");
+ export const selectedCompactMode = writable(false);
+ export const privacyModeNeedsRestart = writable(false);
+ 
+--- a/components/helium_onboarding/src/pages/index.ts
++++ b/components/helium_onboarding/src/pages/index.ts
+@@ -1,5 +1,6 @@
+ export { default as Welcome } from "./Welcome.svelte";
+ export { default as PrivacyMode } from "./PrivacyMode.svelte";
++export { default as Dns } from "./Dns.svelte";
+ export { default as TabLayout } from "./TabLayout.svelte";
+ export { default as HeliumServices } from "./HeliumServices.svelte";
+ export { default as SearchEngine } from "./SearchEngine.svelte";
+--- a/components/helium_onboarding/src/components/PageNavigation.svelte
++++ b/components/helium_onboarding/src/components/PageNavigation.svelte
+@@ -10,6 +10,8 @@
+     import {
+         acceptLatestSchema,
+         setPrivacyMode,
++        setDns,
++        isValidCustomDns,
+         setTabLayout,
+         askToBeDefault,
+         importableProfiles,
+@@ -25,6 +27,8 @@
+         selectedProfiles,
+         previouslyImportedProfiles,
+         selectedPrivacyMode,
++        selectedDns,
++        customDns,
+         privacyModeNeedsRestart,
+         selectedTabLayout,
+         selectedCompactMode,
+@@ -41,7 +45,9 @@
+     // browser. Refreshing may (re)move the previously targeted profiles. The
+     // user has to be aware of both.
+     const nextDisabled = $derived(
+-        working || ($currentPage === "DataImport" && $importDiscovery.refreshing)
++        working ||
++        ($currentPage === "DataImport" && $importDiscovery.refreshing) ||
++        ($currentPage === "Dns" && $selectedDns === "custom" && !isValidCustomDns($customDns))
+     );
+ 
+     const doNext = async () => {
+@@ -50,6 +56,10 @@
+             $privacyModeNeedsRestart = await setPrivacyMode($selectedPrivacyMode);
+             break;
+ 
++        case "Dns":
++            await setDns($selectedDns, $customDns);
++            break;
++
+         case "TabLayout":
+             await setTabLayout($selectedTabLayout, $selectedCompactMode);
+             break;
+--- a/components/helium_onboarding/src/lib/browser/prefs.ts
++++ b/components/helium_onboarding/src/lib/browser/prefs.ts
+@@ -52,6 +52,32 @@
+     return await cr.sendWithPromise<boolean>('setPrivacyMode', mode);
+ }
+ 
++// choice: "cloudflare" | "google" | "system" | "custom". For "custom", |custom|
++// is an https:// DNS address or a bare IP. Rejects when the address is invalid.
++export type DnsState = { choice: string, custom: string };
++
++export const getDns = async (): Promise<DnsState> => {
++    return await cr.sendWithPromise<DnsState>('getDns');
++}
++
++export const setDns = async (choice: string, custom: string): Promise<void> => {
++    await cr.sendWithPromise('setDns', choice, custom);
++}
++
++// Mirrors the browser-side check so "Next" can stay disabled for a bad address.
++export const isValidCustomDns = (input: string): boolean => {
++    const text = input.trim();
++    if (!text || text.length > 512 || /\s/.test(text)) return false;
++    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(text)) return true;
++    if (/^[0-9a-f:]+$/i.test(text) && text.includes(":")) return true;
++    try {
++        const url = new URL(text);
++        return url.protocol === "https:" && !!url.hostname && !url.username && !url.password;
++    } catch {
++        return false;
++    }
++}
++
+ export const acceptLatestSchema = () => {
+     chrome.send("acceptLatestSchema");
+ }
+--- a/components/helium_onboarding/src/pages/Dns.svelte
++++ b/components/helium_onboarding/src/pages/Dns.svelte
+@@ -0,0 +1,182 @@
++<script lang="ts">
++    import { onMount } from "svelte";
++    import { HeliumLogo } from "@imput/helium-prism";
++    import { currentPage, selectedDns, customDns } from "../lib/onboarding-flow";
++    import { getDns, isValidCustomDns } from "../lib/browser";
++
++    import PageHeader from "../components/PageHeader.svelte";
++
++    type Option = { id: string; name: string; detail: string; badge?: string };
++
++    const options: Option[] = [
++        { id: "cloudflare", name: "Cloudflare (1.1.1.1)", detail: "Fast and widely used. Encrypted.", badge: "Recommended" },
++        { id: "google", name: "Google (8.8.8.8)", detail: "Fast and reliable. Encrypted." },
++        { id: "system", name: "Use my computer's DNS", detail: "Whatever your system or network already uses. Usually not encrypted." },
++        { id: "custom", name: "Use a different DNS", detail: "Type an encrypted DNS address (https://\u2026/dns-query) or an IP address." },
++    ];
++
++    const visible = $derived($currentPage === "Dns");
++    const customInvalid = $derived($selectedDns === "custom" && $customDns !== "" && !isValidCustomDns($customDns));
++
++    onMount(async () => {
++        try {
++            const current = await getDns();
++            selectedDns.set(current.choice);
++            customDns.set(current.custom);
++        } catch {
++            // keep the recommended default
++        }
++    });
++</script>
++
++<div id="dns-page" class="onboarding-page" class:visible>
++    <div class="scrollable-page">
++        <PageHeader
++            title="Choose your DNS"
++            subtitle="DNS turns site names into addresses. You can change this later in Settings, Security, Use secure DNS."
++            Icon={HeliumLogo}
++            iconHeight="32px"
++        />
++        <div class="page-content">
++            <div class="option-list" role="radiogroup" aria-label="DNS provider">
++                {#each options as option (option.id)}
++                    <button
++                        type="button"
++                        role="radio"
++                        aria-checked={$selectedDns === option.id}
++                        class="option-card"
++                        class:selected={$selectedDns === option.id}
++                        onclick={() => selectedDns.set(option.id)}
++                    >
++                        <span class="option-name">
++                            {option.name}
++                            {#if option.badge}<span class="badge">{option.badge}</span>{/if}
++                        </span>
++                        <span class="option-detail">{option.detail}</span>
++                    </button>
++                {/each}
++            </div>
++
++            {#if $selectedDns === "custom"}
++                <input
++                    class="custom-input"
++                    type="text"
++                    spellcheck="false"
++                    autocomplete="off"
++                    placeholder="https://dns.example/dns-query"
++                    aria-invalid={customInvalid}
++                    bind:value={$customDns}
++                />
++                {#if customInvalid}
++                    <p class="error" role="alert">Enter an https:// address or an IP address.</p>
++                {/if}
++            {/if}
++
++            <p class="note" aria-live="polite">
++                {#if $selectedDns === "system"}
++                    Your network or internet provider can see which sites you look up.
++                {:else}
++                    The DNS provider you pick can see which site names you look up, but not what you do on the sites. Your internet provider can no longer read them. If the provider is unreachable, sites will not load until you change this.
++                {/if}
++            </p>
++        </div>
++    </div>
++</div>
++
++<style>
++    #dns-page {
++        --page-in-delay: 0.1s;
++    }
++
++    .option-list {
++        display: flex;
++        flex-direction: column;
++        gap: 10px;
++        width: 100%;
++    }
++
++    .option-card {
++        display: flex;
++        flex-direction: column;
++        gap: 4px;
++        width: 100%;
++        padding: 14px 16px;
++        text-align: start;
++        color: inherit;
++        font: inherit;
++        cursor: pointer;
++        background: var(--helium-elevated-5);
++        border: 2px solid var(--helium-elevated-10);
++        border-radius: 16px;
++        transition: border-color 0.15s, background 0.15s;
++    }
++
++    .option-card:hover {
++        background: var(--helium-elevated-7);
++    }
++
++    .option-card:focus-visible {
++        outline: 2px solid var(--helium-blue);
++        outline-offset: 2px;
++    }
++
++    .option-card.selected {
++        border-color: var(--helium-blue);
++        background: var(--helium-elevated-10);
++    }
++
++    .option-name {
++        font-weight: 600;
++        font-size: 1.05em;
++        display: flex;
++        align-items: center;
++        gap: 8px;
++    }
++
++    .badge {
++        font-size: 0.75em;
++        font-weight: 600;
++        padding: 2px 8px;
++        border-radius: 999px;
++        background: var(--helium-blue);
++        color: white;
++    }
++
++    .option-detail {
++        opacity: 0.7;
++        font-size: 0.92em;
++    }
++
++    .custom-input {
++        width: 100%;
++        box-sizing: border-box;
++        margin-top: 10px;
++        padding: 12px 14px;
++        font: inherit;
++        color: inherit;
++        background: var(--helium-elevated-5);
++        border: 2px solid var(--helium-elevated-10);
++        border-radius: 12px;
++    }
++
++    .custom-input:focus-visible {
++        outline: 2px solid var(--helium-blue);
++        outline-offset: 2px;
++    }
++
++    .custom-input[aria-invalid="true"] {
++        border-color: #d9534f;
++    }
++
++    .error {
++        margin: 6px 0 0;
++        font-size: 0.85em;
++        color: #d9534f;
++    }
++
++    .note {
++        margin: 12px 0 0;
++        font-size: 0.85em;
++        opacity: 0.65;
++    }
++</style>

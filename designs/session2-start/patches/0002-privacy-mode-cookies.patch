@@ -1,0 +1,106 @@
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -864,6 +864,8 @@
+     "global_features.cc",
+     "helium_noise/helium_noise_settings.cc",
+     "helium_noise/helium_noise_settings.h",
++    "helium_privacy_mode/helium_privacy_mode.cc",
++    "helium_privacy_mode/helium_privacy_mode.h",
+     "icon_manager.cc",
+     "intranet_redirect_detector.cc",
+     "memory_details.cc",
+--- a/chrome/browser/profiles/profile_impl.cc
++++ b/chrome/browser/profiles/profile_impl.cc
+@@ -86,6 +86,7 @@
+ #include "chrome/browser/profiles/profile_attributes_storage.h"
+ #include "chrome/browser/profiles/profile_avatar_icon_util.h"
+ #include "chrome/browser/profiles/profile_destroyer.h"
++#include "chrome/browser/helium_privacy_mode/helium_privacy_mode.h"
+ #include "chrome/browser/profiles/profile_key.h"
+ #include "chrome/browser/profiles/profile_manager.h"
+ #include "chrome/browser/profiles/profile_metrics.h"
+@@ -1205,6 +1206,8 @@
+   BrowserContextDependencyManager::GetInstance()->CreateBrowserContextServices(
+       this);
+ 
++  helium_privacy_mode::ApplyFromCommandLine(this);
++
+   FullBrowserTransitionManager::Get()->OnProfileCreated(this);
+ 
+   ChromeVersionService::OnProfileLoaded(prefs_.get(), IsNewProfile());
+--- /dev/null
++++ b/chrome/browser/helium_privacy_mode/helium_privacy_mode.h
+@@ -0,0 +1,18 @@
++// Privacy modes (usability / medium / maximum). Source of truth for the
++// values: shared/presets.json in the project repository.
++
++#ifndef CHROME_BROWSER_HELIUM_PRIVACY_MODE_HELIUM_PRIVACY_MODE_H_
++#define CHROME_BROWSER_HELIUM_PRIVACY_MODE_HELIUM_PRIVACY_MODE_H_
++
++class Profile;
++
++namespace helium_privacy_mode {
++
++// Applies the cookie settings of the mode named by --privacy-mode=<mode>
++// ("usability", "medium" or "maximum") to |profile|. Does nothing when the
++// switch is absent; logs and ignores unknown values.
++void ApplyFromCommandLine(Profile* profile);
++
++}  // namespace helium_privacy_mode
++
++#endif  // CHROME_BROWSER_HELIUM_PRIVACY_MODE_HELIUM_PRIVACY_MODE_H_
+--- /dev/null
++++ b/chrome/browser/helium_privacy_mode/helium_privacy_mode.cc
+@@ -0,0 +1,52 @@
++#include "chrome/browser/helium_privacy_mode/helium_privacy_mode.h"
++
++#include <string>
++
++#include "base/command_line.h"
++#include "base/logging.h"
++#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
++#include "chrome/browser/profiles/profile.h"
++#include "components/content_settings/core/browser/cookie_settings.h"
++#include "components/content_settings/core/browser/host_content_settings_map.h"
++#include "components/content_settings/core/common/content_settings.h"
++#include "components/content_settings/core/common/content_settings_types.h"
++#include "components/content_settings/core/common/pref_names.h"
++#include "components/prefs/pref_service.h"
++
++namespace helium_privacy_mode {
++
++namespace {
++constexpr char kSwitch[] = "privacy-mode";
++}  // namespace
++
++void ApplyFromCommandLine(Profile* profile) {
++  const base::CommandLine* cl = base::CommandLine::ForCurrentProcess();
++  if (!cl->HasSwitch(kSwitch)) {
++    return;
++  }
++  const std::string mode = cl->GetSwitchValueASCII(kSwitch);
++
++  content_settings::CookieControlsMode third_party;
++  ContentSetting cookies;
++  if (mode == "usability") {
++    third_party = content_settings::CookieControlsMode::kIncognitoOnly;
++    cookies = CONTENT_SETTING_ALLOW;
++  } else if (mode == "medium") {
++    third_party = content_settings::CookieControlsMode::kBlockThirdParty;
++    cookies = CONTENT_SETTING_ALLOW;
++  } else if (mode == "maximum") {
++    third_party = content_settings::CookieControlsMode::kBlockThirdParty;
++    cookies = CONTENT_SETTING_SESSION_ONLY;  // deleted when the browser closes
++  } else {
++    LOG(WARNING) << "Ignoring unknown --" << kSwitch << "=" << mode;
++    return;
++  }
++
++  profile->GetPrefs()->SetInteger(prefs::kCookieControlsMode,
++                                  static_cast<int>(third_party));
++  HostContentSettingsMapFactory::GetForProfile(profile)
++      ->SetDefaultContentSetting(ContentSettingsType::COOKIES, cookies);
++  LOG(INFO) << "Applied privacy mode: " << mode;
++}
++
++}  // namespace helium_privacy_mode

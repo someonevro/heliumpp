@@ -1,0 +1,254 @@
+--- a/chrome/browser/helium_privacy_mode/helium_privacy_mode.h
++++ b/chrome/browser/helium_privacy_mode/helium_privacy_mode.h
+@@ -22,12 +22,17 @@
+ // WebRTC IP handling, HTTPS mode, permission defaults, preloading and
+ // background mode. Unknown modes are logged and ignored. Applied on every
+ // profile start, so manual changes to these settings are reset at restart.
+-// Referrer and fingerprinting (feature flags) are not handled yet.
++// Fingerprinting and referrer are feature flags in Local State (browser-wide,
++// the last mode applied wins) and need a restart.
+ void Apply(Profile* profile);
+ 
+ // Stores |mode| ("usability", "medium" or "maximum") in helium.privacy_mode and
+ // enforces it now. Returns false and changes nothing for an unknown mode.
+-bool SetMode(Profile* profile, const std::string& mode);
++// |restart_required| (optional) is set when fingerprinting/referrer feature
++// flags changed; those are browser-wide (Local State) and read at startup.
++bool SetMode(Profile* profile,
++             const std::string& mode,
++             bool* restart_required = nullptr);
+ 
+ }  // namespace helium_privacy_mode
+ 
+--- a/chrome/browser/helium_privacy_mode/helium_privacy_mode.cc
++++ b/chrome/browser/helium_privacy_mode/helium_privacy_mode.cc
+@@ -1,9 +1,13 @@
+ #include "chrome/browser/helium_privacy_mode/helium_privacy_mode.h"
+ 
++#include <algorithm>
++#include <set>
+ #include <string>
+ 
+ #include "base/command_line.h"
+ #include "base/logging.h"
++#include "base/strings/string_util.h"
++#include "chrome/browser/browser_process.h"
+ #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+ #include "chrome/browser/prefetch/pref_names.h"
+ #include "chrome/browser/preloading/preloading_prefs.h"
+@@ -16,6 +20,7 @@
+ #include "components/content_settings/core/common/pref_names.h"
+ #include "components/pref_registry/pref_registry_syncable.h"
+ #include "components/prefs/pref_service.h"
++#include "components/webui/flags/pref_service_flags_storage.h"
+ 
+ namespace helium_privacy_mode {
+ 
+@@ -33,22 +38,24 @@
+   bool https_first;
+   bool https_only;
+   Permissions permissions;
++  bool strong_fingerprinting;
++  bool no_cross_origin_referrer;
+ };
+ 
+ bool GetMode(const std::string& name, Mode* mode) {
+   using content_settings::CookieControlsMode;
+   if (name == "usability") {
+     *mode = {CookieControlsMode::kIncognitoOnly, CONTENT_SETTING_ALLOW,
+-             "default", true, false, Permissions::kAsk};
++             "default", true, false, Permissions::kAsk, false, false};
+   } else if (name == "medium") {
+     *mode = {CookieControlsMode::kBlockThirdParty, CONTENT_SETTING_ALLOW,
+              "default_public_interface_only", true, false,
+-             Permissions::kAskRestricted};
++             Permissions::kAskRestricted, false, false};
+   } else if (name == "maximum") {
+     // SESSION_ONLY: cookies and site data are deleted when the browser closes.
+     *mode = {CookieControlsMode::kBlockThirdParty,
+              CONTENT_SETTING_SESSION_ONLY, "disable_non_proxied_udp", false,
+-             true, Permissions::kBlock};
++             true, Permissions::kBlock, true, true};
+   } else {
+     return false;
+   }
+@@ -63,12 +70,57 @@
+ 
+ namespace {
+ 
+-void ApplyStored(Profile* profile) {
++// Flags owned by the privacy modes. "Basic" fingerprinting (Helium noise for
++// canvas, audio and CPU cores) is already on by default, and Chromium's default
++// referrer policy already sends only the origin cross-site, so neither needs a
++// flag; only the stricter levels do.
++constexpr const char* kManagedFlags[] = {
++    "fingerprinting-client-rects-noise",
++    "fingerprinting-canvas-measuretext-noise",
++    "remove-client-hints",
++    "reduced-system-info",
++    "remove-cross-origin-referrers",
++};
++
++std::string FlagBaseName(const std::string& entry) {
++  return entry.substr(0, entry.find('@'));
++}
++
++// Rewrites the managed flags in Local State, leaving the user's other flags
++// alone. Returns true if the stored set changed (a restart is needed).
++bool ApplyFlags(const Mode& mode) {
++  flags_ui::PrefServiceFlagsStorage storage(g_browser_process->local_state());
++  const std::set<std::string> before = storage.GetFlags();
++  std::set<std::string> flags;
++  for (const std::string& entry : before) {
++    if (std::ranges::find(kManagedFlags, FlagBaseName(entry)) ==
++        std::end(kManagedFlags)) {
++      flags.insert(entry);
++    }
++  }
++  if (mode.strong_fingerprinting) {
++    flags.insert("fingerprinting-client-rects-noise");
++    flags.insert("fingerprinting-canvas-measuretext-noise");
++    flags.insert("remove-client-hints@1");
++    flags.insert("reduced-system-info@1");
++  }
++  if (mode.no_cross_origin_referrer) {
++    flags.insert("remove-cross-origin-referrers@1");
++  }
++  if (flags == before) {
++    return false;
++  }
++  storage.SetFlags(flags);
++  return true;
++}
++
++// Returns true if a restart is needed for the flags to take effect.
++bool ApplyStored(Profile* profile) {
+   PrefService* prefs = profile->GetPrefs();
+   const std::string name = prefs->GetString(kModePref);
+   Mode mode;
+   if (name.empty() || !GetMode(name, &mode)) {
+-    return;
++    return false;
+   }
+ 
+   prefs->SetInteger(prefs::kCookieControlsMode,
+@@ -95,18 +147,26 @@
+         ContentSettingsType::MEDIASTREAM_CAMERA}) {
+     map->SetDefaultContentSetting(type, sensitive);
+   }
+-  LOG(INFO) << "Applied privacy mode: " << name;
++  const bool restart = ApplyFlags(mode);
++  LOG(INFO) << "Applied privacy mode: " << name
++            << (restart ? " (restart required for flags)" : "");
++  return restart;
+ }
+ 
+ }  // namespace
+ 
+-bool SetMode(Profile* profile, const std::string& mode) {
++bool SetMode(Profile* profile,
++             const std::string& mode,
++             bool* restart_required) {
+   Mode unused;
+   if (!GetMode(mode, &unused)) {
+     return false;
+   }
+   profile->GetPrefs()->SetString(kModePref, mode);
+-  ApplyStored(profile);
++  const bool restart = ApplyStored(profile);
++  if (restart_required) {
++    *restart_required = restart;
++  }
+   return true;
+ }
+ 
+--- a/chrome/browser/ui/webui/onboarding/onboarding_handler.cc
++++ b/chrome/browser/ui/webui/onboarding/onboarding_handler.cc
+@@ -270,12 +270,14 @@
+   AllowJavascript();
+ 
+   const auto& callback_id = args[0].GetString();
++  bool restart_required = false;
+   if (!args[1].is_string() ||
+-      !helium_privacy_mode::SetMode(profile_, args[1].GetString())) {
++      !helium_privacy_mode::SetMode(profile_, args[1].GetString(),
++                                    &restart_required)) {
+     return RejectJavascriptCallback(callback_id, "unknown privacy mode");
+   }
+ 
+-  ResolveJavascriptCallback(callback_id, {});
++  ResolveJavascriptCallback(callback_id, base::Value(restart_required));
+ }
+ 
+ void OnboardingMessageHandler::HandleSetPreference(
+--- a/components/helium_onboarding/src/lib/browser/prefs.ts
++++ b/components/helium_onboarding/src/lib/browser/prefs.ts
+@@ -36,8 +36,9 @@
+     await cr.sendWithPromise('setPref', name, value);
+ }
+ 
+-export const setPrivacyMode = async (mode: string): Promise<void> => {
+-    await cr.sendWithPromise('setPrivacyMode', mode);
++// Resolves to true when the chosen mode needs a browser restart to fully apply.
++export const setPrivacyMode = async (mode: string): Promise<boolean> => {
++    return await cr.sendWithPromise<boolean>('setPrivacyMode', mode);
+ }
+ 
+ export const acceptLatestSchema = () => {
+--- a/components/helium_onboarding/src/lib/onboarding-flow.ts
++++ b/components/helium_onboarding/src/lib/onboarding-flow.ts
+@@ -74,6 +74,7 @@
+ }
+ 
+ export const selectedPrivacyMode = writable("medium");
++export const privacyModeNeedsRestart = writable(false);
+ 
+ export const userChoseHeliumAsDefault = writable(true);
+ export const selectedProfiles = writable(new SvelteSet<number>());
+--- a/components/helium_onboarding/src/pages/Finish.svelte
++++ b/components/helium_onboarding/src/pages/Finish.svelte
+@@ -7,7 +7,11 @@
+     } from "@imput/helium-prism";
+     import { s } from "../lib/strings";
+     import { setPref, openNewTab } from "../lib/browser";
+-    import { currentPage, previousPage } from "../lib/onboarding-flow";
++    import {
++        currentPage,
++        previousPage,
++        privacyModeNeedsRestart,
++    } from "../lib/onboarding-flow";
+ 
+     const done = async () => {
+         await setPref('completed_onboarding', true);
+@@ -31,6 +35,12 @@
+                 <div id="finish-text">
+                     <h1>{s.finish.title}</h1>
+                     <p>{s.finish.body}</p>
++                    {#if $privacyModeNeedsRestart}
++                        <p>
++                            Restart the browser once to fully apply your privacy
++                            level (fingerprinting and referrer protection).
++                        </p>
++                    {/if}
+                 </div>
+             </div>
+             <div class="action-buttons">
+--- a/components/helium_onboarding/src/components/PageNavigation.svelte
++++ b/components/helium_onboarding/src/components/PageNavigation.svelte
+@@ -24,6 +24,7 @@
+         selectedProfiles,
+         previouslyImportedProfiles,
+         selectedPrivacyMode,
++        privacyModeNeedsRestart,
+     } from "../lib/onboarding-flow";
+ 
+     const visible = $derived(
+@@ -43,7 +44,7 @@
+     const doNext = async () => {
+         switch ($currentPage) {
+         case "PrivacyMode":
+-            await setPrivacyMode($selectedPrivacyMode);
++            $privacyModeNeedsRestart = await setPrivacyMode($selectedPrivacyMode);
+             break;
+ 
+         case "HeliumServices":

@@ -1,0 +1,145 @@
+--- a/chrome/browser/helium_theme/helium_theme.cc
++++ b/chrome/browser/helium_theme/helium_theme.cc
+@@ -95,11 +95,9 @@
+ #endif
+ }
+ 
+-// The desktop's own accent color, when the platform has one: the Omarchy theme's
+-// `accent` (colors.toml) on Linux, the Windows accent color, the macOS accent
+-// color. Runs on a blocking thread. Not verified on Windows or macOS yet.
+-std::optional<SkColor> DesktopAccentColor() {
+ #if BUILDFLAG(IS_LINUX)
++// Reads `<key> = "#RRGGBB"` from the Omarchy theme's colors.toml.
++std::optional<SkColor> ReadOmarchyColor(std::string_view key) {
+   std::string toml;
+   if (!base::ReadFileToString(OmarchyCurrentDir().Append("theme/colors.toml"),
+                               &toml)) {
+@@ -107,7 +105,8 @@
+   }
+   for (std::string_view line : base::SplitStringPiece(
+            toml, "\n", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY)) {
+-    if (!line.starts_with("accent")) {
++    if (!line.starts_with(key) || line.size() <= key.size() ||
++        (line[key.size()] != ' ' && line[key.size()] != '=')) {
+       continue;
+     }
+     const size_t open = line.find('"');
+@@ -125,6 +124,25 @@
+     return SkColorSetRGB((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
+   }
+   return std::nullopt;
++}
++#endif
++
++// The desktop theme's background color (the "color scheme" ground), where the
++// platform exposes one: Omarchy only for now.
++std::optional<SkColor> DesktopBackgroundColor() {
++#if BUILDFLAG(IS_LINUX)
++  return ReadOmarchyColor("background");
++#else
++  return std::nullopt;
++#endif
++}
++
++// The desktop's own accent color, when the platform has one: the Omarchy theme's
++// `accent` (colors.toml) on Linux, the Windows accent color, the macOS accent
++// color. Runs on a blocking thread. Not verified on Windows or macOS yet.
++std::optional<SkColor> DesktopAccentColor() {
++#if BUILDFLAG(IS_LINUX)
++  return ReadOmarchyColor("accent");
+ #elif BUILDFLAG(IS_WIN)
+   base::win::RegKey key(HKEY_CURRENT_USER,
+                         L"Software\\Microsoft\\Windows\\DWM", KEY_READ);
+@@ -204,13 +222,20 @@
+ // Where the desktop's colors come from this time.
+ struct Source {
+   std::optional<SkColor> accent;
++  std::optional<SkColor> background;
+   base::FilePath wallpaper;
+ };
+ 
++std::optional<SkColor>& DesktopBackground() {
++  static std::optional<SkColor> color;
++  return color;
++}
++
+ Source ReadSource(base::FilePath wallpaper_override) {
+   Source source;
+   if (wallpaper_override.empty()) {
+     source.accent = DesktopAccentColor();
++    source.background = DesktopBackgroundColor();
+     source.wallpaper = DefaultWallpaperPath();
+   } else {
+     source.wallpaper = wallpaper_override;
+@@ -223,6 +248,12 @@
+   if (!profile) {
+     return;
+   }
++  // The frame follows the desktop theme's background; repaint the UI when it
++  // changes (a no-op when unchanged, so the observer cannot loop).
++  if (DesktopBackground() != source.background) {
++    DesktopBackground() = source.background;
++    ui::NativeTheme::GetInstanceForNativeUi()->NotifyOnNativeThemeUpdated();
++  }
+   if (source.accent) {
+     ApplyColor(profile.get(), *source.accent);
+     return;
+@@ -294,6 +325,10 @@
+ 
+ }  // namespace
+ 
++std::optional<SkColor> GetDesktopBackground() {
++  return DesktopBackground();
++}
++
+ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
+   registry->RegisterBooleanPref(kInitializedPref, false);
+   registry->RegisterBooleanPref(kMatchWallpaperPref, true);
+--- a/chrome/browser/helium_theme/helium_theme.h
++++ b/chrome/browser/helium_theme/helium_theme.h
+@@ -30,6 +30,10 @@
+ // and never sent anywhere.
+ void Apply(Profile* profile);
+ 
++// The desktop theme's background color (Omarchy colors.toml `background`), or
++// nullopt when the platform has none. The browser frame is tinted from it.
++std::optional<SkColor> GetDesktopBackground();
++
+ // Saturation- and lightness-weighted average color of |bitmap|, or nullopt for
+ // images with no meaningful color (grayscale, nearly black or white).
+ std::optional<SkColor> DominantColor(const SkBitmap& bitmap);
+--- a/chrome/browser/ui/color/material_chrome_color_mixer.cc
++++ b/chrome/browser/ui/color/material_chrome_color_mixer.cc
+@@ -2,6 +2,8 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include "chrome/browser/helium_theme/helium_theme.h"
++#include "ui/gfx/color_utils.h"
+ #include "chrome/browser/ui/color/material_chrome_color_mixer.h"
+ 
+ #include "base/feature_list.h"
+@@ -519,11 +521,20 @@
+ 
+   // Custom themes retain their frame colors because they skip these overrides.
+   mixer[ui::kColorFrameInactive] = {ui::kColorFrameActive};
+-  if (!dark_mode) {
++  // The frame (sidebar and the gap around the page) follows the desktop
++  // theme's background when there is one and it matches the color mode;
++  // otherwise it is the accent blended into the standard frame color.
++  const std::optional<SkColor> desktop_background =
++      helium_theme::GetDesktopBackground();
++  const bool background_is_dark =
++      desktop_background && color_utils::GetRelativeLuminance(
++                                *desktop_background) < 0.2;
++  if (desktop_background && background_is_dark == dark_mode) {
++    mixer[ui::kColorFrameActive] =
++        ui::AlphaBlend(ui::kColorSysPrimary, *desktop_background, 0x18);
++  } else if (!dark_mode) {
+     mixer[ui::kColorFrameActive] = {ui::kColorSysBase};
+   } else {
+-    // Tint the dark frame (sidebar and the gap around the page) with the theme
+-    // accent so it follows the wallpaper instead of being near-black.
+     mixer[ui::kColorFrameActive] =
+         ui::AlphaBlend(ui::kColorSysPrimary, ui::kColorSysHeader, 0x28);
+   }

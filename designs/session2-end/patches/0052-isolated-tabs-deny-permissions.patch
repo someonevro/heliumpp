@@ -1,0 +1,35 @@
+--- a/components/permissions/permission_context_base.cc
++++ b/components/permissions/permission_context_base.cc
+@@ -53,6 +53,10 @@
+ #include "components/permissions/resolvers/content_setting_permission_resolver.h"
+ #include "components/permissions/resolvers/geolocation_permission_resolver.h"
+ #include "components/permissions/resolvers/permission_prompt_options.h"
++#include "content/public/browser/storage_partition_config.h"
++#include "content/public/browser/storage_partition.h"
++#include "content/public/browser/site_instance.h"
++#include "content/public/browser/browser_context.h"
+ #include "content/public/browser/browser_thread.h"
+ #include "content/public/browser/global_routing_id.h"
+ #include "content/public/browser/navigation_controller.h"
+@@ -359,6 +363,21 @@
+         PermissionStatus::DENIED, content::PermissionStatusSource::KILL_SWITCH);
+   }
+ 
++  // Helium: tabs with a private (isolated) storage area never get permissions
++  // such as camera, microphone, location, notifications or clipboard reads,
++  // whatever was granted before in normal tabs.
++  if (render_frame_host) {
++    content::SiteInstance* site_instance = render_frame_host->GetSiteInstance();
++    if (site_instance->GetBrowserContext()
++            ->GetStoragePartition(site_instance)
++            ->GetConfig()
++            .partition_domain() == "heliumisolated") {
++      return content::PermissionResult(
++          PermissionStatus::DENIED,
++          content::PermissionStatusSource::UNSPECIFIED);
++    }
++  }
++
+   if (base::FeatureList::IsEnabled(features::kGlicActorPermissionsAutoReject) &&
+       render_frame_host) {
+     content::WebContents* web_contents =

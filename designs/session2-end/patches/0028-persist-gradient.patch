@@ -1,0 +1,123 @@
+--- a/chrome/browser/helium_theme/helium_theme.cc
++++ b/chrome/browser/helium_theme/helium_theme.cc
+@@ -56,6 +56,10 @@
+ // The color we last applied; lets us tell our own theme from one the user chose.
+ constexpr char kLastAppliedPref[] = "helium.theme.last_applied_color";
+ constexpr char kSwitch[] = "match-wallpaper";
++// The last two-color fade (opaque ARGB ints, 0 = none), kept so the frame is
++// right from the first paint of the next start, before the wallpaper is read.
++constexpr char kGradientAPref[] = "helium.theme.gradient_a";
++constexpr char kGradientBPref[] = "helium.theme.gradient_b";
+ 
+ // Dark slate, deliberately not pure black.
+ constexpr SkColor kFallbackColor = SkColorSetRGB(0x20, 0x22, 0x2E);
+@@ -211,7 +215,17 @@
+   return colors;
+ }
+ 
+-void SetDesktopGradient(std::optional<GradientColors> colors) {
++void SetDesktopGradient(Profile* profile,
++                        std::optional<GradientColors> colors) {
++  if (colors) {
++    profile->GetPrefs()->SetInteger(kGradientAPref,
++                                    static_cast<int>(colors->first));
++    profile->GetPrefs()->SetInteger(kGradientBPref,
++                                    static_cast<int>(colors->second));
++  }
++  LOG(WARNING) << "Wallpaper gradient: " << std::hex
++               << (colors ? colors->first : 0) << " "
++               << (colors ? colors->second : 0);
+   if (DesktopGradient() != colors) {
+     DesktopGradient() = colors;
+     // Repaints the UI; only fires on a real change, so the watcher cannot loop.
+@@ -227,7 +241,7 @@
+   if (!profile || bitmap.isNull()) {
+     return;
+   }
+-  SetDesktopGradient(ExtractGradientColors(bitmap));
++  SetDesktopGradient(profile.get(), ExtractGradientColors(bitmap));
+   std::optional<SkColor> color = DominantColor(bitmap);
+   if (!color) {
+     color = fallback_accent;
+@@ -376,7 +390,7 @@
+   const int step_y = std::max(1, bitmap.height() / 64);
+   constexpr int kBins = 12;  // 30 degrees of hue each.
+   struct Bin {
+-    double weight = 0, r = 0, g = 0, b = 0;
++    double weight = 0, r = 0, g = 0, b = 0, saturation = 0;
+   } bins[kBins];
+   std::vector<double> lightness;
+   double total = 0;
+@@ -389,6 +403,7 @@
+       const double weight = hsl.s * (1 - std::abs(2 * hsl.l - 1));
+       Bin& bin = bins[std::min(kBins - 1, static_cast<int>(hsl.h * kBins))];
+       bin.weight += weight;
++      bin.saturation += hsl.s * weight;
+       bin.r += SkColorGetR(c) * weight;
+       bin.g += SkColorGetG(c) * weight;
+       bin.b += SkColorGetB(c) * weight;
+@@ -400,7 +415,18 @@
+   if (samples == 0) {
+     return std::nullopt;
+   }
+-  if (total / samples < 0.03) {
++  // A hue only counts when it is really colored: noisy near-gray pixels must not
++  // introduce a random tint (they used to come out slightly blue).
++  const auto is_colored = [](const Bin& bin) {
++    return bin.weight > 0 && bin.saturation / bin.weight >= 0.2;
++  };
++  int best = 0;
++  for (int i = 1; i < kBins; ++i) {
++    if (bins[i].weight > bins[best].weight) {
++      best = i;
++    }
++  }
++  if (total / samples < 0.03 || !is_colored(bins[best])) {
+     // Grayscale wallpaper: its darker and lighter tones.
+     std::sort(lightness.begin(), lightness.end());
+     const auto gray = [&](double fraction) {
+@@ -427,7 +453,8 @@
+   for (int i = 0; i < kBins; ++i) {
+     const int distance = std::min((i - first + kBins) % kBins,
+                                   (first - i + kBins) % kBins);
+-    if (distance >= 2 && bins[i].weight >= 0.25 * bins[first].weight &&
++    if (distance >= 2 && is_colored(bins[i]) &&
++        bins[i].weight >= 0.25 * bins[first].weight &&
+         (second < 0 || bins[i].weight > bins[second].weight)) {
+       second = i;
+     }
+@@ -451,6 +478,8 @@
+   registry->RegisterBooleanPref(kInitializedPref, false);
+   registry->RegisterBooleanPref(kMatchWallpaperPref, true);
+   registry->RegisterIntegerPref(kLastAppliedPref, 0);
++  registry->RegisterIntegerPref(kGradientAPref, 0);
++  registry->RegisterIntegerPref(kGradientBPref, 0);
+ }
+ 
+ std::optional<SkColor> DominantColor(const SkBitmap& bitmap) {
+@@ -507,6 +536,14 @@
+     }
+   }
+ 
++  // Paint the last known fade right away; the wallpaper is re-read below.
++  if (!DesktopGradient() && prefs->GetInteger(kGradientAPref) != 0 &&
++      prefs->GetInteger(kGradientBPref) != 0) {
++    DesktopGradient() =
++        GradientColors(static_cast<SkColor>(prefs->GetInteger(kGradientAPref)),
++                       static_cast<SkColor>(prefs->GetInteger(kGradientBPref)));
++  }
++
+   base::FilePath wallpaper_override;
+   const base::CommandLine* cl = base::CommandLine::ForCurrentProcess();
+   if (cl->HasSwitch(kSwitch)) {
+--- a/chrome/browser/ui/views/frame/themed_background.cc
++++ b/chrome/browser/ui/views/frame/themed_background.cc
+@@ -137,7 +137,7 @@
+     color_utils::SkColorToHSL(color, &hsl);
+     // Squeeze the lightness into a band that keeps text readable but still
+     // keeps the two colors apart.
+-    hsl.l = dark ? 0.07 + 0.25 * hsl.l : 0.70 + 0.28 * hsl.l;
++    hsl.l = dark ? 0.06 + 0.32 * hsl.l : 0.70 + 0.28 * hsl.l;
+     hsl.s = std::min(hsl.s, 0.7);
+     return color_utils::HSLToSkColor(hsl, 255);
+   };

@@ -1,0 +1,36 @@
+--- a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
++++ b/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
+@@ -866,8 +866,8 @@
+   const bool vertical_right_aligned =
+       delegate().IsVerticalTabStripRightAligned();
+   // Sidebar toolbar: the address bar sits inside the vertical tab strip region
+-  // (top of the sidebar) and the toolbar (navigation buttons, extensions, menu)
+-  // sits at the bottom of the sidebar column, below the tab strip.
++  // (top of the sidebar). The rest of the toolbar (navigation buttons,
++  // extensions, menu) is hidden in this mode.
+   const bool sidebar_toolbar =
+       IsSidebarToolbarEnabled() &&
+       layout_data_->tab_strip_type == TabStripType::kVertical &&
+@@ -954,8 +954,7 @@
+       const int vertical_tab_strip_height =
+           std::max(0, params.visual_client_area.height() - top_offset -
+                           zen.vertical_tab_strip_top_padding -
+-                          zen.vertical_tab_strip_padding -
+-                          sidebar_toolbar_height);
++                          zen.vertical_tab_strip_padding);
+       vertical_tab_strip_bounds = {
+           vertical_tab_strip_x,
+           params.visual_client_area.y() + top_offset +
+@@ -1094,8 +1093,11 @@
+         }
+       }
+       top_container_layout.bounds.set_height(sidebar_toolbar_height);
++      // The navigation row is hidden: it is parked just below the window edge,
++      // clipped away, so it still gets laid out (it hosts the logic that moves
++      // the address bar into the sidebar) but takes no space and is not shown.
+       top_container_layout.bounds.set_y(
+-          parent_params.visual_client_area.bottom() - sidebar_toolbar_height);
++          parent_params.visual_client_area.bottom());
+     }
+ 
+     if (layout_data_->tab_strip_type == TabStripType::kVertical &&

@@ -1,0 +1,29 @@
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+@@ -87,6 +87,8 @@
+ constexpr int kBottomContainerGap = 2;
+ // Space above the first tab so the list does not hug the toolbar.
+ constexpr int kTabListTopGap = 8;
++// Space between the window edge and the address bar at the top of the sidebar.
++constexpr int kSidebarTopInset = 10;
+ constexpr int kDefaultWidthSnapDistance = 6;
+ 
+ // Shadow is used in expand-on-hover mode. Shadow radius and opacity are dynamic
+@@ -805,6 +807,9 @@
+                                             horizontal_padding));
+   sidebar_location_bar_->SetVisible(state_controller_->GetCollapseState() ==
+                                     tabs::VerticalTabStripCollapseState::kExpanded);
++  // Margins at the edge of the layout are collapsed, so give the address bar
++  // breathing room from the window edge with an interior margin.
++  flex_layout_->SetInteriorMargin(gfx::Insets::TLBR(kSidebarTopInset, 0, 0, 0));
+   InvalidateLayout();
+ }
+ 
+@@ -815,6 +820,7 @@
+   views::View* bar = sidebar_location_bar_.get();
+   sidebar_location_bar_ = nullptr;
+   bar->SetVisible(true);
++  flex_layout_->SetInteriorMargin(gfx::Insets());
+   InvalidateLayout();
+   return RemoveChildViewT(bar);
+ }

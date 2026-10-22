@@ -1,0 +1,295 @@
+--- a/chrome/browser/ui/webui/onboarding/onboarding_handler.cc
++++ b/chrome/browser/ui/webui/onboarding/onboarding_handler.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/ui/webui/onboarding/onboarding_handler.h"
+ 
++#include <utility>
++
+ #include "base/functional/bind.h"
+ #include "base/strings/string_util.h"
+ #include "base/strings/utf_string_conversions.h"
+@@ -12,6 +14,8 @@
+ #include "chrome/browser/browser_process.h"
+ #include "chrome/browser/extensions/webstore_install_with_prompt.h"
+ #include "chrome/browser/helium_privacy_mode/helium_privacy_mode.h"
++#include "chrome/browser/ui/helium/helium_layout_state_controller.h"
++#include "chrome/common/pref_names.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/profiles/profile_attributes_storage.h"
+ #include "chrome/browser/profiles/profile_manager.h"
+@@ -104,6 +108,10 @@
+       base::BindRepeating(&OnboardingMessageHandler::HandleSetPreference,
+                           base::Unretained(this)));
+   web_ui()->RegisterMessageCallback(
++      "setTabLayout",
++      base::BindRepeating(&OnboardingMessageHandler::HandleSetTabLayout,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
+       "getPrivacyMode",
+       base::BindRepeating(&OnboardingMessageHandler::HandleGetPrivacyMode,
+                           base::Unretained(this)));
+@@ -265,6 +273,33 @@
+   }
+ }
+ 
++void OnboardingMessageHandler::HandleSetTabLayout(
++    const base::ListValue& args) {
++  if (args.size() != 2 || !args[0].is_string()) {
++    return;
++  }
++
++  AllowJavascript();
++
++  const auto& callback_id = args[0].GetString();
++  if (!args[1].is_string()) {
++    return RejectJavascriptCallback(callback_id, "invalid layout");
++  }
++
++  const std::string& layout = args[1].GetString();
++  HeliumLayoutType type;
++  if (layout == "horizontal") {
++    type = HeliumLayoutType::kClassic;
++  } else if (layout == "vertical") {
++    type = HeliumLayoutType::kVertical;
++  } else {
++    return RejectJavascriptCallback(callback_id, "unknown tab layout");
++  }
++
++  pref_service_->SetInteger(::prefs::kHeliumLayout, std::to_underlying(type));
++  ResolveJavascriptCallback(callback_id, {});
++}
++
+ void OnboardingMessageHandler::HandleGetPrivacyMode(
+     const base::ListValue& args) {
+   if (args.size() != 1 || !args[0].is_string()) {
+--- a/chrome/browser/ui/webui/onboarding/onboarding_handler.h
++++ b/chrome/browser/ui/webui/onboarding/onboarding_handler.h
+@@ -41,6 +41,7 @@
+   void HandleSetPreference(const base::ListValue& args);
+   void HandleSetPrivacyMode(const base::ListValue& args);
+   void HandleGetPrivacyMode(const base::ListValue& args);
++  void HandleSetTabLayout(const base::ListValue& args);
+   void HandleGetProfileName(const base::ListValue& args);
+   void HandleSetProfileName(const base::ListValue& args);
+   void HandleGetExtensions(const base::ListValue& args);
+--- a/components/helium_onboarding/src/lib/browser/prefs.ts
++++ b/components/helium_onboarding/src/lib/browser/prefs.ts
+@@ -36,6 +36,11 @@
+     await cr.sendWithPromise('setPref', name, value);
+ }
+ 
++// "horizontal" (classic top tab strip) or "vertical" (sidebar tabs).
++export const setTabLayout = async (layout: string): Promise<void> => {
++    await cr.sendWithPromise('setTabLayout', layout);
++}
++
+ // "" when no mode has been chosen yet.
+ export const getPrivacyMode = async (): Promise<string> => {
+     return await cr.sendWithPromise<string>('getPrivacyMode');
+--- a/components/helium_onboarding/src/lib/onboarding-flow.ts
++++ b/components/helium_onboarding/src/lib/onboarding-flow.ts
+@@ -11,6 +11,7 @@
+ export const flow = [
+     "Welcome",
+     "PrivacyMode",
++    "TabLayout",
+     "HeliumServices",
+     "SearchEngine",
+     "DataImport",
+@@ -77,6 +78,7 @@
+ }
+ 
+ export const selectedPrivacyMode = writable("medium");
++export const selectedTabLayout = writable("vertical");
+ export const privacyModeNeedsRestart = writable(false);
+ 
+ export const userChoseHeliumAsDefault = writable(true);
+--- a/components/helium_onboarding/src/pages/index.ts
++++ b/components/helium_onboarding/src/pages/index.ts
+@@ -1,5 +1,6 @@
+ export { default as Welcome } from "./Welcome.svelte";
+ export { default as PrivacyMode } from "./PrivacyMode.svelte";
++export { default as TabLayout } from "./TabLayout.svelte";
+ export { default as HeliumServices } from "./HeliumServices.svelte";
+ export { default as SearchEngine } from "./SearchEngine.svelte";
+ export { default as DataImport } from "./DataImport.svelte";
+--- a/components/helium_onboarding/src/components/PageNavigation.svelte
++++ b/components/helium_onboarding/src/components/PageNavigation.svelte
+@@ -10,6 +10,7 @@
+     import {
+         acceptLatestSchema,
+         setPrivacyMode,
++        setTabLayout,
+         askToBeDefault,
+         importableProfiles,
+         importDiscovery,
+@@ -25,6 +26,7 @@
+         previouslyImportedProfiles,
+         selectedPrivacyMode,
+         privacyModeNeedsRestart,
++        selectedTabLayout,
+     } from "../lib/onboarding-flow";
+ 
+     const visible = $derived(
+@@ -47,6 +49,10 @@
+             $privacyModeNeedsRestart = await setPrivacyMode($selectedPrivacyMode);
+             break;
+ 
++        case "TabLayout":
++            await setTabLayout($selectedTabLayout);
++            break;
++
+         case "HeliumServices":
+             // if the user pressed "next" on the HeliumServices page,
+             // then we mark consent (having seen the page) as true
+--- /dev/null
++++ b/components/helium_onboarding/src/pages/TabLayout.svelte
+@@ -0,0 +1,147 @@
++<script lang="ts">
++    import { HeliumLogo } from "@imput/helium-prism";
++    import { currentPage, selectedTabLayout } from "../lib/onboarding-flow";
++
++    import PageHeader from "../components/PageHeader.svelte";
++
++    const visible = $derived($currentPage === "TabLayout");
++    const selected = $derived($selectedTabLayout);
++
++    const layouts = [
++        {
++            id: "vertical",
++            name: "Vertical tabs",
++            desc: "Tabs in a sidebar on the left. Easier to manage many tabs.",
++        },
++        {
++            id: "horizontal",
++            name: "Horizontal tabs",
++            desc: "Tabs in a strip along the top, like most browsers.",
++        },
++    ];
++</script>
++
++<div id="tab-layout-page" class="onboarding-page" class:visible>
++    <div class="scrollable-page">
++        <PageHeader
++            title="Choose your tab layout"
++            subtitle="You can change this any time in Settings, under Appearance."
++            Icon={HeliumLogo}
++            iconHeight="32px"
++        />
++        <div class="page-content">
++            <div class="layout-list" role="radiogroup" aria-label="Tab layout">
++                {#each layouts as layout (layout.id)}
++                    <button
++                        type="button"
++                        role="radio"
++                        aria-checked={selected === layout.id}
++                        class="layout-card"
++                        class:selected={selected === layout.id}
++                        onclick={() => selectedTabLayout.set(layout.id)}
++                    >
++                        <span class={`preview ${layout.id}`} aria-hidden="true">
++                            <span class="tabs"><i></i><i></i><i></i></span>
++                            <span class="page"></span>
++                        </span>
++                        <span class="layout-name">{layout.name}</span>
++                        <span class="layout-desc">{layout.desc}</span>
++                    </button>
++                {/each}
++            </div>
++        </div>
++    </div>
++</div>
++
++<style>
++    #tab-layout-page {
++        --page-in-delay: 0.1s;
++    }
++
++    .layout-list {
++        display: grid;
++        grid-template-columns: 1fr 1fr;
++        gap: 12px;
++        width: 100%;
++    }
++
++    .layout-card {
++        display: flex;
++        flex-direction: column;
++        gap: 6px;
++        padding: 14px;
++        text-align: start;
++        color: inherit;
++        font: inherit;
++        cursor: pointer;
++        background: var(--helium-elevated-5);
++        border: 2px solid var(--helium-elevated-10);
++        border-radius: 16px;
++        transition: border-color 0.15s, background 0.15s;
++    }
++
++    .layout-card:hover {
++        background: var(--helium-elevated-7);
++    }
++
++    .layout-card:focus-visible {
++        outline: 2px solid var(--helium-blue);
++        outline-offset: 2px;
++    }
++
++    .layout-card.selected {
++        border-color: var(--helium-blue);
++        background: var(--helium-elevated-10);
++    }
++
++    .layout-name {
++        font-weight: 600;
++    }
++
++    .layout-desc {
++        opacity: 0.7;
++        font-size: 0.9em;
++    }
++
++    /* tiny drawing of the window */
++    .preview {
++        display: flex;
++        height: 84px;
++        gap: 6px;
++        padding: 6px;
++        border-radius: 10px;
++        background: var(--helium-elevated-15);
++    }
++
++    .preview.horizontal {
++        flex-direction: column;
++    }
++
++    .tabs {
++        display: flex;
++        gap: 4px;
++    }
++
++    .preview.vertical .tabs {
++        flex-direction: column;
++        width: 26%;
++    }
++
++    .tabs i {
++        flex: 0 0 auto;
++        height: 10px;
++        width: 28%;
++        border-radius: 4px;
++        background: var(--helium-elevated-40);
++    }
++
++    .preview.vertical .tabs i {
++        width: 100%;
++    }
++
++    .preview .page {
++        flex: 1;
++        border-radius: 6px;
++        background: var(--helium-elevated-7);
++    }
++</style>

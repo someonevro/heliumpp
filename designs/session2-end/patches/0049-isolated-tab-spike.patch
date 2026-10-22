@@ -1,0 +1,164 @@
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -2736,6 +2736,8 @@
+       "views/frame/browser_frame_view.cc",
+       "views/frame/browser_frame_view.h",
+       "views/frame/browser_root_view.cc",
++      "helium_isolated/helium_isolated_tabs.cc",
++      "helium_isolated/helium_isolated_tabs.h",
+       "views/frame/browser_view.cc",
+       "views/frame/browser_view.h",
+       "views/frame/browser_widget.cc",
+--- a/chrome/browser/ui/views/frame/browser_view.cc
++++ b/chrome/browser/ui/views/frame/browser_view.cc
+@@ -3,6 +3,7 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/helium_isolated/helium_isolated_tabs.h"
+ 
+ #include <stdint.h>
+ 
+@@ -2268,6 +2269,7 @@
+ // BrowserView, BrowserWindow implementation:
+ 
+ void BrowserView::Show() {
++  helium_isolated::MaybeOpenStartupTabs();
+   // Attempts to show closed windows should no-op.
+   if (browser_widget_->IsClosed()) {
+     return;
+--- a/chrome/browser/ui/helium_isolated/helium_isolated_tabs.h
++++ b/chrome/browser/ui/helium_isolated/helium_isolated_tabs.h
+@@ -0,0 +1,21 @@
++#ifndef CHROME_BROWSER_UI_HELIUM_ISOLATED_HELIUM_ISOLATED_TABS_H_
++#define CHROME_BROWSER_UI_HELIUM_ISOLATED_HELIUM_ISOLATED_TABS_H_
++
++class BrowserWindowInterface;
++class GURL;
++
++namespace helium_isolated {
++
++// Opens |url| in a new foreground tab of |browser| that has its own, in-memory
++// storage area (cookies, local storage, IndexedDB, cache, service workers).
++// Nothing is shared with other tabs or written to disk, and everything is
++// deleted when the tab closes.
++void OpenIsolatedTab(BrowserWindowInterface* browser, const GURL& url);
++
++// Test hook: when --helium-isolated-tabs=<url>,<url>... is present, opens each
++// URL in its own isolated tab a few seconds after the first window shows.
++void MaybeOpenStartupTabs();
++
++}  // namespace helium_isolated
++
++#endif  // CHROME_BROWSER_UI_HELIUM_ISOLATED_HELIUM_ISOLATED_TABS_H_
+--- a/chrome/browser/ui/helium_isolated/helium_isolated_tabs.cc
++++ b/chrome/browser/ui/helium_isolated/helium_isolated_tabs.cc
+@@ -0,0 +1,108 @@
++#include "chrome/browser/ui/helium_isolated/helium_isolated_tabs.h"
++
++#include <memory>
++#include <string>
++#include <vector>
++
++#include "base/command_line.h"
++#include "base/functional/bind.h"
++#include "base/functional/callback_helpers.h"
++#include "base/location.h"
++#include "base/strings/string_split.h"
++#include "base/task/single_thread_task_runner.h"
++#include "base/time/time.h"
++#include "base/uuid.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "content/public/browser/browser_context.h"
++#include "content/public/browser/navigation_controller.h"
++#include "content/public/browser/site_instance.h"
++#include "content/public/browser/storage_partition.h"
++#include "content/public/browser/storage_partition_config.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/browser/web_contents_observer.h"
++#include "third_party/blink/public/common/storage_key/storage_key.h"
++#include "url/gurl.h"
++
++namespace helium_isolated {
++
++namespace {
++
++constexpr char kStartupSwitch[] = "helium-isolated-tabs";
++
++// Deletes everything in the tab's private storage area when the tab goes away.
++// Owns itself; bound to the WebContents lifetime.
++class PartitionWiper : public content::WebContentsObserver {
++ public:
++  PartitionWiper(content::WebContents* contents,
++                 const content::StoragePartitionConfig& config)
++      : content::WebContentsObserver(contents), config_(config) {}
++
++  void WebContentsDestroyed() override {
++    web_contents()
++        ->GetBrowserContext()
++        ->GetStoragePartition(config_, /*can_create=*/false)
++        ->ClearData(content::StoragePartition::REMOVE_DATA_MASK_ALL,
++                    blink::StorageKey(), base::Time(), base::Time::Max(),
++                    base::DoNothing());
++    delete this;
++  }
++
++ private:
++  content::StoragePartitionConfig config_;
++};
++
++}  // namespace
++
++void OpenIsolatedTab(BrowserWindowInterface* browser, const GURL& url) {
++  Profile* profile = browser->GetProfile();
++  // A new, unique, in-memory partition for this tab only.
++  const content::StoragePartitionConfig config =
++      content::StoragePartitionConfig::Create(
++          profile, "heliumisolated",
++          base::Uuid::GenerateRandomV4().AsLowercaseString(),
++          /*in_memory=*/true);
++  auto site_instance = content::SiteInstance::CreateForFixedStoragePartition(
++      profile, url, config);
++  auto contents = content::WebContents::Create(
++      content::WebContents::CreateParams(profile, std::move(site_instance)));
++  content::WebContents* raw = contents.get();
++  new PartitionWiper(raw, config);
++  browser->GetTabStripModel()->AppendWebContents(std::move(contents),
++                                                /*foreground=*/true);
++  raw->GetController().LoadURLWithParams(
++      content::NavigationController::LoadURLParams(url));
++}
++
++void MaybeOpenStartupTabs() {
++  static bool done = false;
++  const base::CommandLine* cl = base::CommandLine::ForCurrentProcess();
++  if (done || !cl->HasSwitch(kStartupSwitch)) {
++    return;
++  }
++  done = true;
++  const std::string value = cl->GetSwitchValueASCII(kStartupSwitch);
++  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
++      FROM_HERE, base::BindOnce(
++                     [](std::string value) {
++                       BrowserWindowInterface* browser =
++                           GetLastActiveBrowserWindowInterfaceWithAnyProfile();
++                       if (!browser) {
++                         return;
++                       }
++                       for (const auto& part :
++                            base::SplitString(value, ",", base::TRIM_WHITESPACE,
++                                              base::SPLIT_WANT_NONEMPTY)) {
++                         GURL url(part);
++                         if (url.is_valid() && url.SchemeIsHTTPOrHTTPS()) {
++                           OpenIsolatedTab(browser, url);
++                         }
++                       }
++                     },
++                     value),
++      base::Seconds(3));
++}
++
++}  // namespace helium_isolated

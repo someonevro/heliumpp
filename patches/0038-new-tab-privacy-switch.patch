@@ -1,0 +1,187 @@
+--- a/chrome/browser/ui/webui/new_tab_page/new_tab_page.mojom
++++ b/chrome/browser/ui/webui/new_tab_page/new_tab_page.mojom
+@@ -172,6 +172,10 @@
+   // Returns the visibility of NTP tiles and the shortcuts type.
+   GetMostVisitedSettings() => (ntp_tiles.mojom.TileType shortcuts_type,
+     bool shortcuts_visible);
++  // Returns the stored privacy mode ("usability", "medium", "maximum" or "").
++  GetPrivacyMode() => (string mode);
++  // Sets the privacy mode. |success| is false for an unknown mode.
++  SetPrivacyMode(string mode) => (bool success, bool restart_required);
+   // Gets current doodle if there is one.
+   GetDoodle() => (Doodle? doodle);
+   // Called when a module the given id is dismissed.
+--- a/chrome/browser/ui/webui/new_tab_page/new_tab_page_handler.h
++++ b/chrome/browser/ui/webui/new_tab_page/new_tab_page_handler.h
+@@ -127,6 +127,9 @@
+   // new_tab_page::mojom::PageHandler:
+   void SetMostVisitedSettings(ntp_tiles::TileType type, bool visible) override;
+   void GetMostVisitedSettings(GetMostVisitedSettingsCallback callback) override;
++  void GetPrivacyMode(GetPrivacyModeCallback callback) override;
++  void SetPrivacyMode(const std::string& mode,
++                      SetPrivacyModeCallback callback) override;
+   void GetDoodle(GetDoodleCallback callback) override;
+   void OnDismissModule(const std::string& module_id) override;
+   void OnRestoreModule(const std::string& module_id) override;
+--- a/chrome/browser/ui/webui/new_tab_page/new_tab_page_handler.cc
++++ b/chrome/browser/ui/webui/new_tab_page/new_tab_page_handler.cc
+@@ -48,6 +48,7 @@
+ #include "chrome/browser/new_tab_page/prefs/ntp_pref_names.h"
+ #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
+ #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
++#include "chrome/browser/helium_privacy_mode/helium_privacy_mode.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/search/background/ntp_custom_background_service.h"
+ #include "chrome/browser/search/background/ntp_custom_background_service_factory.h"
+@@ -632,6 +633,19 @@
+   std::move(callback).Run(type, visible);
+ }
+ 
++void NewTabPageHandler::GetPrivacyMode(GetPrivacyModeCallback callback) {
++  std::move(callback).Run(helium_privacy_mode::GetModeName(profile_));
++}
++
++void NewTabPageHandler::SetPrivacyMode(const std::string& mode,
++                                       SetPrivacyModeCallback callback) {
++  // SetMode rejects anything that is not one of the known modes.
++  bool restart_required = false;
++  const bool success =
++      helium_privacy_mode::SetMode(profile_, mode, &restart_required);
++  std::move(callback).Run(success, restart_required);
++}
++
+ void NewTabPageHandler::GetDoodle(GetDoodleCallback callback) {
+   bool enable_animated_logo =
+       base::FeatureList::IsEnabled(ntp_features::kNtpAnimatedDoodles) &&
+--- a/chrome/browser/resources/new_tab_page/app.html
++++ b/chrome/browser/resources/new_tab_page/app.html
+@@ -7,6 +7,15 @@
+           spellcheck="false"
+           placeholder="Search privately or enter address">
+     </form>
++    <div id="privacySwitch" role="radiogroup" aria-label="Privacy level">
++      ${this.privacyModes_.map(m => html`
++        <button role="radio" aria-checked="${this.privacyMode_ === m.id}"
++            ?data-selected="${this.privacyMode_ === m.id}"
++            data-mode="${m.id}" @click="${this.onPrivacyModeClick_}">
++          ${m.label}
++        </button>`)}
++    </div>
++    <div id="privacyNote">${this.privacyNote_()}</div>
+   </div>
+   ${this.lazyRender_ ? html`
+     ${this.shortcutsEnabled_ ? html`
+--- a/chrome/browser/resources/new_tab_page/app.css
++++ b/chrome/browser/resources/new_tab_page/app.css
+@@ -628,3 +628,42 @@
+   box-shadow: inset 0 0 0 1.5px var(--color-new-tab-page-focus-ring),
+               0 0 0 4px color-mix(in oklab, var(--color-new-tab-page-focus-ring) 25%, transparent);
+ }
++
++#privacySwitch {
++  background: color-mix(in oklab, var(--color-new-tab-page-primary-foreground) 10%, transparent);
++  border-radius: 999px;
++  display: flex;
++  gap: 2px;
++  margin: 18px auto 0;
++  padding: 3px;
++  width: fit-content;
++}
++
++#privacySwitch button {
++  background: none;
++  border: 0;
++  border-radius: 999px;
++  color: var(--color-new-tab-page-secondary-foreground);
++  cursor: pointer;
++  font: inherit;
++  font-size: 14px;
++  padding: 7px 22px;
++  transition: background 0.15s, color 0.15s;
++}
++
++#privacySwitch button[data-selected] {
++  background: color-mix(in oklab, var(--color-new-tab-page-focus-ring) 38%, transparent);
++  box-shadow: inset 0 0 0 1px var(--color-new-tab-page-focus-ring);
++  color: var(--color-new-tab-page-primary-foreground);
++}
++
++#privacySwitch button:not([data-selected]):hover {
++  color: var(--color-new-tab-page-primary-foreground);
++}
++
++#privacyNote {
++  color: var(--color-new-tab-page-secondary-foreground);
++  font-size: 13px;
++  margin-top: 10px;
++  min-height: 1.4em;
++}
+--- a/chrome/browser/resources/new_tab_page/app.ts
++++ b/chrome/browser/resources/new_tab_page/app.ts
+@@ -242,6 +242,8 @@
+       singleColoredLogo_: {type: Boolean},
+ 
+       realboxShown_: {type: Boolean},
++      privacyMode_: {type: String},
++      privacyRestart_: {type: Boolean},
+ 
+       /**
+        * Whether the composebox has been opened at least once.
+@@ -392,6 +394,13 @@
+   protected accessor logoColor_: SkColor|null = null;
+   protected accessor singleColoredLogo_: boolean = false;
+   protected accessor realboxShown_: boolean = false;
++  protected accessor privacyMode_: string = '';
++  protected accessor privacyRestart_: boolean = false;
++  protected readonly privacyModes_ = [
++    {id: 'usability', label: 'Low'},
++    {id: 'medium', label: 'Medium'},
++    {id: 'maximum', label: 'High'},
++  ];
+   protected accessor wasComposeboxOpened_: boolean = false;
+   protected accessor showLensUploadDialog_: boolean = false;
+   protected accessor showComposebox_: boolean = false;
+@@ -542,6 +551,9 @@
+ 
+   override connectedCallback() {
+     super.connectedCallback();
++    this.pageHandler_.getPrivacyMode().then(({mode}) => {
++      this.privacyMode_ = mode;
++    });
+     realboxCanShowSecondarySideMediaQueryList.addEventListener(
+         'change', this.onRealboxCanShowSecondarySideChanged_);
+ 
+@@ -1456,6 +1468,33 @@
+     window.location.href = target;
+   }
+ 
++  protected onPrivacyModeClick_(e: Event) {
++    const mode = (e.currentTarget as HTMLElement).dataset['mode'] || '';
++    this.pageHandler_.setPrivacyMode(mode).then(
++        ({success, restartRequired}) => {
++          if (success) {
++            this.privacyMode_ = mode;
++            this.privacyRestart_ = restartRequired;
++          }
++        });
++  }
++
++  protected privacyNote_(): string {
++    if (this.privacyRestart_) {
++      return 'Restart the browser to apply every change.';
++    }
++    switch (this.privacyMode_) {
++      case 'usability':
++        return 'Ad and tracker blocking, with the fewest site problems.';
++      case 'medium':
++        return 'Recommended: strong blocking, balanced for everyday sites.';
++      case 'maximum':
++        return 'Strictest settings. Some sites may break.';
++      default:
++        return 'Choose a privacy level.';
++    }
++  }
++
+   protected greeting_(): string {
+     const hour = new Date().getHours();
+     const part = hour < 5 ? 'Night' : hour < 12 ? 'Morning' :

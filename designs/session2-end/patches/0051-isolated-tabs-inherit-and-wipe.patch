@@ -1,0 +1,239 @@
+--- a/chrome/browser/ui/tab_helpers.cc
++++ b/chrome/browser/ui/tab_helpers.cc
+@@ -3,6 +3,7 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/ui/tab_helpers.h"
++#include "chrome/browser/ui/helium_isolated/helium_isolated_tabs.h"
+ 
+ #include <cstdint>
+ #include <memory>
+@@ -318,6 +319,8 @@
+   if (adoption_tag) {
+     return;
+   }
++  // Tabs opened from an isolated tab share its private storage area.
++  helium_isolated::MaybeAttachWiper(web_contents);
+ 
+   // Mark as adopted.
+   web_contents->SetUserData(&kTabContentsAttachedTabHelpersUserDataKey,
+--- a/chrome/browser/ui/navigator/browser_navigator.cc
++++ b/chrome/browser/ui/navigator/browser_navigator.cc
+@@ -3,6 +3,7 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/ui/navigator/browser_navigator.h"
++#include "chrome/browser/ui/helium_isolated/helium_isolated_tabs.h"
+ 
+ #include <algorithm>
+ #include <memory>
+@@ -573,6 +574,23 @@
+                     : tab_util::GetSiteInstanceForNewTab(
+                           params.browser->GetProfile(), url);
+ 
++  // A tab opened from an isolated tab stays in that tab's private storage area
++  // instead of falling back to the shared one.
++  if (!params.opener) {
++    content::SiteInstance* source_site_instance =
++        params.source_site_instance
++            ? params.source_site_instance.get()
++            : (params.source_contents
++                   ? params.source_contents->GetSiteInstance()
++                   : nullptr);
++    if (auto isolated = helium_isolated::IsolatedConfigFor(
++            params.browser->GetProfile(), source_site_instance)) {
++      initial_site_instance_for_new_contents =
++          content::SiteInstance::CreateForFixedStoragePartition(
++              params.browser->GetProfile(), url, *isolated);
++    }
++  }
++
+   WebContents::CreateParams create_params(
+       params.browser->GetProfile(), initial_site_instance_for_new_contents);
+   create_params.main_frame_name = params.frame_name;
+--- a/content/browser/web_contents/web_contents_impl.cc
++++ b/content/browser/web_contents/web_contents_impl.cc
+@@ -5696,6 +5696,11 @@
+       // as long as they preserve the guest's StoragePartition.
+       site_instance =
+           SiteInstance::CreateForGuest(GetBrowserContext(), partition_config);
++    } else if (partition_config.partition_domain() == "heliumisolated") {
++      // Helium: a noopener window opened from an isolated tab stays in that
++      // tab's private storage area instead of using the shared one.
++      site_instance = SiteInstance::CreateForFixedStoragePartition(
++          GetBrowserContext(), GURL(), partition_config);
+     } else {
+       site_instance = SiteInstance::Create(GetBrowserContext());
+     }
+--- a/chrome/browser/ui/helium_isolated/helium_isolated_tabs.h
++++ b/chrome/browser/ui/helium_isolated/helium_isolated_tabs.h
+@@ -1,7 +1,16 @@
+ #ifndef CHROME_BROWSER_UI_HELIUM_ISOLATED_HELIUM_ISOLATED_TABS_H_
+ #define CHROME_BROWSER_UI_HELIUM_ISOLATED_HELIUM_ISOLATED_TABS_H_
+ 
++#include <optional>
++
++#include "content/public/browser/storage_partition_config.h"
++
+ class BrowserWindowInterface;
++namespace content {
++class BrowserContext;
++class SiteInstance;
++class WebContents;
++}  // namespace content
+ class GURL;
+ 
+ namespace helium_isolated {
+@@ -12,6 +21,19 @@
+ // deleted when the tab closes.
+ void OpenIsolatedTab(BrowserWindowInterface* browser, const GURL& url);
+ 
++// The private storage area of |contents| / |site_instance|, or nullopt when it
++// uses normal storage.
++std::optional<content::StoragePartitionConfig> IsolatedConfigFor(
++    content::WebContents* contents);
++std::optional<content::StoragePartitionConfig> IsolatedConfigFor(
++    content::BrowserContext* context,
++    content::SiteInstance* site_instance);
++
++// Makes sure the private storage area is deleted when the last tab using it
++// closes (tabs opened from an isolated tab share its area). Safe to call many
++// times.
++void MaybeAttachWiper(content::WebContents* contents);
++
+ // Test hook: when --helium-isolated-tabs=<url>,<url>... is present, opens each
+ // URL in its own isolated tab a few seconds after the first window shows.
+ void MaybeOpenStartupTabs();
+--- a/chrome/browser/ui/helium_isolated/helium_isolated_tabs.cc
++++ b/chrome/browser/ui/helium_isolated/helium_isolated_tabs.cc
+@@ -1,5 +1,6 @@
+ #include "chrome/browser/ui/helium_isolated/helium_isolated_tabs.h"
+ 
++#include <map>
+ #include <memory>
+ #include <string>
+ #include <vector>
+@@ -8,6 +9,7 @@
+ #include "base/functional/bind.h"
+ #include "base/functional/callback_helpers.h"
+ #include "base/location.h"
++#include "base/no_destructor.h"
+ #include "base/strings/string_split.h"
+ #include "base/task/single_thread_task_runner.h"
+ #include "base/time/time.h"
+@@ -23,6 +25,7 @@
+ #include "content/public/browser/storage_partition_config.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/browser/web_contents_observer.h"
++#include "content/public/browser/web_contents_user_data.h"
+ #include "third_party/blink/public/common/storage_key/storage_key.h"
+ #include "url/gurl.h"
+ 
+@@ -32,36 +35,87 @@
+ 
+ constexpr char kStartupSwitch[] = "helium-isolated-tabs";
+ 
+-// Deletes everything in the tab's private storage area when the tab goes away.
+-// Owns itself; bound to the WebContents lifetime.
+-class PartitionWiper : public content::WebContentsObserver {
++constexpr char kPartitionDomain[] = "heliumisolated";
++
++// Number of open tabs per private storage area (keyed by partition name).
++std::map<std::string, int>& TabCounts() {
++  static base::NoDestructor<std::map<std::string, int>> counts;
++  return *counts;
++}
++
++// Deletes everything in the private storage area when the last tab that uses
++// it goes away.
++class PartitionWiper : public content::WebContentsObserver,
++                       public content::WebContentsUserData<PartitionWiper> {
+  public:
+-  PartitionWiper(content::WebContents* contents,
+-                 const content::StoragePartitionConfig& config)
+-      : content::WebContentsObserver(contents), config_(config) {}
++  ~PartitionWiper() override = default;
+ 
+   void WebContentsDestroyed() override {
+-    web_contents()
+-        ->GetBrowserContext()
+-        ->GetStoragePartition(config_, /*can_create=*/false)
++    content::BrowserContext* context = web_contents()->GetBrowserContext();
++    if (--TabCounts()[config_.partition_name()] > 0) {
++      return;
++    }
++    TabCounts().erase(config_.partition_name());
++    context->GetStoragePartition(config_, /*can_create=*/false)
+         ->ClearData(content::StoragePartition::REMOVE_DATA_MASK_ALL,
+                     blink::StorageKey(), base::Time(), base::Time::Max(),
+                     base::DoNothing());
+-    delete this;
+   }
+ 
+  private:
++  friend class content::WebContentsUserData<PartitionWiper>;
++  PartitionWiper(content::WebContents* contents,
++                 const content::StoragePartitionConfig& config)
++      : content::WebContentsObserver(contents),
++        content::WebContentsUserData<PartitionWiper>(*contents),
++        config_(config) {
++    ++TabCounts()[config_.partition_name()];
++  }
++
+   content::StoragePartitionConfig config_;
++  WEB_CONTENTS_USER_DATA_KEY_DECL();
+ };
+ 
++WEB_CONTENTS_USER_DATA_KEY_IMPL(PartitionWiper);
++
+ }  // namespace
+ 
++std::optional<content::StoragePartitionConfig> IsolatedConfigFor(
++    content::BrowserContext* context,
++    content::SiteInstance* site_instance) {
++  if (!context || !site_instance) {
++    return std::nullopt;
++  }
++  const content::StoragePartitionConfig& config =
++      context->GetStoragePartition(site_instance)->GetConfig();
++  if (config.partition_domain() == kPartitionDomain) {
++    return config;
++  }
++  return std::nullopt;
++}
++
++std::optional<content::StoragePartitionConfig> IsolatedConfigFor(
++    content::WebContents* contents) {
++  return contents ? IsolatedConfigFor(contents->GetBrowserContext(),
++                                      contents->GetSiteInstance())
++                  : std::nullopt;
++}
++
++void MaybeAttachWiper(content::WebContents* contents) {
++  if (PartitionWiper::FromWebContents(contents)) {
++    return;
++  }
++  if (auto config = IsolatedConfigFor(contents)) {
++    PartitionWiper::CreateForWebContents(contents, *config);
++  }
++}
++
+ void OpenIsolatedTab(BrowserWindowInterface* browser, const GURL& url) {
+   Profile* profile = browser->GetProfile();
+   // A new, unique, in-memory partition for this tab only.
+   const content::StoragePartitionConfig config =
+       content::StoragePartitionConfig::Create(
+-          profile, "heliumisolated",
++          profile, kPartitionDomain,
+           base::Uuid::GenerateRandomV4().AsLowercaseString(),
+           /*in_memory=*/true);
+   auto site_instance = content::SiteInstance::CreateForFixedStoragePartition(
+@@ -69,7 +123,7 @@
+   auto contents = content::WebContents::Create(
+       content::WebContents::CreateParams(profile, std::move(site_instance)));
+   content::WebContents* raw = contents.get();
+-  new PartitionWiper(raw, config);
++  MaybeAttachWiper(raw);
+   browser->GetTabStripModel()->AppendWebContents(std::move(contents),
+                                                 /*foreground=*/true);
+   raw->GetController().LoadURLWithParams(

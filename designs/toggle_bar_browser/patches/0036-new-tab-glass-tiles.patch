@@ -1,0 +1,25 @@
+--- a/chrome/browser/resources/new_tab_page/app.css
++++ b/chrome/browser/resources/new_tab_page/app.css
+@@ -96,14 +96,17 @@
+ }
+ 
+ cr-most-visited {
+-  --add-shortcut-background-color: var(
+-    --color-new-tab-page-add-shortcut-background
++  --add-shortcut-background-color: color-mix(
++    in oklab, var(--color-new-tab-page-primary-foreground) 12%, transparent
+   );
+   --add-shortcut-foreground-color: var(
+-    --color-new-tab-page-add-shortcut-foreground
++    --color-new-tab-page-primary-foreground
+   );
+-  --tile-hover-color: var(
+-    --color-new-tab-page-add-shortcut-background-hovered
++  --tile-background-color: color-mix(
++    in oklab, var(--color-new-tab-page-primary-foreground) 12%, transparent
++  );
++  --tile-hover-color: color-mix(
++    in oklab, var(--color-new-tab-page-primary-foreground) 22%, transparent
+   );
+   --cr-menu-shadow: var(--ntp-menu-shadow);
+   --most-visited-focus-shadow: var(--ntp-focus-shadow);

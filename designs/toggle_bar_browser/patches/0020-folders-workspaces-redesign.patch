@@ -1,0 +1,618 @@
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -866,6 +866,8 @@
+     "helium_noise/helium_noise_settings.h",
+     "helium_privacy_mode/helium_privacy_mode.cc",
+     "helium_theme/helium_theme.cc",
++    "helium_workspaces/helium_workspaces.cc",
++    "helium_workspaces/helium_workspaces.h",
+     "helium_theme/helium_theme.h",
+     "helium_privacy_mode/helium_privacy_mode.h",
+     "icon_manager.cc",
+--- /dev/null
++++ b/chrome/browser/helium_workspaces/helium_workspaces.cc
+@@ -0,0 +1,276 @@
++#include "chrome/browser/helium_workspaces/helium_workspaces.h"
++
++#include <optional>
++#include <utility>
++
++#include "base/strings/string_number_conversions.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/uuid.h"
++#include "base/values.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser_tabstrip.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/tabs/tab_enums.h"
++#include "components/tabs/public/tab_group.h"
++#include "chrome/browser/ui/tabs/tab_group_model.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/common/webui_url_constants.h"
++#include "components/prefs/pref_registry_simple.h"
++#include "components/prefs/pref_service.h"
++#include "components/tab_groups/tab_group_id.h"
++#include "components/tab_groups/tab_group_visual_data.h"
++#include "components/tabs/public/tab_interface.h"
++#include "content/public/browser/web_contents.h"
++#include "url/gurl.h"
++
++namespace helium_workspaces {
++
++namespace {
++
++constexpr char kDefaultId[] = "main";
++
++base::DictValue NewRecord(const std::string& id, const std::string& name) {
++  base::DictValue record;
++  record.Set("id", id);
++  record.Set("name", name);
++  record.Set("tabs", base::ListValue());
++  record.Set("groups", base::ListValue());
++  return record;
++}
++
++// Makes sure the pref holds at least one workspace and a valid active id.
++void EnsureDefault(Profile* profile) {
++  PrefService* prefs = profile->GetPrefs();
++  base::ListValue list = prefs->GetList(kWorkspacesPref).Clone();
++  if (list.empty()) {
++    list.Append(NewRecord(kDefaultId, "Main"));
++    prefs->SetList(kWorkspacesPref, std::move(list));
++    prefs->SetString(kActiveWorkspacePref, kDefaultId);
++    return;
++  }
++  const std::string active = prefs->GetString(kActiveWorkspacePref);
++  for (const base::Value& item : list) {
++    const base::DictValue* dict = item.GetIfDict();
++    if (dict && dict->FindString("id") && *dict->FindString("id") == active) {
++      return;
++    }
++  }
++  const std::string* first = list.front().GetDict().FindString("id");
++  prefs->SetString(kActiveWorkspacePref, first ? *first : kDefaultId);
++}
++
++base::DictValue* FindRecord(base::ListValue& list, const std::string& id) {
++  for (base::Value& item : list) {
++    base::DictValue* dict = item.GetIfDict();
++    if (dict && dict->FindString("id") && *dict->FindString("id") == id) {
++      return dict;
++    }
++  }
++  return nullptr;
++}
++
++// Records the URL, pinned state and group of every live tab.
++void Snapshot(TabStripModel* model,
++              base::ListValue& tabs,
++              base::ListValue& groups) {
++  std::vector<tab_groups::TabGroupId> group_ids;
++  for (int i = 0; i < model->count(); ++i) {
++    content::WebContents* contents = model->GetTabAtIndex(i)->GetContents();
++    GURL url = contents->GetLastCommittedURL();
++    if (url.is_empty()) {
++      url = contents->GetVisibleURL();
++    }
++    if (!url.is_valid() || url.is_empty()) {
++      continue;
++    }
++    base::DictValue tab;
++    tab.Set("url", url.spec());
++    const bool pinned = model->IsTabPinned(i);
++    tab.Set("pinned", pinned);
++    std::optional<tab_groups::TabGroupId> group = model->GetTabGroupForTab(i);
++    if (group && !pinned) {
++      size_t index = 0;
++      while (index < group_ids.size() && group_ids[index] != *group) {
++        ++index;
++      }
++      if (index == group_ids.size()) {
++        group_ids.push_back(*group);
++        const tab_groups::TabGroupVisualData* visual =
++            model->group_model()->GetTabGroup(*group)->visual_data();
++        base::DictValue dict;
++        dict.Set("title", base::UTF16ToUTF8(visual->title()));
++        dict.Set("color", static_cast<int>(visual->color()));
++        dict.Set("collapsed", visual->is_collapsed());
++        groups.Append(std::move(dict));
++      }
++      tab.Set("group", static_cast<int>(index));
++    }
++    tabs.Append(std::move(tab));
++  }
++}
++
++// Opens the saved tabs after the existing ones and returns their handles in
++// saved order.
++std::vector<tabs::TabInterface*> Restore(BrowserWindowInterface* browser,
++                                         const base::DictValue& record) {
++  TabStripModel* model = browser->GetTabStripModel();
++  const base::ListValue* tabs = record.FindList("tabs");
++  const base::ListValue* groups = record.FindList("groups");
++
++  std::vector<tabs::TabInterface*> handles;
++  std::vector<std::vector<tabs::TabInterface*>> group_members(
++      groups ? groups->size() : 0);
++  std::vector<tabs::TabInterface*> pinned_tabs;
++  if (tabs) {
++    for (const base::Value& item : *tabs) {
++      const base::DictValue* dict = item.GetIfDict();
++      const std::string* url = dict ? dict->FindString("url") : nullptr;
++      if (!url) {
++        continue;
++      }
++      chrome::AddTabAt(browser, GURL(*url), model->count(),
++                       /*foreground=*/false);
++      tabs::TabInterface* handle = model->GetTabAtIndex(model->count() - 1);
++      handles.push_back(handle);
++      if (dict->FindBool("pinned").value_or(false)) {
++        pinned_tabs.push_back(handle);
++      } else if (std::optional<int> group = dict->FindInt("group")) {
++        if (*group >= 0 && *group < static_cast<int>(group_members.size())) {
++          group_members[*group].push_back(handle);
++        }
++      }
++    }
++  }
++  if (handles.empty()) {
++    chrome::AddTabAt(browser, GURL(chrome::kChromeUINewTabURL), model->count(),
++                     /*foreground=*/false);
++    handles.push_back(model->GetTabAtIndex(model->count() - 1));
++  }
++
++  for (size_t g = 0; g < group_members.size(); ++g) {
++    if (group_members[g].empty()) {
++      continue;
++    }
++    std::vector<int> indices;
++    for (tabs::TabInterface* handle : group_members[g]) {
++      indices.push_back(model->GetIndexOfTab(handle));
++    }
++    const tab_groups::TabGroupId id = model->AddToNewGroup(indices);
++    const base::DictValue& info = (*groups)[g].GetDict();
++    const std::string* title = info.FindString("title");
++    model->ChangeTabGroupVisuals(
++        id, tab_groups::TabGroupVisualData(
++                base::UTF8ToUTF16(title ? *title : std::string()),
++                static_cast<tab_groups::TabGroupColorId>(
++                    info.FindInt("color").value_or(0)),
++                info.FindBool("collapsed").value_or(false)));
++  }
++  for (tabs::TabInterface* handle : pinned_tabs) {
++    model->SetTabPinned(model->GetIndexOfTab(handle), true);
++  }
++  return handles;
++}
++
++}  // namespace
++
++void RegisterProfilePrefs(PrefRegistrySimple* registry) {
++  registry->RegisterListPref(kWorkspacesPref);
++  registry->RegisterStringPref(kActiveWorkspacePref, std::string());
++}
++
++std::vector<Info> List(Profile* profile) {
++  EnsureDefault(profile);
++  std::vector<Info> result;
++  for (const base::Value& item :
++       profile->GetPrefs()->GetList(kWorkspacesPref)) {
++    const base::DictValue* dict = item.GetIfDict();
++    const std::string* id = dict ? dict->FindString("id") : nullptr;
++    const std::string* name = dict ? dict->FindString("name") : nullptr;
++    if (id && name) {
++      result.push_back({*id, *name});
++    }
++  }
++  return result;
++}
++
++std::string ActiveId(Profile* profile) {
++  EnsureDefault(profile);
++  return profile->GetPrefs()->GetString(kActiveWorkspacePref);
++}
++
++void Switch(BrowserWindowInterface* browser, const std::string& id) {
++  Profile* profile = browser->GetProfile();
++  EnsureDefault(profile);
++  PrefService* prefs = profile->GetPrefs();
++  const std::string current = prefs->GetString(kActiveWorkspacePref);
++  if (id == current) {
++    return;
++  }
++  base::ListValue list = prefs->GetList(kWorkspacesPref).Clone();
++  base::DictValue* target = FindRecord(list, id);
++  base::DictValue* source = FindRecord(list, current);
++  if (!target) {
++    return;
++  }
++
++  TabStripModel* model = browser->GetTabStripModel();
++  if (source) {
++    base::ListValue tabs;
++    base::ListValue groups;
++    Snapshot(model, tabs, groups);
++    source->Set("tabs", std::move(tabs));
++    source->Set("groups", std::move(groups));
++  }
++  const base::DictValue target_copy = target->Clone();
++  prefs->SetList(kWorkspacesPref, std::move(list));
++  prefs->SetString(kActiveWorkspacePref, id);
++
++  std::vector<tabs::TabInterface*> old_tabs;
++  for (int i = 0; i < model->count(); ++i) {
++    old_tabs.push_back(model->GetTabAtIndex(i));
++  }
++  std::vector<tabs::TabInterface*> opened = Restore(browser, target_copy);
++  model->ActivateTabAt(model->GetIndexOfTab(opened.front()));
++  for (tabs::TabInterface* tab : old_tabs) {
++    model->CloseWebContentsAt(model->GetIndexOfTab(tab),
++                              TabCloseTypes::CLOSE_NONE);
++  }
++}
++
++void Create(BrowserWindowInterface* browser) {
++  Profile* profile = browser->GetProfile();
++  EnsureDefault(profile);
++  PrefService* prefs = profile->GetPrefs();
++  base::ListValue list = prefs->GetList(kWorkspacesPref).Clone();
++  const std::string id = base::Uuid::GenerateRandomV4().AsLowercaseString();
++  list.Append(NewRecord(
++      id, "Workspace " + base::NumberToString(list.size() + 1)));
++  prefs->SetList(kWorkspacesPref, std::move(list));
++  Switch(browser, id);
++}
++
++void Delete(BrowserWindowInterface* browser, const std::string& id) {
++  Profile* profile = browser->GetProfile();
++  std::vector<Info> all = List(profile);
++  if (all.size() <= 1) {
++    return;
++  }
++  if (id == ActiveId(profile)) {
++    for (const Info& info : all) {
++      if (info.id != id) {
++        Switch(browser, info.id);
++        break;
++      }
++    }
++  }
++  PrefService* prefs = profile->GetPrefs();
++  base::ListValue list = prefs->GetList(kWorkspacesPref).Clone();
++  list.EraseIf([&](const base::Value& item) {
++    const base::DictValue* dict = item.GetIfDict();
++    const std::string* item_id = dict ? dict->FindString("id") : nullptr;
++    return item_id && *item_id == id;
++  });
++  prefs->SetList(kWorkspacesPref, std::move(list));
++}
++
++}  // namespace helium_workspaces
+--- /dev/null
++++ b/chrome/browser/helium_workspaces/helium_workspaces.h
+@@ -0,0 +1,41 @@
++#ifndef CHROME_BROWSER_HELIUM_WORKSPACES_HELIUM_WORKSPACES_H_
++#define CHROME_BROWSER_HELIUM_WORKSPACES_HELIUM_WORKSPACES_H_
++
++#include <string>
++#include <vector>
++
++class BrowserWindowInterface;
++class PrefRegistrySimple;
++class Profile;
++
++// Workspaces: named sets of tabs (with pinned state and tab groups) kept in
++// the profile's prefs. Only one workspace is live at a time. Switching saves the
++// URLs of the live tabs, closes them, and reopens the target workspace's tabs,
++// so inactive tabs lose scroll position and form state. The active workspace is
++// per profile, shared by all windows of that profile.
++namespace helium_workspaces {
++
++inline constexpr char kWorkspacesPref[] = "helium.workspaces";
++inline constexpr char kActiveWorkspacePref[] = "helium.workspaces_active";
++
++struct Info {
++  std::string id;
++  std::string name;
++};
++
++void RegisterProfilePrefs(PrefRegistrySimple* registry);
++
++// Always returns at least one workspace.
++std::vector<Info> List(Profile* profile);
++std::string ActiveId(Profile* profile);
++
++// Saves the live tabs into the current workspace, then makes `id` live.
++void Switch(BrowserWindowInterface* browser, const std::string& id);
++// Creates an empty workspace ("Workspace N") and switches to it.
++void Create(BrowserWindowInterface* browser);
++// Deletes a workspace (not the last one). Deleting the live one switches first.
++void Delete(BrowserWindowInterface* browser, const std::string& id);
++
++}  // namespace helium_workspaces
++
++#endif  // CHROME_BROWSER_HELIUM_WORKSPACES_HELIUM_WORKSPACES_H_
+--- a/chrome/browser/prefs/browser_prefs.cc
++++ b/chrome/browser/prefs/browser_prefs.cc
+@@ -40,6 +40,7 @@
+ #include "chrome/browser/gpu/gpu_mode_manager.h"
+ #include "chrome/browser/helium_privacy_mode/helium_privacy_mode.h"
+ #include "chrome/browser/helium_theme/helium_theme.h"
++#include "chrome/browser/helium_workspaces/helium_workspaces.h"
+ #include "chrome/browser/hid/hid_policy_allowed_devices.h"
+ #include "chrome/browser/intranet_redirect_detector.h"
+ #include "chrome/browser/lifetime/browser_shutdown.h"
+@@ -1752,6 +1753,7 @@
+   // User prefs. Please keep this list alphabetized.
+   helium_privacy_mode::RegisterProfilePrefs(registry);
+   helium_theme::RegisterProfilePrefs(registry);
++  helium_workspaces::RegisterProfilePrefs(registry);
+   AccessibilityLabelsService::RegisterProfilePrefs(registry);
+   registry->RegisterBooleanPref(prefs::kRendererAccessibilityEnabled, true);
+   AccessibilityUIMessageHandler::RegisterProfilePrefs(registry);
+--- a/chrome/browser/ui/layout_constants.cc
++++ b/chrome/browser/ui/layout_constants.cc
+@@ -149,15 +149,15 @@
+     case LayoutConstant::kMainBackgroundRegionCornerRadius:
+     case LayoutConstant::kToolbarCornerRadius:
+     case LayoutConstant::kVerticalTabCornerRadius:
+-      return 8;
++      return 12;
+     case LayoutConstant::kVerticalTabHeight:
+-      return 30;
++      return 36;
+     case LayoutConstant::kVerticalTabPinnedHeight:
+-      return 30;
++      return 36;
+     case LayoutConstant::kVerticalTabMinWidth:
+-      return 30;
++      return 36;
+     case LayoutConstant::kVerticalTabStripHorizontalPadding:
+-      return 6;
++      return 8;
+     case LayoutConstant::kVerticalTabStripUncollapsedVerticalPadding:
+       return 6;
+     case LayoutConstant::kVerticalTabStripCollapsedVerticalPadding:
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+@@ -52,6 +52,7 @@
+ #include "chrome/browser/ui/views/tabs/shared/drop_arrow.h"
+ #include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h"
+ #include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_footer.h"
++#include "chrome/browser/ui/views/tabs/vertical/workspace_switcher.h"
+ #include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_focus_swipe_controller.h"
+ #include "chrome/browser/ui/web_applications/app_browser_controller.h"
+ #include "chrome/grit/generated_resources.h"
+@@ -153,6 +154,14 @@
+                                views::MinimumFlexSizeRule::kScaleToZero,
+                                views::MaximumFlexSizeRule::kUnbounded));
+ 
++  // Workspace chips above the footer.
++  auto* workspaces = AddChildView(
++      std::make_unique<WorkspaceSwitcher>(browser_view->browser()));
++  workspaces->SetProperty(
++      views::kMarginsKey,
++      gfx::Insets::TLBR(kBottomContainerGap, region_horizontal_padding, 0,
++                        region_horizontal_padding));
++
+   // Quick access to settings, extensions, downloads, history and bookmarks.
+   auto* footer = AddChildView(std::make_unique<VerticalTabStripFooter>(
+       state_controller_, browser_view->browser()));
+--- a/chrome/browser/ui/views/tabs/vertical/BUILD.gn
++++ b/chrome/browser/ui/views/tabs/vertical/BUILD.gn
+@@ -11,6 +11,7 @@
+     "vertical_new_tab_button.h",
+     "vertical_tab_strip_bottom_container.h",
+     "vertical_tab_strip_footer.h",
++    "workspace_switcher.h",
+     "vertical_tab_strip_expand_on_hover_lock.h",
+     "vertical_tab_strip_focus_swipe_controller.h",
+     "vertical_tab_strip_scroll_bar.h",
+@@ -42,6 +43,7 @@
+     "vertical_new_tab_button.cc",
+     "vertical_tab_strip_bottom_container.cc",
+     "vertical_tab_strip_footer.cc",
++    "workspace_switcher.cc",
+     "vertical_tab_strip_expand_on_hover_lock.cc",
+     "vertical_tab_strip_focus_swipe_controller.cc",
+     "vertical_tab_strip_scroll_bar.cc",
+--- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_footer.cc
++++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_footer.cc
+@@ -26,6 +26,8 @@
+   SetMainAxisAlignment(views::LayoutAlignment::kCenter);
+   SetCrossAxisAlignment(views::LayoutAlignment::kCenter);
+ 
++  AddButton(kCreateNewTabGroupOldIcon, IDC_CREATE_NEW_TAB_GROUP,
++            u"New folder (tab group)");
+   AddButton(vector_icons::kSettingsIcon, IDC_OPTIONS, u"Settings");
+   AddButton(vector_icons::kChromeExtensionIcon, IDC_MANAGE_EXTENSIONS,
+             u"Extensions");
+--- /dev/null
++++ b/chrome/browser/ui/views/tabs/vertical/workspace_switcher.cc
+@@ -0,0 +1,125 @@
++#include "chrome/browser/ui/views/tabs/vertical/workspace_switcher.h"
++
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/i18n/case_conversion.h"
++#include "base/task/single_thread_task_runner.h"
++#include "base/strings/utf_string_conversions.h"
++#include "chrome/browser/helium_workspaces/helium_workspaces.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/color/chrome_color_id.h"
++#include "components/prefs/pref_service.h"
++#include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/base/mojom/menu_source_type.mojom.h"
++#include "ui/gfx/geometry/rect.h"
++#include "ui/views/background.h"
++#include "ui/views/controls/button/label_button.h"
++#include "ui/views/controls/menu/menu_runner.h"
++#include "ui/views/layout/flex_layout_types.h"
++#include "ui/views/view_class_properties.h"
++
++namespace {
++constexpr int kChipSize = 28;
++constexpr int kChipRadius = 10;
++constexpr int kDeleteCommand = 1;
++}  // namespace
++
++WorkspaceSwitcher::WorkspaceSwitcher(BrowserWindowInterface* browser)
++    : browser_(browser) {
++  SetMainAxisAlignment(views::LayoutAlignment::kCenter);
++  SetCrossAxisAlignment(views::LayoutAlignment::kCenter);
++
++  PrefService* prefs = browser_->GetProfile()->GetPrefs();
++  pref_registrar_.Init(prefs);
++  auto rebuild = base::BindRepeating(&WorkspaceSwitcher::ScheduleRebuild,
++                                     base::Unretained(this));
++  pref_registrar_.Add(helium_workspaces::kWorkspacesPref, rebuild);
++  pref_registrar_.Add(helium_workspaces::kActiveWorkspacePref, rebuild);
++  Rebuild();
++}
++
++WorkspaceSwitcher::~WorkspaceSwitcher() = default;
++
++void WorkspaceSwitcher::ScheduleRebuild() {
++  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++      FROM_HERE, base::BindOnce(&WorkspaceSwitcher::Rebuild,
++                                weak_factory_.GetWeakPtr()));
++}
++
++void WorkspaceSwitcher::Rebuild() {
++  RemoveAllChildViews();
++  chips_.clear();
++  Profile* profile = browser_->GetProfile();
++  const std::string active = helium_workspaces::ActiveId(profile);
++
++  auto add_chip = [&](std::u16string label, std::u16string tooltip,
++                      base::RepeatingClosure action, bool selected) {
++    auto chip = std::make_unique<views::LabelButton>(
++        base::BindRepeating([](base::RepeatingClosure action,
++                               const ui::Event&) { action.Run(); },
++                            std::move(action)),
++        std::move(label));
++    chip->SetTooltipText(std::move(tooltip));
++    chip->SetPreferredSize(gfx::Size(kChipSize, kChipSize));
++    chip->SetMinSize(gfx::Size(kChipSize, kChipSize));
++    // Both colours are theme tokens, so the chips follow the wallpaper theme.
++    if (selected) {
++      chip->SetBackground(views::CreateRoundedRectBackground(
++          kColorTabBackgroundActiveFrameActive, kChipRadius));
++    }
++    chip->SetProperty(views::kMarginsKey, gfx::Insets::VH(1, 2));
++    return AddChildView(std::move(chip));
++  };
++
++  for (const helium_workspaces::Info& info :
++       helium_workspaces::List(profile)) {
++    std::u16string name = base::UTF8ToUTF16(info.name);
++    std::u16string letter = base::i18n::ToUpper(name.substr(0, 1));
++    views::View* chip = add_chip(
++        letter, name,
++        base::BindRepeating(
++            [](WorkspaceSwitcher* self, std::string id) {
++              helium_workspaces::Switch(self->browser_, id);
++            },
++            base::Unretained(this), info.id),
++        info.id == active);
++    chip->set_context_menu_controller(this);
++    chips_.emplace_back(chip, info.id);
++  }
++  add_chip(u"+", u"New workspace",
++           base::BindRepeating(
++               [](WorkspaceSwitcher* self) {
++                 helium_workspaces::Create(self->browser_);
++               },
++               base::Unretained(this)),
++           false);
++  InvalidateLayout();
++}
++
++void WorkspaceSwitcher::ShowContextMenuForViewImpl(
++    views::View* source,
++    const gfx::Point& point,
++    ui::mojom::MenuSourceType source_type) {
++  for (const auto& [view, id] : chips_) {
++    if (view == source) {
++      menu_workspace_id_ = id;
++    }
++  }
++  menu_model_ = std::make_unique<ui::SimpleMenuModel>(this);
++  menu_model_->AddItem(kDeleteCommand, u"Delete workspace");
++  menu_runner_ = std::make_unique<views::MenuRunner>(
++      menu_model_.get(), views::MenuRunner::CONTEXT_MENU);
++  menu_runner_->RunMenuAt(GetWidget(), nullptr, gfx::Rect(point, gfx::Size()),
++                          views::MenuAnchorPosition::kTopLeft, source_type);
++}
++
++void WorkspaceSwitcher::ExecuteCommand(int command_id, int event_flags) {
++  if (command_id == kDeleteCommand) {
++    helium_workspaces::Delete(browser_, menu_workspace_id_);
++  }
++}
++
++BEGIN_METADATA(WorkspaceSwitcher)
++END_METADATA
+--- /dev/null
++++ b/chrome/browser/ui/views/tabs/vertical/workspace_switcher.h
+@@ -0,0 +1,58 @@
++#ifndef CHROME_BROWSER_UI_VIEWS_TABS_VERTICAL_WORKSPACE_SWITCHER_H_
++#define CHROME_BROWSER_UI_VIEWS_TABS_VERTICAL_WORKSPACE_SWITCHER_H_
++
++#include <memory>
++#include <string>
++#include <vector>
++
++#include "base/memory/raw_ptr.h"
++#include "base/memory/weak_ptr.h"
++#include "components/prefs/pref_change_registrar.h"
++#include "ui/base/metadata/metadata_header_macros.h"
++#include "ui/menus/simple_menu_model.h"
++#include "ui/views/context_menu_controller.h"
++#include "ui/views/layout/flex_layout_view.h"
++
++class BrowserWindowInterface;
++
++namespace views {
++class MenuRunner;
++}  // namespace views
++
++// A row of round chips at the bottom of the sidebar, one per workspace, plus a
++// "+" chip that creates a workspace. Clicking a chip switches to it; right-click
++// offers deleting it. See helium_workspaces.h for what switching does.
++class WorkspaceSwitcher : public views::FlexLayoutView,
++                          public views::ContextMenuController,
++                          public ui::SimpleMenuModel::Delegate {
++  METADATA_HEADER(WorkspaceSwitcher, views::FlexLayoutView)
++
++ public:
++  explicit WorkspaceSwitcher(BrowserWindowInterface* browser);
++  ~WorkspaceSwitcher() override;
++
++ private:
++  void Rebuild();
++  // Prefs change while a chip's own click is running, so rebuild afterwards.
++  void ScheduleRebuild();
++
++  // views::ContextMenuController:
++  void ShowContextMenuForViewImpl(
++      views::View* source,
++      const gfx::Point& point,
++      ui::mojom::MenuSourceType source_type) override;
++
++  // ui::SimpleMenuModel::Delegate:
++  void ExecuteCommand(int command_id, int event_flags) override;
++
++  raw_ptr<BrowserWindowInterface> browser_;
++  PrefChangeRegistrar pref_registrar_;
++  std::string menu_workspace_id_;
++  std::unique_ptr<ui::SimpleMenuModel> menu_model_;
++  std::unique_ptr<views::MenuRunner> menu_runner_;
++  // Parallel to the chips: the workspace id behind each child view.
++  std::vector<std::pair<raw_ptr<views::View>, std::string>> chips_;
++  base::WeakPtrFactory<WorkspaceSwitcher> weak_factory_{this};
++};
++
++#endif  // CHROME_BROWSER_UI_VIEWS_TABS_VERTICAL_WORKSPACE_SWITCHER_H_
