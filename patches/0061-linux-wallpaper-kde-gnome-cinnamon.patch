@@ -1,0 +1,411 @@
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -869,6 +869,8 @@
+     "helium_workspaces/helium_workspaces.cc",
+     "helium_workspaces/helium_workspaces.h",
+     "helium_theme/helium_theme.h",
++    "helium_theme/wallpaper_config_parsers.cc",
++    "helium_theme/wallpaper_config_parsers.h",
+     "helium_privacy_mode/helium_privacy_mode.h",
+     "icon_manager.cc",
+     "intranet_redirect_detector.cc",
+--- a/chrome/browser/helium_theme/helium_theme.cc
++++ b/chrome/browser/helium_theme/helium_theme.cc
+@@ -1,7 +1,9 @@
+ #include "chrome/browser/helium_theme/helium_theme.h"
++#include "chrome/browser/helium_theme/wallpaper_config_parsers.h"
+ 
+ #include <algorithm>
+ #include <cmath>
++#include <memory>
+ #include <string>
+ #include <tuple>
+ #include <utility>
+@@ -10,10 +12,12 @@
+ #include "base/command_line.h"
+ #include "base/environment.h"
+ #include "base/files/file_path.h"
++#include "base/files/file_enumerator.h"
+ #include "base/files/file_path_watcher.h"
+ #include "base/files/file_util.h"
+ #include "base/functional/bind.h"
+ #include "base/logging.h"
++#include "base/process/launch.h"
+ #include "base/memory/weak_ptr.h"
+ #include "base/scoped_observation.h"
+ #include "base/no_destructor.h"
+@@ -81,9 +85,120 @@
+ }
+ #endif
+ 
++#if BUILDFLAG(IS_LINUX)
++enum class LinuxDesktop { kOther, kKde, kGnome, kCinnamon };
++
++// From XDG_CURRENT_DESKTOP, a colon-separated list such as "ubuntu:GNOME".
++LinuxDesktop DetectLinuxDesktop() {
++  std::string value =
++      base::Environment::Create()->GetVar("XDG_CURRENT_DESKTOP").value_or("");
++  for (std::string_view name : base::SplitStringPiece(
++           base::ToUpperASCII(value), ":", base::TRIM_WHITESPACE,
++           base::SPLIT_WANT_NONEMPTY)) {
++    if (name == "KDE") return LinuxDesktop::kKde;
++    if (name == "X-CINNAMON" || name == "CINNAMON") return LinuxDesktop::kCinnamon;
++    if (name == "GNOME" || name == "UNITY" || name == "BUDGIE") {
++      return LinuxDesktop::kGnome;
++    }
++  }
++  return LinuxDesktop::kOther;
++}
++
++base::FilePath ConfigHome() {
++  std::optional<std::string> dir =
++      base::Environment::Create()->GetVar("XDG_CONFIG_HOME");
++  return dir && !dir->empty() ? base::FilePath(*dir)
++                              : base::GetHomeDir().Append(".config");
++}
++
++base::FilePath KdeWallpaperConfig() {
++  return ConfigHome().Append("plasma-org.kde.plasma.desktop-appletsrc");
++}
++
++// GNOME and Cinnamon keep settings in dconf; every gsettings write changes this file.
++base::FilePath DconfUserDb() {
++  return ConfigHome().Append("dconf/user");
++}
++
++base::FilePath ExpandHome(const std::string& path) {
++  if (path.starts_with("~/")) {
++    return base::GetHomeDir().Append(path.substr(2));
++  }
++  return base::FilePath(path);
++}
++
++std::string GSettingsGet(const char* schema, const char* key) {
++  std::string output;
++  if (!base::GetAppOutput({"gsettings", "get", schema, key}, &output)) {
++    return std::string();
++  }
++  return output;
++}
++
++// KDE's default wallpapers are folders (.../Next); the images are in
++// contents/images. Picks the biggest file, which is the highest resolution.
++base::FilePath ResolveWallpaperPackage(const base::FilePath& path) {
++  if (!base::DirectoryExists(path)) {
++    return path;
++  }
++  base::FilePath best;
++  int64_t best_size = 0;
++  base::FileEnumerator files(path.Append("contents/images"), false,
++                             base::FileEnumerator::FILES);
++  for (base::FilePath f = files.Next(); !f.empty(); f = files.Next()) {
++    if (files.GetInfo().GetSize() > best_size) {
++      best_size = files.GetInfo().GetSize();
++      best = f;
++    }
++  }
++  return best;
++}
++
++// Wallpaper of the running desktop environment. Runs on a blocking thread.
++// shortcut: only KDE, GNOME and Cinnamon; other desktops fall back to the accent.
++base::FilePath LinuxDesktopWallpaper() {
++  std::string path;
++  switch (DetectLinuxDesktop()) {
++    case LinuxDesktop::kKde: {
++      std::string ini;
++      if (base::ReadFileToString(KdeWallpaperConfig(), &ini)) {
++        path = helium_theme::wallpaper::ParseKdeAppletsrc(ini);
++      }
++      break;
++    }
++    case LinuxDesktop::kGnome:
++      // The dark-mode wallpaper is only used when the desktop is in dark mode.
++      if (GSettingsGet("org.gnome.desktop.interface", "color-scheme")
++              .find("prefer-dark") != std::string::npos) {
++        path = helium_theme::wallpaper::ParseGSettingsValue(
++            GSettingsGet("org.gnome.desktop.background", "picture-uri-dark"));
++      }
++      if (path.empty()) {
++        path = helium_theme::wallpaper::ParseGSettingsValue(
++            GSettingsGet("org.gnome.desktop.background", "picture-uri"));
++      }
++      break;
++    case LinuxDesktop::kCinnamon:
++      path = helium_theme::wallpaper::ParseGSettingsValue(
++          GSettingsGet("org.cinnamon.desktop.background", "picture-uri"));
++      break;
++    case LinuxDesktop::kOther:
++      break;
++  }
++  return path.empty() ? base::FilePath()
++                      : ResolveWallpaperPackage(ExpandHome(path));
++}
++
++// Omarchy's wallpaper when present, otherwise the desktop environment's.
++base::FilePath LinuxWallpaperPath() {
++  base::FilePath omarchy = OmarchyCurrentDir().Append("background");
++  return base::PathExists(omarchy) ? omarchy : LinuxDesktopWallpaper();
++}
++#endif
++
+ base::FilePath DefaultWallpaperPath() {
+ #if BUILDFLAG(IS_LINUX)
+-  return OmarchyCurrentDir().Append("background");
++  return LinuxWallpaperPath();
+ #elif BUILDFLAG(IS_WIN)
+   wchar_t buffer[MAX_PATH] = {};
+   if (SystemParametersInfoW(SPI_GETDESKWALLPAPER, MAX_PATH, buffer, 0)) {
+@@ -287,10 +402,18 @@
+     observation_.Observe(ui::NativeTheme::GetInstanceForNativeUi());
+ #if BUILDFLAG(IS_LINUX)
+     if (wallpaper_override_.empty()) {
+-      std::ignore = watcher_.Watch(
+-          OmarchyCurrentDir(), base::FilePathWatcher::Type::kNonRecursive,
+-          base::BindRepeating(&DesktopWatcher::OnFileChanged,
+-                              base::Unretained(this)));
++      WatchPath(OmarchyCurrentDir());
++      switch (DetectLinuxDesktop()) {
++        case LinuxDesktop::kKde:
++          WatchPath(KdeWallpaperConfig());
++          break;
++        case LinuxDesktop::kGnome:
++        case LinuxDesktop::kCinnamon:
++          WatchPath(DconfUserDb());
++          break;
++        case LinuxDesktop::kOther:
++          break;
++      }
+     }
+ #endif
+   }
+@@ -306,6 +429,17 @@
+   }
+ 
+  private:
++#if BUILDFLAG(IS_LINUX)
++  // A file path is re-armed by the watcher when the file is replaced on save.
++  void WatchPath(const base::FilePath& path) {
++    auto watcher = std::make_unique<base::FilePathWatcher>();
++    if (watcher->Watch(path, base::FilePathWatcher::Type::kNonRecursive,
++                       base::BindRepeating(&DesktopWatcher::OnFileChanged,
++                                           base::Unretained(this)))) {
++      watchers_.push_back(std::move(watcher));
++    }
++  }
++#endif
+   void OnNativeThemeUpdated(ui::NativeTheme*) override { Schedule(); }
+   void OnFileChanged(const base::FilePath&, bool) { Schedule(); }
+   void Schedule() {
+@@ -317,7 +451,7 @@
+   base::FilePath wallpaper_override_;
+   bool started_ = false;
+   base::OneShotTimer timer_;
+-  base::FilePathWatcher watcher_;
++  std::vector<std::unique_ptr<base::FilePathWatcher>> watchers_;
+   base::ScopedObservation<ui::NativeTheme, ui::NativeThemeObserver>
+       observation_{this};
+ };
+--- /dev/null
++++ b/chrome/browser/helium_theme/wallpaper_config_parsers.h
+@@ -0,0 +1,29 @@
++// Pure text parsers that find the current wallpaper path in the config files and
++// command output of Linux desktops. std-only so they can be tested without a
++// Chromium build (scripts/test_wallpaper_parsers.sh). All return "" when no
++// wallpaper path is found. A leading "~/" is left for the caller to expand.
++#ifndef CHROME_BROWSER_HELIUM_THEME_WALLPAPER_CONFIG_PARSERS_H_
++#define CHROME_BROWSER_HELIUM_THEME_WALLPAPER_CONFIG_PARSERS_H_
++
++#include <string>
++
++namespace helium_theme::wallpaper {
++
++// `gsettings get ...picture-uri` output, e.g. 'file:///usr/share/a%20b.jpg'.
++std::string ParseGSettingsValue(const std::string& output);
++// ~/.config/plasma-org.kde.plasma.desktop-appletsrc (first org.kde.image Image=).
++std::string ParseKdeAppletsrc(const std::string& ini);
++// xfce4-desktop.xml (first "last-image" property).
++std::string ParseXfceDesktopXml(const std::string& xml);
++// ~/.fehbg (last quoted path on the feh line).
++std::string ParseFehbg(const std::string& script);
++// ~/.config/nitrogen/bg-saved.cfg (first file=).
++std::string ParseNitrogen(const std::string& cfg);
++// sway config: `output <name> bg <path> <mode>`.
++std::string ParseSwayConfig(const std::string& config);
++// hyprpaper.conf: `wallpaper = mon,path`, `path = ...` or `preload = ...`.
++std::string ParseHyprpaper(const std::string& config);
++
++}  // namespace helium_theme::wallpaper
++
++#endif  // CHROME_BROWSER_HELIUM_THEME_WALLPAPER_CONFIG_PARSERS_H_
+--- /dev/null
++++ b/chrome/browser/helium_theme/wallpaper_config_parsers.cc
+@@ -0,0 +1,168 @@
++#include "chrome/browser/helium_theme/wallpaper_config_parsers.h"
++
++#include <cctype>
++#include <sstream>
++#include <utility>
++#include <vector>
++
++namespace helium_theme::wallpaper {
++namespace {
++
++std::string Trim(const std::string& s) {
++  size_t b = 0, e = s.size();
++  while (b < e && std::isspace(static_cast<unsigned char>(s[b]))) ++b;
++  while (e > b && std::isspace(static_cast<unsigned char>(s[e - 1]))) --e;
++  return s.substr(b, e - b);
++}
++
++std::vector<std::string> Lines(const std::string& text) {
++  std::vector<std::string> lines;
++  std::istringstream in(text);
++  for (std::string line; std::getline(in, line);) lines.push_back(Trim(line));
++  return lines;
++}
++
++bool StartsWith(const std::string& s, const std::string& prefix) {
++  return s.compare(0, prefix.size(), prefix) == 0;
++}
++
++int HexValue(char c) {
++  if (c >= '0' && c <= '9') return c - '0';
++  if (c >= 'a' && c <= 'f') return c - 'a' + 10;
++  if (c >= 'A' && c <= 'F') return c - 'A' + 10;
++  return -1;
++}
++
++std::string PercentDecode(const std::string& s) {
++  std::string out;
++  for (size_t i = 0; i < s.size(); ++i) {
++    if (s[i] == '%' && i + 2 < s.size() && HexValue(s[i + 1]) >= 0 &&
++        HexValue(s[i + 2]) >= 0) {
++      out += static_cast<char>(HexValue(s[i + 1]) * 16 + HexValue(s[i + 2]));
++      i += 2;
++    } else {
++      out += s[i];
++    }
++  }
++  return out;
++}
++
++// "file:///a/b.jpg" or "/a/b.jpg" -> "/a/b.jpg"; anything else (http:, colors) -> "".
++std::string UriToPath(const std::string& value) {
++  std::string v = Trim(value);
++  if (StartsWith(v, "file://")) return PercentDecode(v.substr(7));
++  if (StartsWith(v, "/") || StartsWith(v, "~/")) return v;
++  return "";
++}
++
++std::string Unquote(std::string v) {
++  v = Trim(v);
++  if (v.size() >= 2 && (v.front() == '\'' || v.front() == '"') &&
++      v.back() == v.front()) {
++    v = v.substr(1, v.size() - 2);
++  }
++  return v;
++}
++
++}  // namespace
++
++std::string ParseGSettingsValue(const std::string& output) {
++  // Output is a GVariant string: 'file:///x.jpg' (possibly with a type prefix).
++  return UriToPath(Unquote(output));
++}
++
++std::string ParseKdeAppletsrc(const std::string& ini) {
++  bool in_image_section = false;
++  for (const std::string& line : Lines(ini)) {
++    if (!line.empty() && line.front() == '[') {
++      in_image_section =
++          line.find("[Wallpaper][org.kde.image][General]") != std::string::npos;
++    } else if (in_image_section && StartsWith(line, "Image=")) {
++      std::string path = UriToPath(line.substr(6));
++      if (!path.empty()) return path;
++    }
++  }
++  return "";
++}
++
++std::string ParseXfceDesktopXml(const std::string& xml) {
++  const std::string key = "name=\"last-image\"";
++  size_t at = xml.find(key);
++  while (at != std::string::npos) {
++    size_t v = xml.find("value=\"", at);
++    size_t end_of_tag = xml.find('>', at);
++    if (v != std::string::npos && v < end_of_tag) {
++      v += 7;
++      std::string value = xml.substr(v, xml.find('"', v) - v);
++      for (const auto& [from, to] : std::vector<std::pair<std::string, std::string>>{
++               {"&amp;", "&"}, {"&lt;", "<"}, {"&gt;", ">"}, {"&quot;", "\""},
++               {"&apos;", "'"}}) {
++        for (size_t p; (p = value.find(from)) != std::string::npos;)
++          value.replace(p, from.size(), to);
++      }
++      std::string path = UriToPath(value);
++      if (!path.empty()) return path;
++    }
++    at = xml.find(key, at + key.size());
++  }
++  return "";
++}
++
++std::string ParseFehbg(const std::string& script) {
++  for (const std::string& line : Lines(script)) {
++    if (line.find("feh") == std::string::npos) continue;
++    size_t close = line.rfind('\'');
++    if (close == std::string::npos || close == 0) continue;
++    size_t open = line.rfind('\'', close - 1);
++    if (open == std::string::npos) continue;
++    std::string path = UriToPath(line.substr(open + 1, close - open - 1));
++    if (!path.empty()) return path;
++  }
++  return "";
++}
++
++std::string ParseNitrogen(const std::string& cfg) {
++  for (const std::string& line : Lines(cfg)) {
++    if (StartsWith(line, "file=")) {
++      std::string path = UriToPath(line.substr(5));
++      if (!path.empty()) return path;
++    }
++  }
++  return "";
++}
++
++std::string ParseSwayConfig(const std::string& config) {
++  for (const std::string& line : Lines(config)) {
++    if (!StartsWith(line, "output")) continue;
++    size_t bg = line.find(" bg ");
++    if (bg == std::string::npos) continue;
++    std::istringstream rest(line.substr(bg + 4));
++    std::string token;
++    rest >> token;
++    std::string path = UriToPath(Unquote(token));  // "#rrggbb solid_color" -> ""
++    if (!path.empty()) return path;
++  }
++  return "";
++}
++
++std::string ParseHyprpaper(const std::string& config) {
++  for (const std::string& line : Lines(config)) {
++    size_t eq = line.find('=');
++    if (eq == std::string::npos) continue;
++    std::string key = Trim(line.substr(0, eq)), value = Trim(line.substr(eq + 1));
++    if (key == "wallpaper") {
++      size_t comma = value.find(',');
++      if (comma != std::string::npos) value = Trim(value.substr(comma + 1));
++      // Newer syntax allows ",<path>,fit"; keep only the path part.
++      size_t more = value.find(',');
++      if (more != std::string::npos) value = Trim(value.substr(0, more));
++    } else if (key != "path" && key != "preload") {
++      continue;
++    }
++    std::string path = UriToPath(value);
++    if (!path.empty()) return path;
++  }
++  return "";
++}
++
++}  // namespace helium_theme::wallpaper
