@@ -1,0 +1,13 @@
+--- a/chrome/common/chrome_paths_linux.cc
++++ b/chrome/common/chrome_paths_linux.cc
+@@ -90,7 +90,9 @@
+         GetXDGDirectory(env.get(), kXdgConfigHomeEnvVar, kDotConfigDir);
+   }
+ 
+-  std::string data_dir_basename = "net.imput.helium";
++  // Own folder: sharing Helium's net.imput.helium profile let our privacy
++  // modes and older Chromium rewrite real Helium users' data.
++  std::string data_dir_basename = "heliumpp";
+   *result = config_dir.Append(data_dir_basename + GetChannelSuffixForDataDir());
+   return true;
+ }

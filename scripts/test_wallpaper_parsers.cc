@@ -36,6 +36,16 @@ int main() {
   EXPECT(ParseHyprpaper("preload = /home/u/h.jpg\nwallpaper = DP-1,/home/u/h.jpg\n"), "/home/u/h.jpg");
   EXPECT(ParseHyprpaper("wallpaper = ,~/Pictures/x.png\n"), "~/Pictures/x.png");
   EXPECT(ParseHyprpaper("wallpaper {\n  monitor = DP-1\n  path = /home/u/new.png\n  fit_mode = cover\n}\n"), "/home/u/new.png");
+  EXPECT(ParseIniValue("[KDE]\nLookAndFeelPackage=org.kde.breezedark.desktop\n", "KDE", "LookAndFeelPackage"), "org.kde.breezedark.desktop");
+  EXPECT(ParseIniValue("[General]\nAccentColor = 61,174,233\n[KDE]\nX=1\n", "General", "AccentColor"), "61,174,233");
+  EXPECT(ParseIniValue("[Colors:Window]\nAccentColor=1,2,3\n[General]\n", "General", "AccentColor"), "");
+  EXPECT(ParseIniValue("[General]\nAccentColorFromWallpaper=true\n", "General", "AccentColor"), "");
+  EXPECT(ParseIniValue("[Wallpaper]\nImage=Next\n", "Wallpaper", "Image"), "Next");
+  EXPECT(std::to_string(ParseKdeRgb("61,174,233")), std::to_string(0x3daee9));
+  EXPECT(std::to_string(ParseKdeRgb("61,174,233,255")), std::to_string(0x3daee9));
+  EXPECT(std::to_string(ParseKdeRgb("61,174")), "-1");
+  EXPECT(std::to_string(ParseKdeRgb("300,0,0")), "-1");
+  EXPECT(std::to_string(ParseKdeRgb("#3daee9")), "-1");
   if (fails == 0) std::printf("ALL PASS\n");
   return fails != 0;
 }

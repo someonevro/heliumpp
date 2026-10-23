@@ -1,0 +1,175 @@
+--- a/chrome/browser/helium_theme/helium_theme.cc
++++ b/chrome/browser/helium_theme/helium_theme.cc
+@@ -157,6 +157,88 @@
+   return best;
+ }
+ 
++// $XDG_DATA_HOME, then $XDG_DATA_DIRS (spec defaults when unset).
++std::vector<base::FilePath> DataDirs() {
++  auto env = base::Environment::Create();
++  std::optional<std::string> home = env->GetVar("XDG_DATA_HOME");
++  std::vector<base::FilePath> dirs = {
++      home && !home->empty() ? base::FilePath(*home)
++                             : base::GetHomeDir().Append(".local/share")};
++  std::string system = env->GetVar("XDG_DATA_DIRS").value_or("");
++  for (const std::string& d :
++       base::SplitString(system.empty() ? "/usr/local/share:/usr/share" : system,
++                         ":", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY)) {
++    dirs.emplace_back(d);
++  }
++  return dirs;
++}
++
++// A kdeglobals value: the user's file, then the distribution's /etc/xdg one.
++std::string KdeGlobal(const std::string& group, const std::string& key) {
++  for (const base::FilePath& file :
++       {ConfigHome().Append("kdeglobals"), base::FilePath("/etc/xdg/kdeglobals")}) {
++    std::string ini;
++    if (base::ReadFileToString(file, &ini)) {
++      std::string value =
++          helium_theme::wallpaper::ParseIniValue(ini, group, key);
++      if (!value.empty()) {
++        return value;
++      }
++    }
++  }
++  return std::string();
++}
++
++// KDE's accent: the user's AccentColor, else the colour scheme's selection
++// colour, which Plasma uses as the accent when none is set.
++std::optional<SkColor> KdeAccentColor() {
++  int rgb = helium_theme::wallpaper::ParseKdeRgb(KdeGlobal("General", "AccentColor"));
++  if (rgb < 0) {
++    rgb = helium_theme::wallpaper::ParseKdeRgb(
++        KdeGlobal("Colors:Selection", "BackgroundNormal"));
++  }
++  if (rgb < 0) {
++    return std::nullopt;
++  }
++  return SkColorSetRGB((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
++}
++
++// Wallpaper Plasma shows when the user never picked one (no Image= in
++// appletsrc), same order as Plasma's libkworkspace/defaultwallpaper.cpp: the
++// global theme's contents/defaults [Wallpaper] Image=, else "Next".
++// shortcut: skips Plasma's middle step (the Plasma Style's wallpaper); add it if
++// a distro relies on that.
++base::FilePath KdeDefaultWallpaper() {
++  std::string laf = KdeGlobal("KDE", "LookAndFeelPackage");
++  if (laf.empty()) {
++    laf = "org.kde.breeze.desktop";
++  }
++  const std::vector<base::FilePath> dirs = DataDirs();
++  std::string image;
++  for (const base::FilePath& dir : dirs) {
++    std::string ini;
++    if (base::ReadFileToString(
++            dir.Append("plasma/look-and-feel").Append(laf).Append("contents/defaults"),
++            &ini)) {
++      image = helium_theme::wallpaper::ParseIniValue(ini, "Wallpaper", "Image");
++      break;
++    }
++  }
++  if (image.empty()) {
++    image = "Next";
++  }
++  if (image.starts_with("/")) {
++    return base::FilePath(image);
++  }
++  for (const base::FilePath& dir : dirs) {
++    base::FilePath package = dir.Append("wallpapers").Append(image);
++    if (base::PathExists(package)) {
++      return package;
++    }
++  }
++  return base::FilePath();
++}
++
+ // Wallpaper of the running desktop environment. Runs on a blocking thread.
+ // shortcut: only KDE, GNOME and Cinnamon; other desktops fall back to the accent.
+ base::FilePath LinuxDesktopWallpaper() {
+@@ -167,6 +249,9 @@
+       if (base::ReadFileToString(KdeWallpaperConfig(), &ini)) {
+         path = helium_theme::wallpaper::ParseKdeAppletsrc(ini);
+       }
++      if (path.empty()) {
++        return ResolveWallpaperPackage(KdeDefaultWallpaper());
++      }
+       break;
+     }
+     case LinuxDesktop::kGnome:
+@@ -252,7 +337,11 @@
+ // color. Runs on a blocking thread. Not verified on Windows or macOS yet.
+ std::optional<SkColor> DesktopAccentColor() {
+ #if BUILDFLAG(IS_LINUX)
+-  return ReadOmarchyColor("accent");
++  std::optional<SkColor> omarchy = ReadOmarchyColor("accent");
++  if (omarchy || DetectLinuxDesktop() != LinuxDesktop::kKde) {
++    return omarchy;
++  }
++  return KdeAccentColor();
+ #elif BUILDFLAG(IS_WIN)
+   base::win::RegKey key(HKEY_CURRENT_USER,
+                         L"Software\\Microsoft\\Windows\\DWM", KEY_READ);
+@@ -453,6 +542,7 @@
+       switch (DetectLinuxDesktop()) {
+         case LinuxDesktop::kKde:
+           WatchPath(KdeWallpaperConfig());
++          WatchPath(ConfigHome().Append("kdeglobals"));  // accent, global theme
+           break;
+         case LinuxDesktop::kGnome:
+         case LinuxDesktop::kCinnamon:
+--- a/chrome/browser/helium_theme/wallpaper_config_parsers.h
++++ b/chrome/browser/helium_theme/wallpaper_config_parsers.h
+@@ -13,6 +13,12 @@
+ std::string ParseGSettingsValue(const std::string& output);
+ // ~/.config/plasma-org.kde.plasma.desktop-appletsrc (first org.kde.image Image=).
+ std::string ParseKdeAppletsrc(const std::string& ini);
++// Value of `key` in `[group]` of a KDE/INI file (kdeglobals, look-and-feel
++// `defaults`), trimmed; "" if missing. Unlike the parsers above, not a path.
++std::string ParseIniValue(const std::string& ini, const std::string& group,
++                          const std::string& key);
++// KDE colour value "61,174,233" (optional 4th alpha part) -> 0xRRGGBB, or -1.
++int ParseKdeRgb(const std::string& value);
+ // xfce4-desktop.xml (first "last-image" property).
+ std::string ParseXfceDesktopXml(const std::string& xml);
+ // ~/.fehbg (last quoted path on the feh line).
+--- a/chrome/browser/helium_theme/wallpaper_config_parsers.cc
++++ b/chrome/browser/helium_theme/wallpaper_config_parsers.cc
+@@ -85,6 +85,35 @@
+   return "";
+ }
+ 
++std::string ParseIniValue(const std::string& ini, const std::string& group,
++                          const std::string& key) {
++  const std::string header = "[" + group + "]";
++  bool in_group = false;
++  for (const std::string& line : Lines(ini)) {
++    if (!line.empty() && line.front() == '[') {
++      in_group = line == header;
++    } else if (in_group && StartsWith(line, key)) {
++      std::string rest = Trim(line.substr(key.size()));
++      if (!rest.empty() && rest.front() == '=') return Trim(rest.substr(1));
++    }
++  }
++  return "";
++}
++
++int ParseKdeRgb(const std::string& value) {
++  int rgb = 0, parts = 0;
++  std::istringstream in(value);
++  for (std::string part; std::getline(in, part, ',');) {
++    part = Trim(part);
++    if (part.empty() || part.size() > 3 ||
++        part.find_first_not_of("0123456789") != std::string::npos) return -1;
++    const int v = std::stoi(part);
++    if (v > 255) return -1;
++    if (++parts <= 3) rgb = rgb << 8 | v;
++  }
++  return parts == 3 || parts == 4 ? rgb : -1;
++}
++
+ std::string ParseXfceDesktopXml(const std::string& xml) {
+   const std::string key = "name=\"last-image\"";
+   size_t at = xml.find(key);

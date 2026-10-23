@@ -1,0 +1,147 @@
+--- a/chrome/browser/helium_theme/helium_theme.cc
++++ b/chrome/browser/helium_theme/helium_theme.cc
+@@ -22,6 +22,7 @@
+ #include "base/scoped_observation.h"
+ #include "base/no_destructor.h"
+ #include "base/strings/string_number_conversions.h"
++#include "base/strings/strcat.h"
+ #include "base/strings/string_split.h"
+ #include "base/strings/string_util.h"
+ #include "base/task/thread_pool.h"
+@@ -59,6 +60,8 @@
+ constexpr char kMatchWallpaperPref[] = "helium.theme.match_wallpaper";
+ // The color we last applied; lets us tell our own theme from one the user chose.
+ constexpr char kLastAppliedPref[] = "helium.theme.last_applied_color";
++// The wallpaper (path, size, mtime) and accent behind kLastAppliedPref.
++constexpr char kLastSourcePref[] = "helium.theme.last_source";
+ constexpr char kSwitch[] = "match-wallpaper";
+ // Dark slate, deliberately not pure black. Only recognised as ours on profiles
+ // that were themed with it earlier (see CanReplaceTheme).
+@@ -289,6 +292,17 @@
+   return *user_color == last || *user_color == kFallbackColor;
+ }
+ 
++// True if the theme is exactly what kLastAppliedPref says we applied.
++bool ThemeShowsLastApplied(Profile* profile) {
++  ThemeService* theme = ThemeServiceFactory::GetForProfile(profile);
++  const int last = profile->GetPrefs()->GetInteger(kLastAppliedPref);
++  if (last == 0) {
++    return theme->GetIsGrayscale();
++  }
++  return !theme->GetIsGrayscale() &&
++         theme->GetUserColor() == static_cast<SkColor>(last);
++}
++
+ void ApplyColor(Profile* profile, SkColor color) {
+   if (!CanReplaceTheme(profile)) {
+     LOG(INFO) << "Theme was chosen by the user; not applying desktop color";
+@@ -299,13 +313,25 @@
+   // gray a blue hue and would tint the whole UI blue. Use the grayscale theme.
+   color_utils::HSL hsl;
+   color_utils::SkColorToHSL(color, &hsl);
++  // Each Set* call repaints the whole UI and all WebUI pages, and ThemeService
++  // does not skip unchanged values, so skip them here: re-applying the same
++  // color on every launch delayed the new tab page's first paint by ~115 ms.
+   if (hsl.s < 0.15) {
+-    theme->SetIsGrayscale(true);
++    if (!theme->GetIsGrayscale()) {
++      theme->SetIsGrayscale(true);
++      LOG(INFO) << "Desktop accent is neutral; using the grayscale theme";
++    }
+     profile->GetPrefs()->SetInteger(kLastAppliedPref, 0);
+-    LOG(INFO) << "Desktop accent is neutral; using the grayscale theme";
+     return;
+   }
+-  theme->SetIsGrayscale(false);
++  if (!theme->GetIsGrayscale() && theme->GetUserColor() == color &&
++      theme->GetBrowserColorVariant() ==
++          ui::mojom::BrowserColorVariant::kTonalSpot) {
++    return;
++  }
++  if (theme->GetIsGrayscale()) {
++    theme->SetIsGrayscale(false);
++  }
+   theme->SetUserColorAndBrowserColorVariant(
+       color, ui::mojom::BrowserColorVariant::kTonalSpot);
+   profile->GetPrefs()->SetInteger(kLastAppliedPref, static_cast<int>(color));
+@@ -316,10 +342,12 @@
+ // color of its own.
+ void OnDecoded(base::WeakPtr<Profile> profile,
+                std::optional<SkColor> fallback_accent,
++               std::string stamp,
+                const SkBitmap& bitmap) {
+   if (!profile || bitmap.isNull()) {
+     return;
+   }
++  profile->GetPrefs()->SetString(kLastSourcePref, stamp);
+   std::optional<SkColor> color = DominantColor(bitmap);
+   if (!color) {
+     color = fallback_accent;
+@@ -333,6 +361,7 @@
+ 
+ void OnRead(base::WeakPtr<Profile> profile,
+             std::optional<SkColor> fallback_accent,
++            std::string stamp,
+             std::optional<std::vector<uint8_t>> bytes) {
+   if (!profile) {
+     return;
+@@ -347,13 +376,15 @@
+   data_decoder::DecodeImageIsolated(
+       *bytes, data_decoder::mojom::ImageCodec::kDefault,
+       /*shrink_to_fit=*/true, kMaxDecodedBytes, gfx::Size(),
+-      base::BindOnce(&OnDecoded, profile, fallback_accent));
++      base::BindOnce(&OnDecoded, profile, fallback_accent, std::move(stamp)));
+ }
+ 
+ // Where the desktop's colors come from this time.
+ struct Source {
+   std::optional<SkColor> accent;
+   base::FilePath wallpaper;
++  // Changes when the wallpaper file or the accent changes; empty if unknown.
++  std::string stamp;
+ };
+ 
+ 
+@@ -365,6 +396,15 @@
+   } else {
+     source.wallpaper = wallpaper_override;
+   }
++  base::File::Info info;
++  if (!source.wallpaper.empty() && base::GetFileInfo(source.wallpaper, &info)) {
++    source.stamp = base::StrCat(
++        {source.wallpaper.value(), "|", base::NumberToString(info.size), "|",
++         base::NumberToString(
++             info.last_modified.InMillisecondsSinceUnixEpoch()),
++         "|",
++         source.accent ? base::NumberToString(*source.accent) : "-"});
++  }
+   return source;
+ }
+ 
+@@ -380,10 +420,17 @@
+     }
+     return;
+   }
++  // Same wallpaper and accent as last time and the theme still shows our
++  // color: skip the read and the decoder process (slowed the first paint).
++  if (!source.stamp.empty() &&
++      profile->GetPrefs()->GetString(kLastSourcePref) == source.stamp &&
++      ThemeShowsLastApplied(profile.get())) {
++    return;
++  }
+   base::ThreadPool::PostTaskAndReplyWithResult(
+       FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+       base::BindOnce(&ReadWallpaper, source.wallpaper),
+-      base::BindOnce(&OnRead, profile, source.accent));
++      base::BindOnce(&OnRead, profile, source.accent, std::move(source.stamp)));
+ }
+ 
+ // Re-applies when the desktop changes: the system theme or accent (all
+@@ -467,6 +514,7 @@
+   registry->RegisterBooleanPref(kInitializedPref, false);
+   registry->RegisterBooleanPref(kMatchWallpaperPref, true);
+   registry->RegisterIntegerPref(kLastAppliedPref, 0);
++  registry->RegisterStringPref(kLastSourcePref, std::string());
+ }
+ 
+ std::optional<SkColor> DominantColor(const SkBitmap& bitmap) {

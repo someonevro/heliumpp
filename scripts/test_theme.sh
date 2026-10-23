@@ -10,6 +10,7 @@ import sys; from PIL import Image
 b=sys.argv[1]
 Image.new("RGB",(400,300),(200,40,90)).save(f"{b}/wp-vivid.png")   # crimson
 Image.new("RGB",(400,300),(110,110,110)).save(f"{b}/wp-gray.png")
+Image.new("RGB",(400,300),(40,90,200)).save(f"{b}/wp-blue.png")
 PY
 "$b/src/out/Default/chromedriver" --port=9515 > "$b/chromedriver.log" 2>&1 & drv=$!
 trap 'kill $drv 2>/dev/null' EXIT
@@ -35,12 +36,18 @@ print("none" if c is None else "#%06x" % (c & 0xFFFFFF))
 PY
 }
 rm -rf "$b"/th-new "$b"/th-vivid "$b"/th-gray "$b"/th-default "$b"/th-user "$b/xdg/state"
-session th-new;                                          got=$(color th-new);   [ "$got" = "#20222e" ] || { echo "FAIL fallback: $got"; exit 1; }; echo "ok fallback $got"
+session th-new;                                          got=$(color th-new);   [ "$got" = "none" ] || { echo "FAIL fallback: $got"; exit 1; }; echo "ok fallback $got"
 session th-vivid --match-wallpaper="$b/wp-vivid.png";    got=$(color th-vivid); echo "vivid image -> $got"; [ "$got" = "#c8285a" ] || { echo "FAIL vivid accent"; exit 1; }; echo "ok wallpaper accent"
-session th-gray --match-wallpaper="$b/wp-gray.png";      got=$(color th-gray);  [ "$got" = "#20222e" ] || { echo "FAIL gray should keep fallback: $got"; exit 1; }; echo "ok gray image keeps fallback"
+session th-gray --match-wallpaper="$b/wp-gray.png";      got=$(color th-gray);  [ "$got" = "none" ] || { echo "FAIL gray should stay grayscale: $got"; exit 1; }; echo "ok gray image stays grayscale"
 # default-on: a fake Omarchy wallpaper link, no switch at all
 mkdir -p "$b/xdg/state/omarchy/current"; ln -sf "$b/wp-vivid.png" "$b/xdg/state/omarchy/current/background"
 session th-default;                                      got=$(color th-default); [ "$got" = "#c8285a" ] || { echo "FAIL default-on wallpaper: $got"; exit 1; }; echo "ok default-on picks wallpaper $got"
+# unchanged wallpaper is skipped at startup (0062); a swapped one must still apply, and a relaunch must keep it
+rm -rf "$b/th-swap"; session th-swap;                     got=$(color th-swap);  [ "$got" = "#c8285a" ] || { echo "FAIL swap start: $got"; exit 1; }
+ln -sf "$b/wp-blue.png" "$b/xdg/state/omarchy/current/background"
+session th-swap;                                          got=$(color th-swap);  [ "$got" = "#285ac8" ] || { echo "FAIL swapped wallpaper not applied: $got"; exit 1; }
+session th-swap;                                          got=$(color th-swap);  [ "$got" = "#285ac8" ] || { echo "FAIL relaunch lost color: $got"; exit 1; }; echo "ok swapped wallpaper applied and kept $got"
+ln -sf "$b/wp-vivid.png" "$b/xdg/state/omarchy/current/background"
 # a color the user chose must survive a restart even though a wallpaper accent exists
 python3 -I - "$b/th-default/Default/Preferences" <<'PY'
 import json, sys
