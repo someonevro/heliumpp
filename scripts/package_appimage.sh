@@ -28,7 +28,10 @@ done
 cp "$out"/locales/*.pak "$app/opt/helium/locales/"
 find "$app/opt/helium" -type f -exec file {} + | awk -F: '/ELF/ {print $1}' | xargs strip --strip-unneeded
 sed 's/^Name=Helium$/Name=Helium++/' "$pkg/helium.desktop" > "$app/helium.desktop"
-cp "$pkg/helium-wrapper-appimage.sh" "$app/AppRun"; chmod +x "$app/AppRun"
+# Own AppArmor profile name: the upstream one (helium-appimage) is shared with real Helium's AppImage.
+sed 's|/etc/apparmor.d/helium-appimage|/etc/apparmor.d/heliumpp-appimage|; s|profile helium-appimage |profile heliumpp-appimage |; s|<local/helium-appimage>|<local/heliumpp-appimage>|' \
+    "$pkg/helium-wrapper-appimage.sh" > "$app/AppRun"; chmod +x "$app/AppRun"
+grep -q "heliumpp-appimage" "$app/AppRun" && ! grep -q "helium-appimage" "$app/AppRun" || { echo "AppArmor rename failed" >&2; exit 1; }
 cp "$out/product_logo_256.png" "$app/helium.png"
 cp "$out/product_logo_256.png" "$app/usr/share/icons/hicolor/256x256/apps/helium.png"
 

@@ -58,3 +58,7 @@
 0059-onboarding-features-page.patch
 0060-linux-appimage-updater.patch
 0061-linux-wallpaper-kde-gnome-cinnamon.patch
+0062-theme-skip-unchanged-apply.patch
+0063-kde-default-wallpaper-and-accent.patch
+0064-own-profile-folder.patch
+0065-version-0.19.4.2.patch
