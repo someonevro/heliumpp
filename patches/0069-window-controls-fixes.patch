@@ -1,0 +1,60 @@
+--- a/chrome/browser/ui/views/frame/opaque_browser_frame_view.cc
++++ b/chrome/browser/ui/views/frame/opaque_browser_frame_view.cc
+@@ -177,7 +177,10 @@
+       base::CommandLine::ForCurrentProcess()->HasSwitch("no-sidebar-toolbar");
+   auto* controller =
+       HeliumLayoutStateController::From(GetBrowserView()->browser());
+-  return !disabled && controller && !controller->IsZenModeEnabled();
++  // No buttons (window manager title bar, system title bar): no bar either,
++  // or an empty bar would drop down and push the page.
++  return !disabled && controller && !controller->IsZenModeEnabled() &&
++         ShouldShowCaptionButtons();
+ }
+ 
+ gfx::Rect OpaqueBrowserFrameView::CaptionButtonsBounds() const {
+@@ -226,9 +229,19 @@
+   }
+   for (views::Button* button : {minimize_button_.get(), maximize_button_.get(),
+                                 restore_button_.get(), close_button_.get()}) {
+-    if (!button || !button->layer()) {
++    if (!button) {
+       continue;
+     }
++    // BrowserView's SetCaptionButtonsOpacity(1.0f) used to destroy this layer,
++    // which left the buttons stuck in full view over the page.
++    if (!button->layer()) {
++      button->SetPaintToLayer();
++      button->layer()->SetFillsBoundsOpaquely(false);
++    }
++    if (!button->GetBackground()) {
++      button->SetBackground(
++          views::CreateRoundedRectBackground(kColorToolbar, 16.0f));
++    }
+     button->layer()->SetOpacity(amount);
+     gfx::Transform slide;
+     slide.Translate(0, -(1.0 - amount) * button->height());
+@@ -672,6 +685,11 @@
+ }
+ 
+ void OpaqueBrowserFrameView::SetCaptionButtonsOpacity(float opacity) {
++  // Outside zen mode the hover reveal owns the buttons' layers and opacity.
++  if (ShouldAutoHideCaptionButtons()) {
++    UpdateCaptionButtonReveal();
++    return;
++  }
+   auto apply = [opacity](views::Button* view) {
+     if (!view) {
+       return;
+--- a/chrome/browser/resources/new_tab_page/app.css
++++ b/chrome/browser/resources/new_tab_page/app.css
+@@ -681,7 +681,9 @@
+   gap: 12px;
+   margin: 22px auto 0;
+   text-align: start;
+-  width: fit-content;
++  /* Fixed width: with fit-content the switch jumped sideways when the on/off
++     description changed length. */
++  width: min(440px, 86vw);
+ }
+ 
+ #performanceSwitch {

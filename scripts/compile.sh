@@ -11,6 +11,9 @@ if ! cmp -s "$root/shared/presets.json" "$dest"; then
     cp "$root/shared/presets.json" "$dest"
     touch "$root/build/src/components/helium_onboarding/src"
 fi
+# Same for the onboarding "new tab page" previews (made by scripts/make_ntp_previews.sh, binary, so not in a patch).
+mkdir -p "$root/build/src/components/helium_onboarding/src/assets/ntp-previews"
+cp "$root"/shared/ntp-previews/*.webp "$root/build/src/components/helium_onboarding/src/assets/ntp-previews/"
 # vite never cleans its output dir; stale hashed files overflow the grd's fixed resource ID range
 # (IdRangeOverflow). Wiping it forces a vite run on every compile (costs ~a minute) but is always correct.
 rm -rf "$root/build/src/out/Default/gen/components/helium_onboarding/dist"

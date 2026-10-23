@@ -27,13 +27,17 @@ for f in helium chrome_100_percent.pak chrome_200_percent.pak helium_crashpad_ha
 done
 cp "$out"/locales/*.pak "$app/opt/helium/locales/"
 find "$app/opt/helium" -type f -exec file {} + | awk -F: '/ELF/ {print $1}' | xargs strip --strip-unneeded
-sed 's/^Name=Helium$/Name=Helium++/' "$pkg/helium.desktop" > "$app/helium.desktop"
+# Own desktop id/icon (heliumpp, matches GetDesktopName in 0066) so desktops never mix us up with real Helium.
+sed 's/^Name=Helium$/Name=Helium++/; s/^Icon=helium$/Icon=heliumpp/; /^\[Desktop Entry\]$/a StartupWMClass=heliumpp' \
+    "$pkg/helium.desktop" > "$app/heliumpp.desktop"
+[ "$(grep -c '^StartupWMClass=heliumpp$' "$app/heliumpp.desktop")" = 1 ] && ! grep -q '^Icon=helium$' "$app/heliumpp.desktop" \
+    || { echo "desktop entry rename failed" >&2; exit 1; }
 # Own AppArmor profile name: the upstream one (helium-appimage) is shared with real Helium's AppImage.
 sed 's|/etc/apparmor.d/helium-appimage|/etc/apparmor.d/heliumpp-appimage|; s|profile helium-appimage |profile heliumpp-appimage |; s|<local/helium-appimage>|<local/heliumpp-appimage>|' \
     "$pkg/helium-wrapper-appimage.sh" > "$app/AppRun"; chmod +x "$app/AppRun"
 grep -q "heliumpp-appimage" "$app/AppRun" && ! grep -q "helium-appimage" "$app/AppRun" || { echo "AppArmor rename failed" >&2; exit 1; }
-cp "$out/product_logo_256.png" "$app/helium.png"
-cp "$out/product_logo_256.png" "$app/usr/share/icons/hicolor/256x256/apps/helium.png"
+cp "$out/product_logo_256.png" "$app/heliumpp.png"
+cp "$out/product_logo_256.png" "$app/usr/share/icons/hicolor/256x256/apps/heliumpp.png"
 
 rm -f "$rel/$name"
 docker run --rm -u "$(id -u):$(id -g)" -e APPIMAGE_EXTRACT_AND_RUN=1 -e ARCH=x86_64 \

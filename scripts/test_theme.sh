@@ -48,6 +48,9 @@ ln -sf "$b/wp-blue.png" "$b/xdg/state/omarchy/current/background"
 session th-swap;                                          got=$(color th-swap);  [ "$got" = "#285ac8" ] || { echo "FAIL swapped wallpaper not applied: $got"; exit 1; }
 session th-swap;                                          got=$(color th-swap);  [ "$got" = "#285ac8" ] || { echo "FAIL relaunch lost color: $got"; exit 1; }; echo "ok swapped wallpaper applied and kept $got"
 ln -sf "$b/wp-vivid.png" "$b/xdg/state/omarchy/current/background"
+# performance mode pauses the sync (0068): the swap back to crimson must not apply until it is off again
+session th-swap --performance-mode=on;                     got=$(color th-swap);  [ "$got" = "#285ac8" ] || { echo "FAIL performance mode still synced: $got"; exit 1; }
+session th-swap --performance-mode=off;                    got=$(color th-swap);  [ "$got" = "#c8285a" ] || { echo "FAIL sync did not resume: $got"; exit 1; }; echo "ok performance mode pauses and resumes sync"
 # a color the user chose must survive a restart even though a wallpaper accent exists
 python3 -I - "$b/th-default/Default/Preferences" <<'PY'
 import json, sys

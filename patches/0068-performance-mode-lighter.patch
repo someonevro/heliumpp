@@ -1,0 +1,95 @@
+--- a/chrome/browser/helium_privacy_mode/helium_privacy_mode.cc
++++ b/chrome/browser/helium_privacy_mode/helium_privacy_mode.cc
+@@ -13,7 +13,10 @@
+ #include "chrome/browser/preloading/preloading_prefs.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/common/pref_names.h"
++#include "chrome/browser/helium_theme/helium_theme.h"
+ #include "content/public/browser/browser_context.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/render_process_host.h"
+ #include "content/public/browser/site_instance.h"
+ #include "content/public/browser/storage_partition.h"
+ #include "content/public/browser/storage_partition_config.h"
+@@ -104,12 +107,27 @@
+ 
+ // Forces (or stops forcing) reduced motion for the whole browser UI. Every
+ // RichAnimationDuration() caller then runs with zero duration.
++// Open pages get it too: their WebPreferences read PrefersReducedMotion(), so
++// recompute them (CSS `prefers-reduced-motion: reduce` then matches).
+ void ApplyReducedMotion(bool enabled) {
+   if (enabled) {
+     gfx::Animation::SetPrefersReducedMotionForTesting(true);
+   } else {
+     gfx::Animation::UpdatePrefersReducedMotion();
+   }
++  std::set<content::WebContents*> pages;
++  for (auto it = content::RenderProcessHost::AllHostsIterator(); !it.IsAtEnd();
++       it.Advance()) {
++    it.GetCurrentValue()->ForEachRenderFrameHost(
++        [&pages](content::RenderFrameHost* frame) {
++          if (auto* contents = content::WebContents::FromRenderFrameHost(frame)) {
++            pages.insert(contents);
++          }
++        });
++  }
++  for (content::WebContents* contents : pages) {
++    contents->NotifyPreferencesChanged();
++  }
+ }
+ 
+ void SetPerformanceMode(Profile* profile, bool enabled) {
+@@ -170,6 +188,7 @@
+   }
+   prefs->SetBoolean(kPerfPref, enabled);
+   ApplyReducedMotion(enabled);
++  helium_theme::Apply(profile);  // pauses or resumes the desktop colour sync
+ }
+ 
+ namespace {
+--- a/chrome/browser/helium_theme/helium_theme.cc
++++ b/chrome/browser/helium_theme/helium_theme.cc
+@@ -28,6 +28,7 @@
+ #include "base/task/thread_pool.h"
+ #include "base/timer/timer.h"
+ #include "build/build_config.h"
++#include "chrome/browser/helium_privacy_mode/helium_privacy_mode.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/themes/theme_service.h"
+ #include "chrome/browser/themes/theme_service_factory.h"
+@@ -555,6 +556,14 @@
+ #endif
+   }
+ 
++  // Performance mode: no file watchers, no wallpaper reads or decodes.
++  void Stop() {
++    started_ = false;
++    timer_.Stop();
++    watchers_.clear();
++    observation_.Reset();
++  }
++
+   void Reload() {
+     if (!profile_) {
+       return;
+@@ -679,7 +688,10 @@
+     prefs->SetBoolean(kMatchWallpaperPref, true);
+     wallpaper_override = cl->GetSwitchValuePath(kSwitch);
+   }
+-  if (!prefs->GetBoolean(kMatchWallpaperPref)) {
++  // The current colours stay; syncing resumes when performance mode is off.
++  if (!prefs->GetBoolean(kMatchWallpaperPref) ||
++      helium_privacy_mode::IsPerformanceMode(profile)) {
++    Watcher().Stop();
+     return;
+   }
+   Watcher().Start(profile->GetWeakPtr(), wallpaper_override);
+--- a/chrome/browser/resources/new_tab_page/app.css
++++ b/chrome/browser/resources/new_tab_page/app.css
+@@ -730,4 +730,6 @@
+ #content[data-reduced] * {
+   animation: none !important;
+   transition: none !important;
++  /* Blur is a per-frame GPU cost. */
++  backdrop-filter: none !important;
+ }

@@ -1,0 +1,21 @@
+--- a/content/browser/download/download_manager_impl.cc
++++ b/content/browser/download/download_manager_impl.cc
+@@ -974,10 +974,17 @@
+     }
+     is_duplicate = is_duplicate && found_same_url;
+   }
++  // Helium++ isolated tabs (partition domain "heliumisolated") keep nothing
++  // on disk, so their downloads stay out of the in-progress download database.
++  const bool persist =
++      should_persist_new_download_ &&
++      !(download && SerializedEmbedderDownloadDataToStoragePartitionConfig(
++                        download->GetSerializedEmbedderDownloadData())
++                            .partition_domain() == "heliumisolated");
+   std::move(callback).Run(
+       std::move(info), download,
+       is_duplicate ? duplicate_download_file_path : base::FilePath(),
+-      should_persist_new_download_);
++      persist);
+   if (download) {
+     // For new downloads, we notify here, rather than earlier, so that
+     // the download_file is bound to download and all the usual

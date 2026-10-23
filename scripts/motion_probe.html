@@ -1,0 +1,8 @@
+<!doctype html><title>motion probe</title>
+<body style="font:48px sans-serif;background:#222;color:#eee;display:grid;place-items:center;height:90vh">
+<div id="m"></div>
+<script>
+const q = matchMedia('(prefers-reduced-motion: reduce)');
+const show = () => document.getElementById('m').textContent = q.matches ? 'MOTION: REDUCE' : 'MOTION: NORMAL';
+q.addEventListener('change', show); show();
+</script>
