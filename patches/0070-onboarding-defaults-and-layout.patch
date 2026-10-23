@@ -1,0 +1,52 @@
+--- a/chrome/browser/helium_privacy_mode/helium_privacy_mode.cc
++++ b/chrome/browser/helium_privacy_mode/helium_privacy_mode.cc
+@@ -308,6 +308,11 @@
+       LOG(WARNING) << "Ignoring unknown --" << kSwitch << "=" << requested;
+     }
+   }
++  // Medium is the documented default. Without this, "Use defaults" in
++  // onboarding (which skips the privacy step) left the profile with no mode.
++  if (GetModeName(profile).empty()) {
++    SetMode(profile, "medium");
++  }
+   // Test hook: --performance-mode=on|off.
+   if (cl->HasSwitch("performance-mode")) {
+     SetPerformanceMode(profile, cl->GetSwitchValueASCII("performance-mode") ==
+--- a/components/helium_onboarding/src/app.css
++++ b/components/helium_onboarding/src/app.css
+@@ -35,11 +35,16 @@
+ .onboarding-page {
+     display: flex;
+     flex-direction: column;
+-    justify-content: center;
++    /* safe + scroll + room for the fixed Back/Next bar: tall pages (privacy
++       details) used to run under the buttons on short windows. */
++    justify-content: safe center;
+     align-items: center;
+     text-align: center;
+     width: 100%;
+     height: 100%;
++    box-sizing: border-box;
++    overflow-y: auto;
++    padding-bottom: calc(var(--navigation-bottom-space) + 72px);
+     left: 0;
+     position: absolute;
+     visibility: hidden;
+--- a/components/helium_onboarding/src/pages/Dns.svelte
++++ b/components/helium_onboarding/src/pages/Dns.svelte
+@@ -21,8 +21,13 @@
+     onMount(async () => {
+         try {
+             const current = await getDns();
+-            selectedDns.set(current.choice);
+-            customDns.set(current.custom);
++            // "system" is also what a fresh profile reports (Chromium's
++            // automatic mode), so only an encrypted choice replaces the
++            // recommended Cloudflare default.
++            if (current.choice !== "system") {
++                selectedDns.set(current.choice);
++                customDns.set(current.custom);
++            }
+         } catch {
+             // keep the recommended default
+         }

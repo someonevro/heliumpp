@@ -62,3 +62,14 @@
 0063-kde-default-wallpaper-and-accent.patch
 0064-own-profile-folder.patch
 0065-version-0.19.4.2.patch
+0066-own-desktop-name.patch
+0067-toolbar-view-missing-member.patch
+0068-performance-mode-lighter.patch
+0069-window-controls-fixes.patch
+0070-onboarding-defaults-and-layout.patch
+0071-isolated-no-downloads-passwords.patch
+0072-isolated-no-download-db.patch
+0073-bonjourr-component.patch
+0074-new-tab-page-choice.patch
+0075-own-policy-folder.patch
+0076-version-0.19.4.3.patch

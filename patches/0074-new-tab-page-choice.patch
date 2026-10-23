@@ -1,0 +1,255 @@
+--- a/components/helium_onboarding/src/lib/onboarding-flow.ts
++++ b/components/helium_onboarding/src/lib/onboarding-flow.ts
+@@ -14,6 +14,7 @@
+     "PrivacyMode",
+     "Dns",
+     "TabLayout",
++    "NewTab",
+     "HeliumServices",
+     "SearchEngine",
+     "DataImport",
+@@ -81,6 +82,8 @@
+ 
+ export const selectedPrivacyMode = writable("medium");
+ export const selectedTabLayout = writable("vertical");
++// "helium" (our page, follows the wallpaper) or "bonjourr" (bundled extension).
++export const selectedNewTab = writable("helium");
+ // Encrypted DNS provider: 1.1.1.1 is the recommended default.
+ export const selectedDns = writable("cloudflare");
+ export const customDns = writable("");
+--- a/components/helium_onboarding/src/pages/index.ts
++++ b/components/helium_onboarding/src/pages/index.ts
+@@ -3,6 +3,7 @@
+ export { default as PrivacyMode } from "./PrivacyMode.svelte";
+ export { default as Dns } from "./Dns.svelte";
+ export { default as TabLayout } from "./TabLayout.svelte";
++export { default as NewTab } from "./NewTab.svelte";
+ export { default as HeliumServices } from "./HeliumServices.svelte";
+ export { default as SearchEngine } from "./SearchEngine.svelte";
+ export { default as DataImport } from "./DataImport.svelte";
+--- a/components/helium_onboarding/src/components/PageNavigation.svelte
++++ b/components/helium_onboarding/src/components/PageNavigation.svelte
+@@ -32,6 +32,7 @@
+         privacyModeNeedsRestart,
+         selectedTabLayout,
+         selectedCompactMode,
++        selectedNewTab,
+     } from "../lib/onboarding-flow";
+ 
+     const visible = $derived(
+@@ -64,6 +65,11 @@
+             await setTabLayout($selectedTabLayout, $selectedCompactMode);
+             break;
+ 
++        case "NewTab":
++            // Takes effect at once: the browser loads or unloads Bonjourr.
++            await setPref("ntp.bonjourr", $selectedNewTab === "bonjourr");
++            break;
++
+         case "HeliumServices":
+             // if the user pressed "next" on the HeliumServices page,
+             // then we mark consent (having seen the page) as true
+--- a/components/helium_onboarding/src/lib/browser/prefs.ts
++++ b/components/helium_onboarding/src/lib/browser/prefs.ts
+@@ -11,6 +11,7 @@
+     'services.spellcheck_files': boolean,
+     'services.browser_updates': boolean,
+     'services.ublock_assets': boolean,
++    'ntp.bonjourr': boolean,
+ };
+ 
+ export type PrefKey = keyof Preferences;
+--- /dev/null
++++ b/components/helium_onboarding/src/pages/NewTab.svelte
+@@ -0,0 +1,158 @@
++<script lang="ts">
++    import { HeliumLogo } from "@imput/helium-prism";
++    import { currentPage, selectedNewTab } from "../lib/onboarding-flow";
++
++    import PageHeader from "../components/PageHeader.svelte";
++
++    // Screenshots made with scripts/ui_tour.py (scripts/make_ntp_previews.sh).
++    import oursCrimson from "../assets/ntp-previews/ours-crimson.webp";
++    import oursBlue from "../assets/ntp-previews/ours-blue.webp";
++    import oursGreen from "../assets/ntp-previews/ours-green.webp";
++    import bonjourr from "../assets/ntp-previews/bonjourr.webp";
++
++    const visible = $derived($currentPage === "NewTab");
++    const selected = $derived($selectedNewTab);
++</script>
++
++<div id="new-tab-page" class="onboarding-page" class:visible>
++    <div class="scrollable-page">
++        <PageHeader
++            title="Choose your new tab page"
++            subtitle="You can switch any time in Settings, under Appearance."
++            Icon={HeliumLogo}
++            iconHeight="32px"
++        />
++        <div class="page-content">
++            <div class="ntp-list" role="radiogroup" aria-label="New tab page">
++                <button
++                    type="button"
++                    role="radio"
++                    aria-checked={selected === "helium"}
++                    class="ntp-card"
++                    class:selected={selected === "helium"}
++                    onclick={() => selectedNewTab.set("helium")}
++                >
++                    <span class="preview fan" aria-hidden="true">
++                        <img src={oursCrimson} alt="" />
++                        <img src={oursBlue} alt="" />
++                        <img src={oursGreen} alt="" />
++                    </span>
++                    <span class="ntp-name">Helium++ <span class="badge">Default</span></span>
++                    <span class="ntp-desc">
++                        Its colours follow your desktop wallpaper: change the wallpaper and the page
++                        (and the whole browser) changes with it. Search, privacy level and Performance mode
++                        are right on the page.
++                    </span>
++                </button>
++                <button
++                    type="button"
++                    role="radio"
++                    aria-checked={selected === "bonjourr"}
++                    class="ntp-card"
++                    class:selected={selected === "bonjourr"}
++                    onclick={() => selectedNewTab.set("bonjourr")}
++                >
++                    <span class="preview" aria-hidden="true">
++                        <img src={bonjourr} alt="" />
++                    </span>
++                    <span class="ntp-name">Bonjourr</span>
++                    <span class="ntp-desc">
++                        A minimal clock and greeting with many widgets you can customise. Starts with a plain
++                        colour background; photo backgrounds, weather and quotes load from Bonjourr's servers,
++                        so they stay off until you turn them on. Performance mode is only on the Helium++ page.
++                    </span>
++                </button>
++            </div>
++        </div>
++    </div>
++</div>
++
++<style>
++    #new-tab-page {
++        --page-in-delay: 0.1s;
++    }
++
++    .ntp-list {
++        display: grid;
++        grid-template-columns: 1fr 1fr;
++        gap: 12px;
++        width: 100%;
++    }
++
++    .ntp-card {
++        display: flex;
++        flex-direction: column;
++        gap: 6px;
++        padding: 12px;
++        text-align: start;
++        border-radius: 14px;
++        border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
++        background: var(--card-background, rgba(255, 255, 255, 0.04));
++        color: inherit;
++        cursor: pointer;
++    }
++
++    .ntp-card.selected {
++        outline: 2px solid var(--accent-color, #6a7dff);
++    }
++
++    .preview {
++        display: block;
++        /* Explicit width: a stretched flex item's width does not feed
++           aspect-ratio, and the fan has no in-flow content to size it. */
++        width: 100%;
++        flex: none;
++        position: relative;
++        aspect-ratio: 888 / 780;
++        border-radius: 10px;
++        overflow: hidden;
++    }
++
++    .preview img {
++        width: 100%;
++        height: 100%;
++        object-fit: cover;
++        display: block;
++    }
++
++    /* The same page under three wallpapers, fanned out so each stays whole. */
++    .preview.fan img {
++        position: absolute;
++        width: 70%;
++        height: auto;
++        aspect-ratio: 888 / 780;
++        border-radius: 8px;
++        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
++    }
++
++    .preview.fan img:nth-child(1) { left: 0; top: 0; }
++    .preview.fan img:nth-child(2) { left: 15%; top: 10%; }
++    .preview.fan img:nth-child(3) { left: 30%; top: 20%; }
++
++    .ntp-name {
++        font-weight: 600;
++        display: flex;
++        align-items: center;
++        gap: 6px;
++    }
++
++    .badge {
++        font-size: 11px;
++        font-weight: 600;
++        padding: 1px 8px;
++        border-radius: 999px;
++        background: var(--accent-color, #3b5bdb);
++        color: white;
++    }
++
++    .ntp-desc {
++        font-size: 13px;
++        opacity: 0.75;
++    }
++
++    @media (max-width: 640px) {
++        .ntp-list {
++            grid-template-columns: 1fr;
++        }
++    }
++</style>
+--- a/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts
++++ b/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts
+@@ -118,6 +118,11 @@
+         label="$i18n{roundedFrame}">
+     </settings-toggle-button>
+     <settings-toggle-button class="hr"
++        pref-key="helium.ntp.bonjourr"
++        label="Use Bonjourr as the new tab page"
++        sub-label="Off: the Helium++ page, whose colours follow your wallpaper. Photo backgrounds, weather and quotes in Bonjourr load from its servers.">
++    </settings-toggle-button>
++    <settings-toggle-button class="hr"
+         ?hidden="${!this.showNativeFrameMaterialsOption_}"
+         pref-key="helium.browser.native_frame_materials"
+         label="$i18n{nativeFrameMaterials}"
+--- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
++++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+@@ -13,6 +13,7 @@
+ #include "build/build_config.h"
+ #include "build/chromeos_buildflags.h"
+ #include "chrome/browser/accessibility/tree_fixing/pref_names.h"
++#include "chrome/browser/helium_privacy_mode/helium_privacy_mode.h"
+ #include "chrome/browser/autofill/generated_find_and_fill_with_gemini_pref.h"
+ #include "chrome/browser/browser_process.h"
+ #include "chrome/browser/browser_process_platform_part.h"
+@@ -331,6 +332,8 @@
+       settings_api::PrefType::kBoolean;
+   (*s_allowlist)[::prefs::kHeliumRoundedFrame] =
+       settings_api::PrefType::kBoolean;
++  (*s_allowlist)[helium_privacy_mode::kBonjourrNewTabPref] =
++      settings_api::PrefType::kBoolean;
+ 
+   (*s_allowlist)[::prefs::kShowHomeButton] = settings_api::PrefType::kBoolean;
+   (*s_allowlist)[contextual_search::kDriveConsentState] =

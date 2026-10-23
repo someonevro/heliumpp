@@ -44,8 +44,11 @@ class H(http.server.BaseHTTPRequestHandler):
             # Sets a cookie, then opens two popups: one with noopener, one with an opener.
             self.send_header("Set-Cookie", "t=%s; Path=/" % q["c"][0])
             self.end_headers()
+            # P3: an about:blank popup that the opener then sends to a URL (the known about:blank hole).
             self.wfile.write(("open <script>setTimeout(()=>{window.open('/read?id=P1','_blank','noopener');"
-                              "window.open('/read?id=P2','_blank');},1500)</script>").encode())
+                              "window.open('/read?id=P2','_blank');"
+                              "const w=window.open('about:blank','_blank');setTimeout(()=>{w.location='/read?id=P3'},800);},1500)"
+                              "</script>").encode())
             return
         if u.path == "/set":
             self.send_header("Set-Cookie", "t=%s; Path=/" % q["c"][0])
@@ -92,5 +95,6 @@ check("isolated tab: every permission is 'denied'",
       reports.get("PI") and all(v == "denied" for v in reports["PI"].values()))
 check("popup with noopener opened from isolated O stays in O's container (sees t=O)", by.get("P1") and by["P1"][0] == "t=O")
 check("popup with opener opened from isolated O stays in O's container (sees t=O)", by.get("P2") and by["P2"][0] == "t=O")
+check("about:blank popup from isolated O, then sent to a URL, stays in O's container (sees t=O)", by.get("P3") and by["P3"][0] == "t=O")
 sys.exit(0 if ok else 1)
 
