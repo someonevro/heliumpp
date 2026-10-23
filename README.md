@@ -63,8 +63,6 @@ Honest summary of what has been demonstrated, not just coded:
 | Linux build (Chromium 155.0.8059.84) | Builds and runs; `helium --version` prints `Helium++ 0.19.4.2 (Chromium 155.0.8059.84)` |
 | Privacy modes, performance mode | Automated tests pass (`scripts/test_privacy_mode.sh`, `scripts/test_performance_mode.sh`) |
 | Isolated tabs | Cookie isolation, popups, permissions, disk traces and wipe-on-close tested headlessly. Downloads, password manager and clipboard writes are **not** blocked yet |
-| Updater | Signature, checksum and downgrade checks tested against a local server. Real AppImage swap and relaunch **not** verified |
-| AppImage | Starts and renders a headless screenshot; normal desktop launch not verified |
 | Secure DNS onboarding | Implemented; page not yet seen and DoH use not observed |
 | Windows, macOS, Android, iOS | **Not started** |
 | DRM (Widevine) | **Not tested** |
