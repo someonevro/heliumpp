@@ -1,0 +1,13 @@
+<!doctype html><meta charset=utf-8><body><script>
+const t = (n, f) => { const s = performance.now(); f(); r[n] = Math.round(performance.now() - s); };
+const r = {};
+t('fib', () => { const f = n => n < 2 ? n : f(n-1) + f(n-2); f(37); });
+t('sort', () => { const a = Array.from({length: 1e6}, (_, i) => (i * 7919 % 1000003) / 3); a.sort((x, y) => x - y); });
+t('json', () => { const o = Array.from({length: 2e5}, (_, i) => ({id: i, s: 'x' + i, a: [i, i+1]})); JSON.parse(JSON.stringify(o)); });
+t('regex', () => { let s = 'abc123def456 '.repeat(2e5), c = 0; for (const m of s.matchAll(/[a-z]+(\d+)/g)) c += m[1].length; });
+t('map', () => { const m = new Map(); for (let i = 0; i < 1e6; i++) m.set('k' + (i % 50000), i); });
+t('typed', () => { const a = new Float64Array(5e6); for (let k = 0; k < 6; k++) for (let i = 0; i < a.length; i++) a[i] = a[i] * 0.5 + i; });
+t('dom', () => { const d = document.createElement('div'); document.body.append(d);
+  for (let i = 0; i < 20000; i++) { const e = document.createElement('p'); e.textContent = 'row ' + i; e.style.padding = (i % 5) + 'px'; d.append(e); if (i % 500 == 0) d.offsetHeight; } d.offsetHeight; });
+document.title = 'RESULT ' + JSON.stringify(r);
+</script>
