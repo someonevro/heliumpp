@@ -10,7 +10,13 @@ Updated 2026-10-21 (end of session 2).
 **Next (user's list):** (1) isolated mode: fix/test the about:blank popup hole, block or redirect downloads, password manager, clipboard write; (2) item 4 general speed outside performance mode (measure first); (3) restyle: horizontal layout, menus/popups, Settings and onboarding pages; (4) wallpaper image behind the new tab page and privacy chip (dropped: weather, tracker counter unless uBO stats readable); (5) red hover tint on window close; (6) DNS: visual check and a real-use test; (7) update CLAUDE.md (still says six presets; the product uses three modes) and ARCHITECTURE.md/PLATFORM_SUPPORT.md with this session's decisions; (8) run the series on a pristine tree.
 **User preferences seen this session:** wants to review changes before big edits when asked ("show me what changes"); wants honest "not verified" notes; decides between options quickly (picked option 1 even with the URL-hiding trade-off, later reverted it); likes the new tab page and drop-down window bar; wants the browser to stop looking like stock Helium.
 
-## SESSION 6 (2026-10-24, after v0.19.4.5) - NOT released yet
+## SESSION 6 (2026-10-24, after v0.19.4.5) - released as v0.19.4.6-alpha
+- RELEASE v0.19.4.6-alpha (user asked 2026-10-24, published as Latest): 0084-0097 + 0098 version bump (rebuild
+  1h00m). AppImage sha256 5a2c8f80b2fd996b13b18ec8e05f2a8b6b82afcde6f1765ccb644d8fe38fe7c5 (158632440 bytes),
+  signed latest.json. Regression before packaging: privacy_mode, performance_mode, theme, wallpaper_kde,
+  wallpaper_desktops, privacy_flags_profiles, two_profiles, update 8/8, hibp, addy_alias, close_with_download,
+  isolated_downloads: all PASS. From the AppImage: --version 0.19.4.6, menu entry + icon written in a fake home,
+  AppRun re-exec keeps "$@", only heliumpp-appimage. 0.19.4.5 users should auto-update (not observed).
 - User tested 0.19.4.5 on Ubuntu: works; About page reached GitHub ("up to date").
 - Menu entry + desktop icon: scripts/appimage_desktop_entry.sh is spliced into AppRun by package_appimage.sh.
   Writes $XDG_DATA_HOME/applications/heliumpp.desktop + icon each launch when changed; ~/Desktop icon first launch only
