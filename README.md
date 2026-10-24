@@ -15,11 +15,11 @@
 
 ## Download
 
-Experimental Linux x86_64 AppImage: **[Helium++ 0.19.4.3 alpha](https://github.com/someonevro/heliumpp/releases/tag/v0.19.4.3-alpha)**
+Experimental Linux x86_64 AppImage: **[Helium++ 0.19.4.4 alpha](https://github.com/someonevro/heliumpp/releases/tag/v0.19.4.4-alpha)**
 
 ```bash
-chmod +x heliumpp-0.19.4.3-x86_64.AppImage
-./heliumpp-0.19.4.3-x86_64.AppImage
+chmod +x heliumpp-0.19.4.4-x86_64.AppImage
+./heliumpp-0.19.4.4-x86_64.AppImage
 ```
 
 > **Data warning for 0.19.4.1 (withdrawn).** Version 0.19.4.1 used real Helium's profile folder (`~/.config/net.imput.helium`). If you also use Helium, it could change Helium's settings: the "High" privacy mode makes cookies and site data get deleted whenever the browser closes, and that setting stays in Helium. From 0.19.4.2 on, Helium++ uses its own folder (`~/.config/heliumpp`) and never touches Helium's data. If you ran 0.19.4.1 next to Helium: back up `~/.config/net.imput.helium`, then in Helium check Settings > Privacy and security > Site settings > Additional content settings > On-device site data, third-party cookies, site permissions and the theme.
@@ -47,8 +47,8 @@ This repository does **not** contain the Chromium source tree. It holds the Heli
 - **Three privacy modes** chosen at first launch, changeable later: Low, Medium (recommended) and High.
 - **Zen-inspired interface:** vertical tab sidebar, essentials tiles, folders, workspaces, floating page card.
 - **Wallpaper-driven theme:** the UI color follows your desktop wallpaper or accent color.
-- **New tab page:** greeting, search field, glass tiles, and Low/Medium/High and Performance mode switches.
-- **Performance mode:** aggressive tab discarding, energy saver, reduced animations.
+- **New tab page:** greeting, search field, glass tiles, and Usability/Medium/Maximum privacy and Performance mode switches.
+- **Performance mode:** aggressive tab discarding, energy saver, reduced animations, wallpaper colour sync paused. Also in Settings > Appearance.
 - **Isolated tabs** (`Ctrl+Alt+N`): per-tab throwaway in-memory storage, no history or session traces, permissions denied by default. This is **not** a VM and does not hide your IP, DNS or fingerprint.
 - **Secure DNS choice** at first run: Cloudflare, Google, system, or custom DoH.
 - **Built-in ad blocking** inherited from Helium.
@@ -60,7 +60,7 @@ Honest summary of what has been demonstrated, not just coded:
 
 | Area | State |
 | --- | --- |
-| Linux build (Chromium 155.0.8059.84) | Builds and runs; `helium --version` prints `Helium++ 0.19.4.3 (Chromium 155.0.8059.84)` |
+| Linux build (Chromium 155.0.8059.84) | Builds and runs; `helium --version` prints `Helium++ 0.19.4.4 (Chromium 155.0.8059.84)` |
 | Privacy modes, performance mode | Automated tests pass (`scripts/test_privacy_mode.sh`, `scripts/test_performance_mode.sh`) |
 | Isolated tabs | Cookie isolation, popups, permissions, disk traces and wipe-on-close tested headlessly. Downloads blocked and kept off disk (tested); password manager off (not tested); clipboard writes are **not** blocked |
 | Secure DNS onboarding | Implemented; page not yet seen and DoH use not observed |

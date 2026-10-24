@@ -1,0 +1,191 @@
+--- a/chrome/browser/helium_privacy_mode/helium_privacy_mode.h
++++ b/chrome/browser/helium_privacy_mode/helium_privacy_mode.h
+@@ -20,6 +20,8 @@
+ // Profile pref: true = the bundled Bonjourr extension is the new tab page
+ // (chosen in onboarding or Settings > Appearance; ComponentLoader follows it).
+ inline constexpr char kBonjourrNewTabPref[] = "helium.ntp.bonjourr";
++// Settings writes it directly; a pref observer applies the side effects.
++inline constexpr char kPerformanceModePref[] = "helium.performance_mode";
+ 
+ // Registers helium.privacy_mode ("" = no mode chosen, nothing is enforced).
+ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
+--- a/chrome/browser/helium_privacy_mode/helium_privacy_mode.cc
++++ b/chrome/browser/helium_privacy_mode/helium_privacy_mode.cc
+@@ -1,10 +1,14 @@
+ #include "chrome/browser/helium_privacy_mode/helium_privacy_mode.h"
+ 
+ #include <algorithm>
++#include <memory>
+ #include <set>
+ #include <string>
+ 
+ #include "base/command_line.h"
++#include "base/functional/bind.h"
++#include "base/scoped_observation.h"
++#include "base/supports_user_data.h"
+ #include "base/logging.h"
+ #include "base/strings/string_util.h"
+ #include "chrome/browser/browser_process.h"
+@@ -12,6 +16,7 @@
+ #include "chrome/browser/prefetch/pref_names.h"
+ #include "chrome/browser/preloading/preloading_prefs.h"
+ #include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/profiles/profile_observer.h"
+ #include "chrome/common/pref_names.h"
+ #include "chrome/browser/helium_theme/helium_theme.h"
+ #include "content/public/browser/browser_context.h"
+@@ -32,6 +37,7 @@
+ #include "ui/gfx/animation/animation.h"
+ #include "components/pref_registry/pref_registry_syncable.h"
+ #include "base/values.h"
++#include "components/prefs/pref_change_registrar.h"
+ #include "components/prefs/pref_service.h"
+ #include "components/webui/flags/pref_service_flags_storage.h"
+ 
+@@ -78,7 +84,6 @@
+ }  // namespace
+ 
+ namespace {
+-constexpr char kPerfPref[] = "helium.performance_mode";
+ constexpr char kPerfSavedPref[] = "helium.performance_saved";
+ // How long a background tab stays loaded in performance mode.
+ constexpr int kPerfDiscardMinutes = 5;
+@@ -86,7 +91,7 @@
+ 
+ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
+   registry->RegisterStringPref(kModePref, std::string());
+-  registry->RegisterBooleanPref(kPerfPref, false);
++  registry->RegisterBooleanPref(kPerformanceModePref, false);
+   registry->RegisterBooleanPref(kBonjourrNewTabPref, false);
+   registry->RegisterDictionaryPref(kPerfSavedPref);
+ }
+@@ -103,7 +108,7 @@
+ }
+ 
+ bool IsPerformanceMode(Profile* profile) {
+-  return profile->GetPrefs()->GetBoolean(kPerfPref);
++  return profile->GetPrefs()->GetBoolean(kPerformanceModePref);
+ }
+ 
+ // Forces (or stops forcing) reduced motion for the whole browser UI. Every
+@@ -131,12 +136,16 @@
+   }
+ }
+ 
+-void SetPerformanceMode(Profile* profile, bool enabled) {
++// Brings memory saver, energy saver, animations and spellcheck in line with
++// kPerformanceModePref. The saved dict is non-empty exactly while performance
++// mode is on, so this is safe to call again for the same state.
++void SyncPerformanceMode(Profile* profile) {
+   namespace tuning = performance_manager::user_tuning::prefs;
+   PrefService* prefs = profile->GetPrefs();
+   // These are browser-wide (local state) prefs.
+   PrefService* local = g_browser_process->local_state();
+-  if (enabled == prefs->GetBoolean(kPerfPref)) {
++  const bool enabled = prefs->GetBoolean(kPerformanceModePref);
++  if (enabled == !prefs->GetDict(kPerfSavedPref).empty()) {
+     return;
+   }
+   if (enabled) {
+@@ -187,11 +196,39 @@
+     }
+     prefs->ClearPref(kPerfSavedPref);
+   }
+-  prefs->SetBoolean(kPerfPref, enabled);
+   ApplyReducedMotion(enabled);
+   helium_theme::Apply(profile);  // pauses or resumes the desktop colour sync
+ }
+ 
++// Applies the pref when Settings flips it. Profile user data can outlive the
++// PrefService, so the registrar is dropped when the profile starts shutting down.
++class PerformanceModeWatcher : public base::SupportsUserData::Data,
++                               public ProfileObserver {
++ public:
++  explicit PerformanceModeWatcher(Profile* profile) {
++    observation_.Observe(profile);
++    registrar_.Init(profile->GetPrefs());
++    registrar_.Add(kPerformanceModePref,
++                   base::BindRepeating(&SyncPerformanceMode, profile));
++  }
++
++  void OnProfileWillBeDestroyed(Profile*) override {
++    registrar_.RemoveAll();
++    observation_.Reset();
++  }
++
++ private:
++  PrefChangeRegistrar registrar_;
++  base::ScopedObservation<Profile, ProfileObserver> observation_{this};
++};
++
++constexpr char kPerfWatcherKey[] = "helium_performance_mode_watcher";
++
++void SetPerformanceMode(Profile* profile, bool enabled) {
++  profile->GetPrefs()->SetBoolean(kPerformanceModePref, enabled);
++  SyncPerformanceMode(profile);  // no-op when the watcher already ran it
++}
++
+ namespace {
+ 
+ // Flags owned by the privacy modes. "Basic" fingerprinting (Helium noise for
+@@ -314,6 +351,10 @@
+   if (GetModeName(profile).empty()) {
+     SetMode(profile, "medium");
+   }
++  if (!profile->GetUserData(kPerfWatcherKey)) {
++    profile->SetUserData(kPerfWatcherKey,
++                         std::make_unique<PerformanceModeWatcher>(profile));
++  }
+   // Test hook: --performance-mode=on|off.
+   if (cl->HasSwitch("performance-mode")) {
+     SetPerformanceMode(profile, cl->GetSwitchValueASCII("performance-mode") ==
+--- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
++++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+@@ -334,6 +334,8 @@
+       settings_api::PrefType::kBoolean;
+   (*s_allowlist)[helium_privacy_mode::kBonjourrNewTabPref] =
+       settings_api::PrefType::kBoolean;
++  (*s_allowlist)[helium_privacy_mode::kPerformanceModePref] =
++      settings_api::PrefType::kBoolean;
+ 
+   (*s_allowlist)[::prefs::kShowHomeButton] = settings_api::PrefType::kBoolean;
+   (*s_allowlist)[contextual_search::kDriveConsentState] =
+--- a/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts
++++ b/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts
+@@ -123,6 +123,11 @@
+         sub-label="Off: the Helium++ page, whose colours follow your wallpaper. Photo backgrounds, weather and quotes in Bonjourr load from its servers.">
+     </settings-toggle-button>
+     <settings-toggle-button class="hr"
++        pref-key="helium.performance_mode"
++        label="Performance mode"
++        sub-label="Turns off animations, the wallpaper colour sync and spellcheck, unloads background tabs after 5 minutes and turns on energy saver.">
++    </settings-toggle-button>
++    <settings-toggle-button class="hr"
+         ?hidden="${!this.showNativeFrameMaterialsOption_}"
+         pref-key="helium.browser.native_frame_materials"
+         label="$i18n{nativeFrameMaterials}"
+--- a/chrome/browser/resources/new_tab_page/app.ts
++++ b/chrome/browser/resources/new_tab_page/app.ts
+@@ -399,9 +399,9 @@
+   protected accessor performanceMode_: boolean = false;
+   protected accessor privacyRestart_: boolean = false;
+   protected readonly privacyModes_ = [
+-    {id: 'usability', label: 'Low'},
++    {id: 'usability', label: 'Usability'},
+     {id: 'medium', label: 'Medium'},
+-    {id: 'maximum', label: 'High'},
++    {id: 'maximum', label: 'Maximum'},
+   ];
+   protected accessor wasComposeboxOpened_: boolean = false;
+   protected accessor showLensUploadDialog_: boolean = false;
+--- a/components/helium_onboarding/src/pages/NewTab.svelte
++++ b/components/helium_onboarding/src/pages/NewTab.svelte
+@@ -59,7 +59,7 @@
+                     <span class="ntp-desc">
+                         A minimal clock and greeting with many widgets you can customise. Starts with a plain
+                         colour background; photo backgrounds, weather and quotes load from Bonjourr's servers,
+-                        so they stay off until you turn them on. Performance mode is only on the Helium++ page.
++                        so they stay off until you turn them on. Performance mode stays in Settings, under Appearance.
+                     </span>
+                 </button>
+             </div>

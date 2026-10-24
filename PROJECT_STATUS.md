@@ -10,6 +10,24 @@ Updated 2026-10-21 (end of session 2).
 **Next (user's list):** (1) isolated mode: fix/test the about:blank popup hole, block or redirect downloads, password manager, clipboard write; (2) item 4 general speed outside performance mode (measure first); (3) restyle: horizontal layout, menus/popups, Settings and onboarding pages; (4) wallpaper image behind the new tab page and privacy chip (dropped: weather, tracker counter unless uBO stats readable); (5) red hover tint on window close; (6) DNS: visual check and a real-use test; (7) update CLAUDE.md (still says six presets; the product uses three modes) and ARCHITECTURE.md/PLATFORM_SUPPORT.md with this session's decisions; (8) run the series on a pristine tree.
 **User preferences seen this session:** wants to review changes before big edits when asked ("show me what changes"); wants honest "not verified" notes; decides between options quickly (picked option 1 even with the URL-hiding trade-off, later reverted it); likes the new tab page and drop-down window bar; wants the browser to stop looking like stock Helium.
 
+## SESSION 5 (2026-10-24) - released as v0.19.4.4-alpha
+- 0077-performance-toggle-and-level-names: Performance mode switch in Settings > Appearance (writes
+  helium.performance_mode; a pref observer in helium_privacy_mode.cc does the memory/energy saver,
+  spellcheck, motion and wallpaper-sync side effects, so it also works with Bonjourr as new tab page).
+  New tab privacy buttons renamed Low/High -> Usability/Maximum to match setup. Setup Bonjourr card text updated.
+- Bonjourr is already in chrome://credits (checked in the generated about_credits.html; no change needed).
+- Tested: incremental build OK (5m18s); scripts/test_performance_toggle.py PASS (on/off via the Settings
+  switch: pref, spellcheck, prefers-reduced-motion on an open page); scripts/test_theme.sh all ok;
+  screenshots build/shots/s5 (new tab labels, Settings switch).
+- RELEASE v0.19.4.4-alpha (user approved 2026-10-24): 0078 version bump (rebuild ~50 min); AppImage sha256
+  a489ff78559c2702ab679fcb90b2e77d55bdafe6797e011ecad1a9972a2041e3 (158669304 bytes), signed latest.json.
+  Regression before packaging: performance toggle, privacy, performance, KDE wallpaper, isolated downloads PASS;
+  isolated tabs 13/13 on rerun (first run hit the known tab-B flake). From the AppImage: --version 0.19.4.4,
+  heliumpp.desktop, only heliumpp-appimage AppArmor name, planted net.imput.helium untouched.
+- Release plan agreed with user: fewer AppImages, batch changes. Next release = KDE fixes + newer Chromium
+  (security) + updater URL set to the GitHub latest.json.
+- Next: user's KDE test (bug list + Wayland/X11 + chrome://gpu).
+
 ## SESSION 4 (2026-10-23)
 - Git: the project IS a git repo now (`main`, last commit 4009d8f); the "not a git repo" lines above are outdated. Session 4 changes are NOT committed.
 - WINDOWED BENCH: `python3 -I scripts/bench/window_bench.py label=binary ...` (private Xvfb :98, software GL, fresh pre-seeded profile + warm-up launch, then N relaunches; Chromium's own Startup.* histograms via DevTools; summed PSS of all browser processes after TABS Wikipedia tabs; env `NO_WALLPAPER=1` turns wallpaper matching off). Baseline = upstream Helium 0.20.1.1 (Chromium 156) in `build/baseline/ex/squashfs-root/opt/helium/helium`.
