@@ -1,0 +1,229 @@
+--- a/chrome/browser/helium_fingerprint/fingerprint_report.h
++++ b/chrome/browser/helium_fingerprint/fingerprint_report.h
+@@ -0,0 +1,28 @@
++// Fingerprint report: which browser APIs often used for fingerprinting the page
++// in a tab (and its frames) has called, from Blink's use counters. Shown in the
++// page info bubble next to Helium's fingerprint noise switch.
++
++#ifndef CHROME_BROWSER_HELIUM_FINGERPRINT_FINGERPRINT_REPORT_H_
++#define CHROME_BROWSER_HELIUM_FINGERPRINT_FINGERPRINT_REPORT_H_
++
++#include <memory>
++#include <string>
++
++namespace content {
++class WebContents;
++}
++namespace page_load_metrics {
++class PageLoadMetricsObserver;
++}
++
++namespace helium_fingerprint {
++
++// For PageLoadMetricsEmbedder::RegisterObservers (regular web pages).
++std::unique_ptr<page_load_metrics::PageLoadMetricsObserver> CreateObserver();
++
++// "canvas, WebGL and audio", or "" when the current page used none of them.
++std::u16string UsedTechniques(content::WebContents* web_contents);
++
++}  // namespace helium_fingerprint
++
++#endif  // CHROME_BROWSER_HELIUM_FINGERPRINT_FINGERPRINT_REPORT_H_
+--- a/chrome/browser/helium_fingerprint/fingerprint_report.cc
++++ b/chrome/browser/helium_fingerprint/fingerprint_report.cc
+@@ -0,0 +1,130 @@
++#include "chrome/browser/helium_fingerprint/fingerprint_report.h"
++
++#include <algorithm>
++#include <vector>
++
++#include "components/page_load_metrics/browser/page_load_metrics_observer.h"
++#include "components/page_load_metrics/browser/page_load_metrics_observer_delegate.h"
++#include "content/public/browser/navigation_handle.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/browser/web_contents_user_data.h"
++#include "third_party/blink/public/common/use_counter/use_counter_feature.h"
++#include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom.h"
++#include "third_party/blink/public/mojom/use_counter/use_counter_feature.mojom.h"
++
++namespace helium_fingerprint {
++
++namespace {
++
++using blink::mojom::WebFeature;
++
++// Order is the order shown to the user.
++enum Technique { kCanvas, kWebGL, kAudio, kFonts, kDevice, kCount };
++constexpr const char16_t* kNames[kCount] = {u"canvas", u"WebGL", u"audio",
++                                            u"fonts", u"device details"};
++
++int TechniqueOf(WebFeature feature) {
++  switch (feature) {
++    case WebFeature::kCanvasToDataURL:
++    case WebFeature::kCanvasToBlob:
++    case WebFeature::kCanvas2DGetImageData:
++      return kCanvas;
++    case WebFeature::kWebGLRenderingContextGetParameter:
++    case WebFeature::kV8WebGLRenderingContext_GetSupportedExtensions_Method:
++    case WebFeature::kV8WebGL2RenderingContext_GetSupportedExtensions_Method:
++      return kWebGL;
++    case WebFeature::kOfflineAudioContextStartRendering:
++    case WebFeature::kV8AudioBuffer_GetChannelData_Method:
++    case WebFeature::kV8AnalyserNode_GetFloatFrequencyData_Method:
++      return kAudio;
++    // Measuring text in many fonts reveals which fonts are installed (but
++    // ordinary text layout code measures text too).
++    case WebFeature::kCanvas2DMeasureText:
++      return kFonts;
++    case WebFeature::kNavigatorHardwareConcurrency:
++    case WebFeature::kNavigatorDeviceMemory:
++      return kDevice;
++    default:
++      return -1;
++  }
++}
++
++// Techniques used by the page currently shown in a tab.
++class Report : public content::WebContentsUserData<Report> {
++ public:
++  bool used[kCount] = {};
++
++ private:
++  explicit Report(content::WebContents* web_contents)
++      : content::WebContentsUserData<Report>(*web_contents) {}
++  friend class content::WebContentsUserData<Report>;
++  WEB_CONTENTS_USER_DATA_KEY_DECL();
++};
++
++WEB_CONTENTS_USER_DATA_KEY_IMPL(Report);
++
++class Observer : public page_load_metrics::PageLoadMetricsObserver {
++ public:
++  const char* GetObserverName() const override {
++    return "HeliumFingerprintReport";
++  }
++
++  ObservePolicy OnFencedFramesStart(
++      content::NavigationHandle* navigation_handle,
++      const GURL& currently_committed_url) override {
++    return FORWARD_OBSERVING;
++  }
++
++  ObservePolicy OnPrerenderStart(content::NavigationHandle* navigation_handle,
++                                 const GURL& currently_committed_url) override {
++    return STOP_OBSERVING;
++  }
++
++  // A new page in the tab starts with an empty report.
++  ObservePolicy OnCommit(content::NavigationHandle* navigation_handle) override {
++    content::WebContents* contents = GetDelegate().GetWebContents();
++    Report::CreateForWebContents(contents);
++    std::ranges::fill(Report::FromWebContents(contents)->used, false);
++    return CONTINUE_OBSERVING;
++  }
++
++  void OnFeaturesUsageObserved(
++      content::RenderFrameHost* rfh,
++      const std::vector<blink::UseCounterFeature>& features) override {
++    Report* report = Report::FromWebContents(GetDelegate().GetWebContents());
++    if (!report) {
++      return;
++    }
++    for (const blink::UseCounterFeature& feature : features) {
++      if (feature.type() == blink::mojom::UseCounterFeatureType::kWebFeature) {
++        if (int t = TechniqueOf(static_cast<WebFeature>(feature.value()));
++            t >= 0) {
++          report->used[t] = true;
++        }
++      }
++    }
++  }
++};
++
++}  // namespace
++
++std::unique_ptr<page_load_metrics::PageLoadMetricsObserver> CreateObserver() {
++  return std::make_unique<Observer>();
++}
++
++std::u16string UsedTechniques(content::WebContents* web_contents) {
++  const Report* report = Report::FromWebContents(web_contents);
++  std::vector<std::u16string> names;
++  for (int t = 0; report && t < kCount; ++t) {
++    if (report->used[t]) {
++      names.push_back(kNames[t]);
++    }
++  }
++  std::u16string text;
++  for (size_t i = 0; i < names.size(); ++i) {
++    text += (i == 0 ? u"" : i + 1 == names.size() ? u" and " : u", ") + names[i];
++  }
++  return text;
++}
++
++}  // namespace helium_fingerprint
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -862,6 +862,8 @@
+     "font_family_cache.cc",
+     "font_family_cache.h",
+     "global_features.cc",
++    "helium_fingerprint/fingerprint_report.cc",
++    "helium_fingerprint/fingerprint_report.h",
+     "helium_focus/helium_focus.cc",
+     "helium_focus/helium_focus.h",
+     "helium_noise/helium_noise_settings.cc",
+--- a/chrome/browser/page_load_metrics/page_load_metrics_initialize.cc
++++ b/chrome/browser/page_load_metrics/page_load_metrics_initialize.cc
+@@ -2,6 +2,7 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include "chrome/browser/helium_fingerprint/fingerprint_report.h"
+ #include "chrome/browser/page_load_metrics/page_load_metrics_initialize.h"
+ 
+ #include <memory>
+@@ -217,6 +218,7 @@
+ 
+   // Observers for regular web pages.
+   RegisterCommonObservers(tracker);
++  tracker->AddObserver(helium_fingerprint::CreateObserver());
+ 
+   if (!IsNoStatePrefetch(web_contents())) {
+     tracker->AddObserver(std::make_unique<AMPPageLoadMetricsObserver>());
+--- a/chrome/browser/ui/views/page_info/page_info_main_view.cc
++++ b/chrome/browser/ui/views/page_info/page_info_main_view.cc
+@@ -23,6 +23,7 @@
+ #include "base/task/cancelable_task_tracker.h"
+ #include "chrome/app/vector_icons/vector_icons.h"
+ #include "chrome/browser/browsing_data/chrome_browsing_data_remover_constants.h"
++#include "chrome/browser/helium_fingerprint/fingerprint_report.h"
+ #include "chrome/browser/helium_focus/helium_focus.h"
+ #include "chrome/browser/history/history_service_factory.h"
+ #include "chrome/browser/profiles/profile.h"
+@@ -501,7 +502,15 @@
+                               base::Unretained(navigation_handler_)),
+           PageInfoViewFactory::GetNoiseIcon(noise_enabled),
+           l10n_util::GetStringUTF16(IDS_PAGE_INFO_HELIUM_NOISE_HEADER),
+-          /*subtitle_text=*/std::u16string(),
++          // Helium++: what this page has called so far.
++          /*subtitle_text=*/
++          [&] {
++            const std::u16string used =
++                helium_fingerprint::UsedTechniques(web_contents);
++            return used.empty()
++                       ? std::u16string(u"No common fingerprinting calls seen")
++                       : u"This page read " + used;
++          }(),
+           PageInfoViewFactory::GetOpenSubpageIcon()));
+   noise_button->SetTooltipText(
+       l10n_util::GetStringUTF16(IDS_PAGE_INFO_HELIUM_NOISE_TOOLTIP));
+@@ -509,6 +518,8 @@
+       PageInfoViewFactory::VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_NOISE_SUBPAGE);
+   noise_button->SetTitleTextStyleAndColor(views::style::STYLE_BODY_3_MEDIUM,
+                                           kColorPageInfoForeground);
++  noise_button->SetSubtitleTextStyleAndColor(views::style::STYLE_BODY_4,
++                                             kColorPageInfoSubtitleForeground);
+ }
+ 
+ void PageInfoMainView::SetPermissionInfo(

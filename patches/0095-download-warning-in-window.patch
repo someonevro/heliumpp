@@ -1,0 +1,68 @@
+--- a/chrome/browser/ui/views/download/download_in_progress_dialog_view.h
++++ b/chrome/browser/ui/views/download/download_in_progress_dialog_view.h
+@@ -11,6 +11,10 @@
+ 
+ // Dialog shown when the user tries to exit the browser or all incognito windows
+ // while a download is in progress.
++namespace content {
++class WebContents;
++}
++
+ class DownloadInProgressDialogView : public views::DialogDelegateView {
+   METADATA_HEADER(DownloadInProgressDialogView, views::DialogDelegateView)
+ 
+@@ -24,7 +28,11 @@
+   // kLastWindowInIncognitoProfile to indicate the user is
+   // closing the last incognito window. |callback| will be called with true if
+   // the download should be canceled, or false if the download should proceed.
++  // Helium++: shown over |web_contents| (the active tab) when given, drawn inside
++  // the browser window; a separate dialog window may be placed out of sight by
++  // Wayland compositors, leaving the close blocked for no visible reason.
+   static void Show(gfx::NativeWindow parent,
++                   content::WebContents* web_contents,
+                    int download_count,
+                    UnloadController::DownloadCloseType dialog_type,
+                    base::OnceCallback<void(bool)> callback);
+--- a/chrome/browser/ui/views/download/download_in_progress_dialog_view.cc
++++ b/chrome/browser/ui/views/download/download_in_progress_dialog_view.cc
+@@ -18,11 +18,17 @@
+ // static
+ void DownloadInProgressDialogView::Show(
+     gfx::NativeWindow parent,
++    content::WebContents* web_contents,
+     int download_count,
+     UnloadController::DownloadCloseType dialog_type,
+     base::OnceCallback<void(bool)> callback) {
+   DownloadInProgressDialogView* window = new DownloadInProgressDialogView(
+       download_count, dialog_type, std::move(callback));
++  if (web_contents) {
++    window->SetModalType(ui::mojom::ModalType::kChild);
++    constrained_window::ShowWebModalDialogViews(window, web_contents);
++    return;
++  }
+   constrained_window::CreateBrowserModalDialogViews(window, parent)->Show();
+ }
+ 
+--- a/chrome/browser/ui/views/download/download_in_progress_dialog_view_unittest.cc
++++ b/chrome/browser/ui/views/download/download_in_progress_dialog_view_unittest.cc
+@@ -29,7 +29,7 @@
+   views::NamedWidgetShownWaiter waiter(views::test::AnyWidgetTestPasskey(),
+                                        "DownloadInProgressDialogView");
+   DownloadInProgressDialogView::Show(
+-      parent->GetNativeWindow(), 1,
++      parent->GetNativeWindow(), /*web_contents=*/nullptr, 1,
+       UnloadController::DownloadCloseType::kBrowserShutdown,
+       base::BindLambdaForTesting([&](bool b) { result = b; }));
+   waiter.WaitIfNeededAndGet()->Close();
+--- a/chrome/browser/ui/views/frame/browser_view.cc
++++ b/chrome/browser/ui/views/frame/browser_view.cc
+@@ -3849,7 +3849,8 @@
+   // getting stuck in the hover state. Reset the window controls to
+   // prevent this.
+   browser_widget()->non_client_view()->ResetWindowControls();
+-  DownloadInProgressDialogView::Show(GetNativeWindow(), download_count,
++  DownloadInProgressDialogView::Show(GetNativeWindow(), GetActiveWebContents(),
++                                     download_count,
+                                      dialog_type, std::move(callback));
+ }
+ 

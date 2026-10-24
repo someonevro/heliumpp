@@ -1,0 +1,122 @@
+--- a/chrome/browser/ui/webui/new_tab_page/new_tab_page.mojom
++++ b/chrome/browser/ui/webui/new_tab_page/new_tab_page.mojom
+@@ -179,6 +179,8 @@
+   // Performance mode (lighter on memory and battery).
+   GetPerformanceMode() => (bool enabled);
+   SetPerformanceMode(bool enabled);
++  // Tabs asleep (discarded) in this profile and the memory they used before.
++  GetSleepingTabs() => (int32 count, int64 bytes);
+   // Gets current doodle if there is one.
+   GetDoodle() => (Doodle? doodle);
+   // Called when a module the given id is dismissed.
+--- a/chrome/browser/ui/webui/new_tab_page/new_tab_page_handler.h
++++ b/chrome/browser/ui/webui/new_tab_page/new_tab_page_handler.h
+@@ -129,6 +129,7 @@
+   void GetMostVisitedSettings(GetMostVisitedSettingsCallback callback) override;
+   void GetPerformanceMode(GetPerformanceModeCallback callback) override;
+   void SetPerformanceMode(bool enabled) override;
++  void GetSleepingTabs(GetSleepingTabsCallback callback) override;
+   void GetPrivacyMode(GetPrivacyModeCallback callback) override;
+   void SetPrivacyMode(const std::string& mode,
+                       SetPrivacyModeCallback callback) override;
+--- a/chrome/browser/ui/webui/new_tab_page/new_tab_page_handler.cc
++++ b/chrome/browser/ui/webui/new_tab_page/new_tab_page_handler.cc
+@@ -57,6 +57,9 @@
+ #include "chrome/browser/themes/theme_properties.h"
+ #include "chrome/browser/ui/actions/chrome_action_id.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
++#include "chrome/browser/ui/performance_controls/tab_resource_usage_tab_helper.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/color/chrome_color_id.h"
+ #include "chrome/browser/ui/hats/hats_service.h"
+ #include "chrome/browser/ui/hats/hats_service_factory.h"
+@@ -642,6 +645,30 @@
+   helium_privacy_mode::SetPerformanceMode(profile_, enabled);
+ }
+ 
++void NewTabPageHandler::GetSleepingTabs(GetSleepingTabsCallback callback) {
++  int count = 0;
++  int64_t bytes = 0;
++  for (BrowserWindowInterface* window : GetAllBrowserWindowInterfaces()) {
++    if (window->GetProfile() != profile_) {
++      continue;
++    }
++    TabStripModel* tabs = window->GetTabStripModel();
++    for (int i = 0; i < tabs->count(); ++i) {
++      tabs::TabInterface* tab = tabs->GetTabAtIndex(i);
++      if (!tab->GetContents()->WasDiscarded()) {
++        continue;
++      }
++      ++count;
++      // The last measurement before the tab went to sleep (also what its hover
++      // card reports as "memory freed").
++      if (auto* usage = TabResourceUsageTabHelper::From(tab)) {
++        bytes += usage->GetMemoryUsage().InBytes();
++      }
++    }
++  }
++  std::move(callback).Run(count, bytes);
++}
++
+ void NewTabPageHandler::GetPrivacyMode(GetPrivacyModeCallback callback) {
+   std::move(callback).Run(helium_privacy_mode::GetModeName(profile_));
+ }
+--- a/chrome/browser/resources/new_tab_page/app.ts
++++ b/chrome/browser/resources/new_tab_page/app.ts
+@@ -244,6 +244,7 @@
+       realboxShown_: {type: Boolean},
+       privacyMode_: {type: String},
+       performanceMode_: {type: Boolean},
++      sleepingTabs_: {type: Object},
+       privacyRestart_: {type: Boolean},
+ 
+       /**
+@@ -397,6 +398,7 @@
+   protected accessor realboxShown_: boolean = false;
+   protected accessor privacyMode_: string = '';
+   protected accessor performanceMode_: boolean = false;
++  protected accessor sleepingTabs_: {count: number, bytes: bigint} = {count: 0, bytes: 0n};
+   protected accessor privacyRestart_: boolean = false;
+   protected readonly privacyModes_ = [
+     {id: 'usability', label: 'Usability'},
+@@ -1482,6 +1484,9 @@
+     this.pageHandler_.getPerformanceMode().then(({enabled}) => {
+       this.performanceMode_ = enabled;
+     });
++    this.pageHandler_.getSleepingTabs().then(({count, bytes}) => {
++      this.sleepingTabs_ = {count, bytes};
++    });
+   };
+ 
+   protected onPerformanceClick_() {
+@@ -1495,6 +1500,18 @@
+         'Off: normal behavior.';
+   }
+ 
++  // "3 sleeping tabs are freeing about 1.2 GB", or '' when none sleep.
++  protected sleepingNote_(): string {
++    const {count, bytes} = this.sleepingTabs_;
++    if (!count) {
++      return '';
++    }
++    const mb = Number(bytes) / (1024 * 1024);
++    const size = mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`;
++    const tabs = count === 1 ? '1 sleeping tab is' : `${count} sleeping tabs are`;
++    return mb >= 1 ? `${tabs} freeing about ${size}.` : `${tabs} freeing memory.`;
++  }
++
+   protected onPrivacyModeClick_(e: Event) {
+     const mode = (e.currentTarget as HTMLElement).dataset['mode'] || '';
+     this.pageHandler_.setPrivacyMode(mode).then(
+--- a/chrome/browser/resources/new_tab_page/app.html
++++ b/chrome/browser/resources/new_tab_page/app.html
+@@ -27,6 +27,8 @@
+       <div>
+         <div class="title">Performance mode</div>
+         <div class="desc">${this.performanceNote_()}</div>
++        ${this.sleepingNote_() ? html`
++          <div class="desc" id="sleepingNote">${this.sleepingNote_()}</div>` : ''}
+       </div>
+     </div>
+   </div>

@@ -1,0 +1,139 @@
+--- a/chrome/browser/chrome_browser_main_linux.cc
++++ b/chrome/browser/chrome_browser_main_linux.cc
+@@ -15,7 +15,16 @@
+ #include "base/task/single_thread_task_runner.h"
+ #include "base/task/thread_pool.h"
+ #include "build/build_config.h"
++#include "base/no_destructor.h"
++#include "base/strings/utf_string_conversions.h"
+ #include "chrome/browser/browser_process.h"
++#include "chrome/browser/lifetime/application_lifetime.h"
++#include "chrome/browser/notifications/notification_display_service.h"
++#include "chrome/browser/notifications/notification_display_service_factory.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/profiles/profile_manager.h"
++#include "chrome/browser/upgrade_detector/build_state.h"
++#include "chrome/browser/upgrade_detector/build_state_observer.h"
+ #include "chrome/common/chrome_features.h"
+ #include "components/password_manager/core/browser/password_manager_switches.h"
+ #include "content/public/browser/browser_thread.h"
+@@ -23,6 +32,8 @@
+ #include "ui/base/l10n/l10n_util.h"
+ 
+ #if BUILDFLAG(IS_LINUX)
++#include "ui/message_center/public/cpp/notification.h"
++#include "ui/message_center/public/cpp/notification_delegate.h"
+ #include "ui/ozone/public/ozone_platform.h"
+ #if BUILDFLAG(USE_DBUS)
+ #include "components/dbus/thread_linux/dbus_thread_linux.h"
+@@ -75,8 +86,57 @@
+   ChromeBrowserMainPartsPosix::PostCreateMainMessageLoop();
+ }
+ 
++namespace {
++
++// Desktop notification once the updater has installed a new version (it reports that to
++// BuildState). The vertical layout has no app menu button for Chromium's relaunch chip.
++class UpdateReadyNotifier : public BuildStateObserver {
++ public:
++  void OnUpdate(const BuildState* build_state) override {
++    Profile* profile = ProfileManager::GetLastUsedProfileIfLoaded();
++    if (build_state->update_type() == BuildState::UpdateType::kNone || !profile ||
++        profile->IsSystemProfile()) {
++      return;
++    }
++    message_center::RichNotificationData data;
++    data.buttons.emplace_back(u"Restart now");
++    message_center::Notification notification(
++        message_center::NOTIFICATION_TYPE_SIMPLE, "heliumpp-update-ready",
++        u"Helium++ update ready",
++        u"Version " +
++            base::UTF8ToUTF16(build_state->installed_version()
++                                  ? build_state->installed_version()->GetString()
++                                  : std::string()) +
++            u" is installed. Restart Helium++ to start using it.",
++        ui::ImageModel(), u"Helium++", GURL(),
++        message_center::NotifierId(message_center::NotifierType::SYSTEM_COMPONENT,
++                                   "heliumpp.update"),
++        data,
++        base::MakeRefCounted<message_center::HandleNotificationClickDelegate>(
++            base::BindRepeating([](std::optional<int> button) {
++              if (button) {
++                chrome::AttemptRestart();
++              }
++            })));
++    notification.set_never_timeout(true);
++    NotificationDisplayServiceFactory::GetForProfile(profile)->Display(
++        NotificationHandler::Type::TRANSIENT, notification, nullptr);
++  }
++};
++
++UpdateReadyNotifier& Notifier() {
++  static base::NoDestructor<UpdateReadyNotifier> notifier;
++  return *notifier;
++}
++
++}  // namespace
++
+ #if BUILDFLAG(IS_LINUX)
+ void ChromeBrowserMainPartsLinux::PostMainMessageLoopRun() {
++  // BuildState checks that its observers are gone when it is destroyed.
++  if (g_browser_process->GetBuildState()->HasObserver(&Notifier())) {
++    g_browser_process->GetBuildState()->RemoveObserver(&Notifier());
++  }
+   ChromeBrowserMainPartsPosix::PostMainMessageLoopRun();
+   ui::OzonePlatform::GetInstance()->PostMainMessageLoopRun();
+ }
+@@ -100,6 +160,7 @@
+ 
+ #if BUILDFLAG(USE_DBUS) && !BUILDFLAG(IS_CHROMEOS)
+ void ChromeBrowserMainPartsLinux::PostBrowserStart() {
++  g_browser_process->GetBuildState()->AddObserver(&Notifier());
+   StartHeliumAutoUpdate();
+   auto* monitor = memory_pressure::MultiSourceMemoryPressureMonitor::Get();
+   if (monitor &&
+--- a/chrome/browser/ui/webui/help/helium_appimage_updater.cc
++++ b/chrome/browser/ui/webui/help/helium_appimage_updater.cc
+@@ -29,6 +29,7 @@
+ #include "base/version.h"
+ #include "base/version_info/version_info.h"
+ #include "chrome/browser/browser_process.h"
++#include "chrome/browser/upgrade_detector/build_state.h"
+ #include "chrome/browser/ui/webui/help/version_updater.h"
+ #include "crypto/hash.h"
+ #include "net/base/url_util.h"
+@@ -301,6 +302,9 @@
+     }
+     Done();
+     InstalledVersion() = version_;
++    // Lights up the app menu's "Relaunch to update" chip (UpgradeDetectorImpl observes this).
++    g_browser_process->GetBuildState()->SetUpdate(BuildState::UpdateType::kNormalUpdate,
++                                                  base::Version(version_), std::nullopt);
+     Report(NEARLY_UPDATED, 0, std::u16string());
+   }
+ 
+--- a/chrome/browser/upgrade_detector/upgrade_detector_impl.cc
++++ b/chrome/browser/upgrade_detector/upgrade_detector_impl.cc
+@@ -48,8 +48,10 @@
+ namespace {
+ 
+ // The default thresholds for reaching annoyance levels.
+-constexpr auto kDefaultVeryLowThreshold = base::Hours(1);
+-constexpr auto kDefaultLowThreshold = base::Days(2);
++// Helium++: our updater only reports a finished install, so show the relaunch chip at once
++// (stable channels show nothing below "low"); it still escalates at 4 and 7 days.
++constexpr auto kDefaultVeryLowThreshold = base::TimeDelta();
++constexpr auto kDefaultLowThreshold = base::TimeDelta();
+ constexpr auto kDefaultElevatedThreshold = base::Days(4);
+ constexpr auto kDefaultHighThreshold = base::Days(7);
+ constexpr auto kDefaultGraceThreshold = kDefaultHighThreshold - base::Hours(1);
+@@ -493,6 +495,9 @@
+   auto* const build_state = g_browser_process->GetBuildState();
+   build_state->AddObserver(this);
+   installed_version_poller_.emplace(build_state);
++#else
++  // Helium++'s AppImage updater (helium_appimage_updater.cc) reports installs here.
++  g_browser_process->GetBuildState()->AddObserver(this);
+ #endif  // BUILDFLAG(ENABLE_UPDATE_NOTIFICATIONS)
+ }
+ 

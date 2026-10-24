@@ -1,0 +1,357 @@
+--- a/chrome/browser/ui/views/page_info/page_info_main_view.cc
++++ b/chrome/browser/ui/views/page_info/page_info_main_view.cc
+@@ -19,6 +19,7 @@
+ #include "chrome/browser/ui/layout_constants.h"
+ #include "chrome/browser/ui/page_info/chrome_page_info_ui_delegate.h"
+ #include "base/no_destructor.h"
++#include "base/scoped_observation.h"
+ #include "base/strings/utf_string_conversions.h"
+ #include "base/task/cancelable_task_tracker.h"
+ #include "chrome/app/vector_icons/vector_icons.h"
+@@ -27,7 +28,10 @@
+ #include "chrome/browser/helium_focus/helium_focus.h"
+ #include "chrome/browser/history/history_service_factory.h"
+ #include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
+ #include "chrome/browser/ui/dialogs/browser_dialogs.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/ui_features.h"
+ #include "chrome/browser/ui/views/accessibility/non_accessible_image_view.h"
+ #include "chrome/browser/ui/views/chrome_layout_provider.h"
+@@ -201,8 +205,8 @@
+ };
+ 
+ // Deletes the cookies, storage, cache and history of a site (all its
+-// subdomains), then leaves the site for the new tab page: reloading would be a new
+-// visit that stores it all again. Deletes itself.
++// subdomains), then sends every tab showing the site to the new tab page: a tab
++// left on it, or a reload, would store it all again. Deletes itself.
+ class SiteForgetter : public content::BrowsingDataRemover::Observer {
+  public:
+   static void Start(content::WebContents* contents, const GURL& url) {
+@@ -211,9 +215,9 @@
+ 
+  private:
+   SiteForgetter(content::WebContents* contents, const std::string& site)
+-      : contents_(contents->GetWeakPtr()) {
+-    Profile* profile =
+-        Profile::FromBrowserContext(contents->GetBrowserContext());
++      : profile_(Profile::FromBrowserContext(contents->GetBrowserContext())),
++        site_(site) {
++    Profile* profile = profile_;
+     // The remover ignores filters for history and would wipe all of it, so the
+     // site's entries are picked out here.
+     if (history::HistoryService* history =
+@@ -227,6 +231,8 @@
+     auto filter = content::BrowsingDataFilterBuilder::Create(
+         content::BrowsingDataFilterBuilder::Mode::kDelete);
+     filter->AddRegisterableDomain(site);
++    // The remover only reports back to registered observers.
++    observation_.Observe(profile->GetBrowsingDataRemover());
+     profile->GetBrowsingDataRemover()->RemoveWithFilterAndReply(
+         base::Time(), base::Time::Max(),
+         // Content settings (permissions) can't be removed per site; page info
+@@ -239,15 +245,30 @@
+   }
+ 
+   void OnBrowsingDataRemoverDone(uint64_t failed_data_types) override {
+-    if (contents_) {
+-      contents_->GetController().LoadURL(
+-          GURL(chrome::kChromeUINewTabURL), content::Referrer(),
+-          ui::PAGE_TRANSITION_AUTO_TOPLEVEL, std::string());
++    observation_.Reset();
++    for (BrowserWindowInterface* window : GetAllBrowserWindowInterfaces()) {
++      if (window->GetProfile() != profile_) {
++        continue;
++      }
++      TabStripModel* tabs = window->GetTabStripModel();
++      for (int i = 0; i < tabs->count(); ++i) {
++        content::WebContents* contents = tabs->GetWebContentsAt(i);
++        if (contents->GetLastCommittedURL().DomainIs(site_)) {
++          contents->GetController().LoadURL(
++              GURL(chrome::kChromeUINewTabURL), content::Referrer(),
++              ui::PAGE_TRANSITION_AUTO_TOPLEVEL, std::string());
++        }
++      }
+     }
+     delete this;
+   }
+ 
+-  base::WeakPtr<content::WebContents> contents_;
++  // The remover belongs to the profile, so it outlives this.
++  const raw_ptr<Profile> profile_;
++  const std::string site_;
++  base::ScopedObservation<content::BrowsingDataRemover,
++                          content::BrowsingDataRemover::Observer>
++      observation_{this};
+ };
+ 
+ }  // namespace
+--- a/components/password_manager/core/browser/leak_detection/leak_detection_check_factory_impl.cc
++++ b/components/password_manager/core/browser/leak_detection/leak_detection_check_factory_impl.cc
+@@ -15,7 +15,6 @@
+ 
+ #if !BUILDFLAG(IS_ANDROID)
+ #include "base/containers/circular_deque.h"
+-#include "base/containers/flat_map.h"
+ #include "base/hash/sha1.h"
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/weak_ptr.h"
+@@ -23,7 +22,6 @@
+ #include "base/strings/string_split.h"
+ #include "base/strings/string_util.h"
+ #include "base/strings/utf_string_conversions.h"
+-#include "base/task/sequenced_task_runner.h"
+ #include "components/password_manager/core/browser/leak_detection/bulk_leak_check_delegate_interface.h"
+ #include "components/password_manager/core/browser/leak_detection/bulk_leak_check_impl.h"
+ #include "components/password_manager/core/browser/leak_detection/leak_detection_request_utils.h"
+@@ -52,7 +50,8 @@
+ // Pwned's Pwned Passwords range API. Only the first 5 hex digits of each
+ // password's SHA-1 leave the browser ("k-anonymity"); the match against the
+ // returned suffixes happens here. Padding is requested so response sizes don't
+-// hint at the prefix. Runs only when the user starts the check.
++// hint at the prefix. One request per password, one at a time. Runs only on
++// the user's own actions.
+ class HibpBulkLeakCheck : public BulkLeakCheck {
+  public:
+   HibpBulkLeakCheck(
+@@ -90,13 +89,6 @@
+       return;
+     }
+     const std::string prefix = HashOf(queue_.front()).substr(0, 5);
+-    if (ranges_.contains(prefix)) {
+-      // Posted: the delegate may call back into this object.
+-      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+-          FROM_HERE, base::BindOnce(&HibpBulkLeakCheck::Finish,
+-                                    weak_factory_.GetWeakPtr()));
+-      return;
+-    }
+     static constexpr net::NetworkTrafficAnnotationTag kAnnotation =
+         net::DefineNetworkTrafficAnnotation("helium_hibp_password_check", R"(
+           semantics {
+@@ -124,33 +116,25 @@
+     loader_ = network::SimpleURLLoader::Create(std::move(request), kAnnotation);
+     loader_->DownloadToString(
+         url_loader_factory_.get(),
+-        base::BindOnce(&HibpBulkLeakCheck::OnRange, weak_factory_.GetWeakPtr(),
+-                       prefix),
++        base::BindOnce(&HibpBulkLeakCheck::OnRange, weak_factory_.GetWeakPtr()),
+         /*max_body_size=*/1024 * 1024);
+   }
+ 
+-  void OnRange(const std::string& prefix, std::optional<std::string> body) {
++  // `range` lists the hash suffixes for the first queued credential's prefix.
++  void OnRange(std::optional<std::string> range) {
+     loader_.reset();
+-    if (!body) {
++    if (!range) {
+       queue_.clear();
+       delegate_->OnError(LeakDetectionError::kNetworkError);
+       return;
+     }
+-    ranges_[prefix] = std::move(*body);
+-    Finish();
+-  }
+-
+-  void Finish() {
+-    if (queue_.empty()) {
+-      return;
+-    }
+     LeakCheckCredential credential = std::move(queue_.front());
+     queue_.pop_front();
+     const std::string hash = HashOf(credential);
+     bool leaked = false;
+     // Lines are "SUFFIX:COUNT"; padding lines have a count of 0.
+     for (std::string_view line :
+-         base::SplitStringPiece(ranges_[hash.substr(0, 5)], "\n",
++         base::SplitStringPiece(*range, "\n",
+                                 base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY)) {
+       const size_t colon = line.find(':');
+       int count = 0;
+@@ -173,7 +157,6 @@
+   const raw_ptr<BulkLeakCheckDelegateInterface> delegate_;
+   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
+   base::circular_deque<LeakCheckCredential> queue_;
+-  base::flat_map<std::string, std::string> ranges_;
+   std::unique_ptr<network::SimpleURLLoader> loader_;
+   base::WeakPtrFactory<HibpBulkLeakCheck> weak_factory_{this};
+ };
+--- a/chrome/browser/helium_fingerprint/fingerprint_report.cc
++++ b/chrome/browser/helium_fingerprint/fingerprint_report.cc
+@@ -1,13 +1,13 @@
+ #include "chrome/browser/helium_fingerprint/fingerprint_report.h"
+ 
+-#include <algorithm>
+ #include <vector>
+ 
+ #include "components/page_load_metrics/browser/page_load_metrics_observer.h"
+ #include "components/page_load_metrics/browser/page_load_metrics_observer_delegate.h"
+-#include "content/public/browser/navigation_handle.h"
++#include "content/public/browser/page.h"
++#include "content/public/browser/page_user_data.h"
++#include "content/public/browser/render_frame_host.h"
+ #include "content/public/browser/web_contents.h"
+-#include "content/public/browser/web_contents_user_data.h"
+ #include "third_party/blink/public/common/use_counter/use_counter_feature.h"
+ #include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom.h"
+ #include "third_party/blink/public/mojom/use_counter/use_counter_feature.mojom.h"
+@@ -19,9 +19,9 @@
+ using blink::mojom::WebFeature;
+ 
+ // Order is the order shown to the user.
+-enum Technique { kCanvas, kWebGL, kAudio, kFonts, kDevice, kCount };
++enum Technique { kCanvas, kWebGL, kAudio, kDevice, kCount };
+ constexpr const char16_t* kNames[kCount] = {u"canvas", u"WebGL", u"audio",
+-                                            u"fonts", u"device details"};
++                                            u"device details"};
+ 
+ int TechniqueOf(WebFeature feature) {
+   switch (feature) {
+@@ -37,10 +37,6 @@
+     case WebFeature::kV8AudioBuffer_GetChannelData_Method:
+     case WebFeature::kV8AnalyserNode_GetFloatFrequencyData_Method:
+       return kAudio;
+-    // Measuring text in many fonts reveals which fonts are installed (but
+-    // ordinary text layout code measures text too).
+-    case WebFeature::kCanvas2DMeasureText:
+-      return kFonts;
+     case WebFeature::kNavigatorHardwareConcurrency:
+     case WebFeature::kNavigatorDeviceMemory:
+       return kDevice;
+@@ -49,19 +45,19 @@
+   }
+ }
+ 
+-// Techniques used by the page currently shown in a tab.
+-class Report : public content::WebContentsUserData<Report> {
++// Techniques used by a page. Kept on the page, so a page restored by Back keeps
++// its own report.
++class Report : public content::PageUserData<Report> {
+  public:
+   bool used[kCount] = {};
+ 
+  private:
+-  explicit Report(content::WebContents* web_contents)
+-      : content::WebContentsUserData<Report>(*web_contents) {}
+-  friend class content::WebContentsUserData<Report>;
+-  WEB_CONTENTS_USER_DATA_KEY_DECL();
++  explicit Report(content::Page& page) : content::PageUserData<Report>(page) {}
++  friend class content::PageUserData<Report>;
++  PAGE_USER_DATA_KEY_DECL();
+ };
+ 
+-WEB_CONTENTS_USER_DATA_KEY_IMPL(Report);
++PAGE_USER_DATA_KEY_IMPL(Report);
+ 
+ class Observer : public page_load_metrics::PageLoadMetricsObserver {
+  public:
+@@ -80,21 +76,17 @@
+     return STOP_OBSERVING;
+   }
+ 
+-  // A new page in the tab starts with an empty report.
+-  ObservePolicy OnCommit(content::NavigationHandle* navigation_handle) override {
+-    content::WebContents* contents = GetDelegate().GetWebContents();
+-    Report::CreateForWebContents(contents);
+-    std::ranges::fill(Report::FromWebContents(contents)->used, false);
++  // Keep counting after Back restores the page from the back/forward cache.
++  ObservePolicy OnEnterBackForwardCache(
++      const page_load_metrics::mojom::PageLoadTiming& timing) override {
+     return CONTINUE_OBSERVING;
+   }
+ 
+   void OnFeaturesUsageObserved(
+       content::RenderFrameHost* rfh,
+       const std::vector<blink::UseCounterFeature>& features) override {
+-    Report* report = Report::FromWebContents(GetDelegate().GetWebContents());
+-    if (!report) {
+-      return;
+-    }
++    Report* report = Report::GetOrCreateForPage(
++        rfh->GetOutermostMainFrame()->GetPage());
+     for (const blink::UseCounterFeature& feature : features) {
+       if (feature.type() == blink::mojom::UseCounterFeatureType::kWebFeature) {
+         if (int t = TechniqueOf(static_cast<WebFeature>(feature.value()));
+@@ -113,7 +105,8 @@
+ }
+ 
+ std::u16string UsedTechniques(content::WebContents* web_contents) {
+-  const Report* report = Report::FromWebContents(web_contents);
++  const Report* report =
++      Report::GetForPage(web_contents->GetPrimaryPage());
+   std::vector<std::u16string> names;
+   for (int t = 0; report && t < kCount; ++t) {
+     if (report->used[t]) {
+--- a/chrome/browser/helium_aliases/helium_aliases.h
++++ b/chrome/browser/helium_aliases/helium_aliases.h
+@@ -13,7 +13,8 @@
+ 
+ namespace helium_aliases {
+ 
+-// Profile pref: the user's addy.io API key, encrypted with OSCrypt, base64.
++// Profile pref: the user's addy.io API key, encrypted with OSCrypt through the
++// system keyring ("v11"), base64. Empty when there is no keyring.
+ inline constexpr char kAddyKeyPref[] = "helium.addy_key";
+ 
+ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
+--- a/chrome/browser/helium_aliases/helium_aliases.cc
++++ b/chrome/browser/helium_aliases/helium_aliases.cc
+@@ -144,7 +144,7 @@
+       // "custom" needs a local part we don't have.
+       alias.Set("format", format && *format != "custom" ? *format
+                                                          : "random_words");
+-      alias.Set("description", "Helium++: " + site_);
++      alias.Set("description", site_.empty() ? "Helium++" : "Helium++: " + site_);
+       Send("aliases", base::WriteJson(alias));
+       return;
+     } else if (const std::string* email = data->FindString("email")) {
+@@ -170,7 +170,8 @@
+       .AddParagraph(ui::DialogModelLabel(
+           problem + (problem.empty() ? u"" : u" ") +
+           u"Paste an API key from app.addy.io (Settings, API Keys). It is "
+-          u"stored encrypted on this device."))
++          u"saved only if your system keyring (GNOME Keyring, KWallet) can "
++          u"encrypt it; without one you are asked each time."))
+       .AddTextfield(kKeyFieldId, u"API key", std::u16string(),
+                     ui::DialogModelTextfield::Params().SetAccessibleName(
+                         u"addy.io API key"))
+@@ -189,14 +190,20 @@
+                        std::string key,
+                        scoped_refptr<os_crypt_async::Encryptor> encryptor) {
+                       std::string encrypted;
+-                      if (!contents ||
+-                          !encryptor->EncryptString(key, &encrypted)) {
++                      if (!contents) {
+                         return;
+                       }
+-                      Profile::FromBrowserContext(contents->GetBrowserContext())
+-                          ->GetPrefs()
+-                          ->SetString(kAddyKeyPref,
+-                                      base::Base64Encode(encrypted));
++                      // "v11" = keyring-backed key. Without a keyring
++                      // Chromium falls back to "v10", a key built into the
++                      // browser: that only scrambles, so nothing is saved.
++                      if (encryptor->EncryptString(key, &encrypted) &&
++                          encrypted.starts_with("v11")) {
++                        Profile::FromBrowserContext(
++                            contents->GetBrowserContext())
++                            ->GetPrefs()
++                            ->SetString(kAddyKeyPref,
++                                        base::Base64Encode(encrypted));
++                      }
+                       AliasRequest::Start(contents.get(), key);
+                     },
+                     contents, key));
+--- a/chrome/browser/helium_theme/helium_theme.cc
++++ b/chrome/browser/helium_theme/helium_theme.cc
+@@ -525,8 +525,7 @@
+ 
+ // Re-applies when the desktop changes: the system theme or accent (all
+ // platforms, via NativeTheme) and Omarchy's theme switch (the symlinks in its
+-// "current" directory change). shortcut: tracks the last profile that applied,
+-// which is fine while a single profile is open.
++// "current" directory change), for every profile that follows the desktop.
+ class DesktopWatcher : public ui::NativeThemeObserver {
+  public:
+   // Every profile with sync on is followed; the watchers stop when none is left.

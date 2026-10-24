@@ -36,6 +36,14 @@ sed 's/^Name=Helium$/Name=Helium++/; s/^Icon=helium$/Icon=heliumpp/; /^\[Desktop
 sed 's|/etc/apparmor.d/helium-appimage|/etc/apparmor.d/heliumpp-appimage|; s|profile helium-appimage |profile heliumpp-appimage |; s|<local/helium-appimage>|<local/heliumpp-appimage>|' \
     "$pkg/helium-wrapper-appimage.sh" > "$app/AppRun"; chmod +x "$app/AppRun"
 grep -q "heliumpp-appimage" "$app/AppRun" && ! grep -q "helium-appimage" "$app/AppRun" || { echo "AppArmor rename failed" >&2; exit 1; }
+# Upstream's AppArmor re-exec drops the arguments: a link opened on the first launch was lost.
+sed -i 's|^\( *APPARMOR_BOOTSTRAPPED=1 exec "\$APPIMAGE"\)$|\1 "$@"|' "$app/AppRun"
+grep -q 'APPARMOR_BOOTSTRAPPED=1 exec "$APPIMAGE" "$@"$' "$app/AppRun" || { echo "AppArmor re-exec fix failed" >&2; exit 1; }
+# Menu entry and desktop icon: splice ours in before the last line, which starts the browser.
+launch='"${HERE}"/opt/helium/helium "$@"'
+[ "$(tail -n 1 "$app/AppRun")" = "$launch" ] || { echo "AppRun last line changed" >&2; exit 1; }
+{ head -n -1 "$app/AppRun"; cat "$root/scripts/appimage_desktop_entry.sh"; echo; echo "$launch"; } > "$app/AppRun.new"
+mv "$app/AppRun.new" "$app/AppRun"; chmod +x "$app/AppRun"
 cp "$out/product_logo_256.png" "$app/heliumpp.png"
 cp "$out/product_logo_256.png" "$app/usr/share/icons/hicolor/256x256/apps/heliumpp.png"
 

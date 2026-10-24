@@ -1,0 +1,133 @@
+--- a/chrome/app/chrome_command_ids.h
++++ b/chrome/app/chrome_command_ids.h
+@@ -335,6 +335,7 @@
+ #define IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW 50111
+ #define IDC_CONTENT_CONTEXT_ADD_LINK_TO_READING_LIST 50112
+ #define IDC_CONTENT_CONTEXT_OPENLINK_ISOLATED 50113
++#define IDC_CONTENT_CONTEXT_COPYCLEANLINK 50114
+ // Image items.
+ #define IDC_CONTENT_CONTEXT_SAVEIMAGEAS 50120
+ #define IDC_CONTENT_CONTEXT_COPYIMAGELOCATION 50121
+--- a/chrome/browser/renderer_context_menu/render_view_context_menu.cc
++++ b/chrome/browser/renderer_context_menu/render_view_context_menu.cc
+@@ -17,6 +17,7 @@
+ #include "base/check.h"
+ #include "base/command_line.h"
+ #include "base/containers/fixed_flat_map.h"
++#include "base/containers/fixed_flat_set.h"
+ #include "base/feature_list.h"
+ #include "base/functional/bind.h"
+ #include "base/functional/callback.h"
+@@ -30,6 +31,7 @@
+ #include "base/no_destructor.h"
+ #include "base/observer_list.h"
+ #include "base/strings/escape.h"
++#include "base/strings/string_split.h"
+ #include "base/strings/strcat.h"
+ #include "base/strings/string_tokenizer.h"
+ #include "base/strings/string_util.h"
+@@ -661,13 +663,14 @@
+        {IDC_CONTENT_CONTEXT_SAVE_TO_MEMORY_BANKS, 168},
+        {IDC_CONTENT_CONTEXT_OPENLINK_ISOLATED, 169},
+        {IDC_CONTENT_CONTEXT_FORCE_PASTE, 170},
++       {IDC_CONTENT_CONTEXT_COPYCLEANLINK, 171},
+        // To add new items:
+        //   - Add one more line above this comment block, using the UMA value
+        //     from the line below this comment block.
+        //   - Increment the UMA value in that latter line.
+        //   - Add the new item to the RenderViewContextMenuItem enum in
+        //     tools/metrics/histograms/metadata/ui/enums.xml.
+-       {kUmaMaxValueKey, 171}});
++       {kUmaMaxValueKey, 172}});
+   // LINT.ThenChange(//tools/metrics/histograms/metadata/ui/enums.xml:RenderViewContextMenuItem)
+ 
+   // LINT.IfChange(ContextMenuOptionDesktop)
+@@ -776,6 +779,56 @@
+   return UmaEnumForCommand(id, type);
+ }
+ 
++// Query parameters that only record who shared or clicked a link (for "Copy clean link").
++constexpr auto kTrackingParams = base::MakeFixedFlatSet<std::string_view>(
++    {"fbclid",      "gclid",     "gclsrc",      "dclid",      "gbraid",
++     "wbraid",      "msclkid",   "mc_cid",      "mc_eid",     "igshid",
++     "igsh",        "yclid",     "ysclid",      "twclid",     "ttclid",
++     "li_fat_id",   "_hsenc",    "_hsmi",       "__hssc",     "__hstc",
++     "__hsfp",      "mkt_tok",   "oly_anon_id", "oly_enc_id", "vero_id",
++     "vero_conv",   "_openstat", "wickedid",    "rb_clickid", "s_cid",
++     "srsltid",     "epik",      "_gl",         "ref_src",    "ref_url"});
++// Prefixes of whole tracking families: utm_source, utm_medium, ... (and Matomo/Piwik's).
++constexpr std::string_view kTrackingPrefixes[] = {"utm_", "mtm_", "pk_"};
++
++bool IsTrackingParam(std::string_view host, std::string_view key) {
++  const std::string lower = base::ToLowerASCII(key);
++  if (kTrackingParams.contains(lower)) {
++    return true;
++  }
++  for (std::string_view prefix : kTrackingPrefixes) {
++    if (lower.starts_with(prefix)) {
++      return true;
++    }
++  }
++  // "si" is a share id on YouTube and Spotify but may mean anything elsewhere.
++  return lower == "si" &&
++         (host == "youtu.be" || host == "open.spotify.com" ||
++          host == "youtube.com" || host.ends_with(".youtube.com"));
++}
++
++// `url` without tracking query parameters; everything else is kept byte for byte.
++GURL StripTrackingParams(const GURL& url) {
++  if (!url.has_query() || !url.SchemeIsHTTPOrHTTPS()) {
++    return url;
++  }
++  std::vector<std::string_view> kept;
++  for (std::string_view part : base::SplitStringPiece(
++           url.query(), "&", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY)) {
++    if (!IsTrackingParam(url.host(), part.substr(0, part.find('=')))) {
++      kept.push_back(part);
++    }
++  }
++  const std::string query = base::JoinString(kept, "&");
++  GURL::Replacements replacements;
++  if (query.empty()) {
++    replacements.ClearQuery();
++  } else {
++    replacements.SetQueryStr(query);
++  }
++  return url.ReplaceComponents(replacements);
++}
++
+ // Returns true if the command id is for opening a link.
+ bool IsCommandForOpenLink(int id) {
+   return id == IDC_CONTENT_CONTEXT_OPENLINKNEWTAB ||
+@@ -2162,6 +2215,10 @@
+                                   params_.link_url.SchemeIs(url::kMailToScheme)
+                                       ? IDS_CONTENT_CONTEXT_COPYEMAILADDRESS
+                                       : IDS_CONTENT_CONTEXT_COPYLINKLOCATION);
++  // Only offered when there is something to remove.
++  if (StripTrackingParams(params_.link_url) != params_.link_url) {
++    menu_model_.AddItem(IDC_CONTENT_CONTEXT_COPYCLEANLINK, u"Copy c&lean link");
++  }
+   if (features::IsMenuSimplificationEnabled() && !params_.has_image_contents) {
+     menu_model_.AddItemWithStringIdAndIcon(
+         IDC_CONTENT_CONTEXT_ADD_LINK_TO_READING_LIST,
+@@ -3418,6 +3475,9 @@
+     case IDC_CONTENT_CONTEXT_COPYLINKLOCATION:
+       return params_.unfiltered_link_url.is_valid();
+ 
++    case IDC_CONTENT_CONTEXT_COPYCLEANLINK:
++      return params_.link_url.is_valid();
++
+     case IDC_CONTENT_CONTEXT_ADD_LINK_TO_READING_LIST:
+       return params_.link_url.is_valid();
+ 
+@@ -3813,6 +3873,10 @@
+       WriteURLToClipboard(params_.unfiltered_link_url, id);
+       break;
+ 
++    case IDC_CONTENT_CONTEXT_COPYCLEANLINK:
++      WriteURLToClipboard(StripTrackingParams(params_.link_url), id);
++      break;
++
+     case IDC_CONTENT_CONTEXT_ADD_LINK_TO_READING_LIST: {
+       ReadingListModel* model =
+           ReadingListModelFactory::GetForBrowserContext(browser_context_);

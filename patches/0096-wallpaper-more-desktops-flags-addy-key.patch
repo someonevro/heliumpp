@@ -1,0 +1,225 @@
+--- a/chrome/browser/helium_theme/helium_theme.cc
++++ b/chrome/browser/helium_theme/helium_theme.cc
+@@ -90,7 +90,7 @@
+ #endif
+ 
+ #if BUILDFLAG(IS_LINUX)
+-enum class LinuxDesktop { kOther, kKde, kGnome, kCinnamon };
++enum class LinuxDesktop { kOther, kKde, kGnome, kCinnamon, kMate, kXfce };
+ 
+ // From XDG_CURRENT_DESKTOP, a colon-separated list such as "ubuntu:GNOME".
+ LinuxDesktop DetectLinuxDesktop() {
+@@ -101,7 +101,11 @@
+            base::SPLIT_WANT_NONEMPTY)) {
+     if (name == "KDE") return LinuxDesktop::kKde;
+     if (name == "X-CINNAMON" || name == "CINNAMON") return LinuxDesktop::kCinnamon;
+-    if (name == "GNOME" || name == "UNITY" || name == "BUDGIE") {
++    if (name == "MATE") return LinuxDesktop::kMate;
++    if (name == "XFCE") return LinuxDesktop::kXfce;
++    // Pantheon (elementary OS) and Budgie keep the wallpaper in GNOME's key.
++    if (name == "GNOME" || name == "UNITY" || name == "BUDGIE" ||
++        name == "PANTHEON") {
+       return LinuxDesktop::kGnome;
+     }
+   }
+@@ -119,6 +123,24 @@
+   return ConfigHome().Append("plasma-org.kde.plasma.desktop-appletsrc");
+ }
+ 
++base::FilePath XfceDesktopConfig() {
++  return ConfigHome().Append("xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml");
++}
++
++// Wallpaper tools without a desktop environment (tiling window managers), in
++// the order they are tried; each pairs a config file with its parser.
++struct WallpaperToolConfig {
++  base::FilePath file;
++  std::string (*parse)(const std::string&);
++};
++std::vector<WallpaperToolConfig> WallpaperToolConfigs() {
++  namespace wp = helium_theme::wallpaper;
++  return {{ConfigHome().Append("hypr/hyprpaper.conf"), &wp::ParseHyprpaper},
++          {ConfigHome().Append("sway/config"), &wp::ParseSwayConfig},
++          {base::GetHomeDir().Append(".fehbg"), &wp::ParseFehbg},
++          {ConfigHome().Append("nitrogen/bg-saved.cfg"), &wp::ParseNitrogen}};
++}
++
+ // GNOME and Cinnamon keep settings in dconf; every gsettings write changes this file.
+ base::FilePath DconfUserDb() {
+   return ConfigHome().Append("dconf/user");
+@@ -241,7 +263,8 @@
+ }
+ 
+ // Wallpaper of the running desktop environment. Runs on a blocking thread.
+-// shortcut: only KDE, GNOME and Cinnamon; other desktops fall back to the accent.
++// shortcut: other desktops (Deepin, COSMIC, LXQt, swww users...) fall back to the
++// accent; add a parser when one is asked for.
+ base::FilePath LinuxDesktopWallpaper() {
+   std::string path;
+   switch (DetectLinuxDesktop()) {
+@@ -271,7 +294,29 @@
+       path = helium_theme::wallpaper::ParseGSettingsValue(
+           GSettingsGet("org.cinnamon.desktop.background", "picture-uri"));
+       break;
++    case LinuxDesktop::kMate:
++      path = helium_theme::wallpaper::ParseGSettingsValue(
++          GSettingsGet("org.mate.background", "picture-filename"));
++      break;
++    case LinuxDesktop::kXfce: {
++      std::string xml;
++      if (base::ReadFileToString(XfceDesktopConfig(), &xml)) {
++        path = helium_theme::wallpaper::ParseXfceDesktopXml(xml);
++      }
++      break;
++    }
+     case LinuxDesktop::kOther:
++      for (const WallpaperToolConfig& tool : WallpaperToolConfigs()) {
++        std::string text;
++        if (!base::ReadFileToString(tool.file, &text)) {
++          continue;
++        }
++        std::string found = tool.parse(text);
++        if (!found.empty() && base::PathExists(ExpandHome(found))) {
++          path = std::move(found);
++          break;
++        }
++      }
+       break;
+   }
+   return path.empty() ? base::FilePath()
+@@ -548,9 +593,16 @@
+           break;
+         case LinuxDesktop::kGnome:
+         case LinuxDesktop::kCinnamon:
++        case LinuxDesktop::kMate:
+           WatchPath(DconfUserDb());
+           break;
++        case LinuxDesktop::kXfce:
++          WatchPath(XfceDesktopConfig());
++          break;
+         case LinuxDesktop::kOther:
++          for (const WallpaperToolConfig& tool : WallpaperToolConfigs()) {
++            WatchPath(tool.file);
++          }
+           break;
+       }
+     }
+--- a/chrome/browser/helium_privacy_mode/helium_privacy_mode.cc
++++ b/chrome/browser/helium_privacy_mode/helium_privacy_mode.cc
+@@ -288,7 +288,21 @@
+ 
+ // Rewrites the managed flags in Local State, leaving the user's other flags
+ // alone. Returns true if the stored set changed (a restart is needed).
+-bool ApplyFlags(const Mode& mode) {
++// Flags are browser-wide but levels are per profile: keep the strictest level
++// of every loaded profile, so a new profile (default Medium) does not silently
++// drop the protections of a profile on Maximum.
++// shortcut: profiles not loaded right now are not seen; reading their Preferences
++// files would cover them if users mix levels across many profiles.
++bool ApplyFlags(Profile* self, Mode mode) {
++  for (Profile* other :
++       g_browser_process->profile_manager()->GetLoadedProfiles()) {
++    Mode other_mode;
++    if (other != self && GetMode(other->GetPrefs()->GetString(kModePref),
++                                 &other_mode)) {
++      mode.strong_fingerprinting |= other_mode.strong_fingerprinting;
++      mode.no_cross_origin_referrer |= other_mode.no_cross_origin_referrer;
++    }
++  }
+   flags_ui::PrefServiceFlagsStorage storage(g_browser_process->local_state());
+   const std::set<std::string> before = storage.GetFlags();
+   std::set<std::string> flags;
+@@ -315,7 +329,8 @@
+ }
+ 
+ // Returns true if a restart is needed for the flags to take effect.
+-bool ApplyStored(Profile* profile) {
++// `write_flags` false leaves the browser-wide flags alone.
++bool ApplyStored(Profile* profile, bool write_flags = true) {
+   PrefService* prefs = profile->GetPrefs();
+   const std::string name = prefs->GetString(kModePref);
+   Mode mode;
+@@ -350,7 +365,7 @@
+         ContentSettingsType::MEDIASTREAM_CAMERA}) {
+     map->SetDefaultContentSetting(type, sensitive);
+   }
+-  const bool restart = ApplyFlags(mode);
++  const bool restart = write_flags && ApplyFlags(profile, mode);
+   LOG(INFO) << "Applied privacy mode: " << name
+             << (restart ? " (restart required for flags)" : "");
+   return restart;
+@@ -388,8 +403,12 @@
+   }
+   // Medium is the documented default. Without this, "Use defaults" in
+   // onboarding (which skips the privacy step) left the profile with no mode.
++  // A new profile must not touch the browser-wide flags: other profiles may be
++  // on Maximum and not loaded yet, and Medium needs no flags of its own.
+   if (GetModeName(profile).empty()) {
+-    SetMode(profile, "medium");
++    profile->GetPrefs()->SetString(kModePref, "medium");
++    ApplyStored(profile, /*write_flags=*/false);
++    profile->GetPrefs()->SetString(kAppliedPref, "medium");
+   }
+   if (!profile->GetUserData(kPerfWatcherKey)) {
+     profile->SetUserData(kPerfWatcherKey,
+--- a/chrome/browser/helium_aliases/helium_aliases.cc
++++ b/chrome/browser/helium_aliases/helium_aliases.cc
+@@ -13,6 +13,7 @@
+ #include "base/strings/strcat.h"
+ #include "base/strings/string_number_conversions.h"
+ #include "base/strings/utf_string_conversions.h"
++#include "base/task/sequenced_task_runner.h"
+ #include "base/values.h"
+ #include "chrome/browser/browser_process.h"
+ #include "chrome/browser/profiles/profile.h"
+@@ -25,6 +26,7 @@
+ #include "content/public/browser/web_contents.h"
+ #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+ #include "net/http/http_response_headers.h"
++#include "net/http/http_util.h"
+ #include "net/traffic_annotation/network_traffic_annotation.h"
+ #include "services/network/public/cpp/resource_request.h"
+ #include "services/network/public/cpp/shared_url_loader_factory.h"
+@@ -64,6 +66,12 @@
+         policy_exception_justification: "Not implemented."
+       })");
+ 
++// The key goes into a header; SetHeader CHECK-crashes on a newline, and a
++// pasted key can carry one in the middle (paste trims only the ends).
++bool IsUsableKey(const std::string& key) {
++  return !key.empty() && net::HttpUtil::IsValidHeaderValue("Bearer " + key);
++}
++
+ void ShowMessage(content::WebContents* contents, std::u16string text) {
+   chrome::ShowTabModal(ui::DialogModel::Builder()
+                            .SetTitle(u"Throwaway email")
+@@ -185,6 +193,20 @@
+                 if (!contents || key.empty()) {
+                   return;
+                 }
++                if (!IsUsableKey(key)) {
++                  // Posted: the dialog is still closing.
++                  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++                      FROM_HERE,
++                      base::BindOnce(
++                          [](base::WeakPtr<content::WebContents> contents) {
++                            if (contents) {
++                              AskForKey(contents.get(),
++                                        u"That API key contains a line break.");
++                            }
++                          },
++                          contents));
++                  return;
++                }
+                 g_browser_process->os_crypt_async()->GetInstance(base::BindOnce(
+                     [](base::WeakPtr<content::WebContents> contents,
+                        std::string key,
+@@ -237,7 +259,7 @@
+           return;
+         }
+         // E.g. the keyring changed: ask again rather than fail silently.
+-        if (!encryptor->DecryptString(encrypted, &key) || key.empty()) {
++        if (!encryptor->DecryptString(encrypted, &key) || !IsUsableKey(key)) {
+           AskForKey(contents.get(), u"The saved API key could not be read.");
+           return;
+         }

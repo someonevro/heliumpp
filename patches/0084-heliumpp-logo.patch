@@ -1,0 +1,100 @@
+--- a/components/helium_onboarding/src/components/HeliumppLogo.svelte
++++ b/components/helium_onboarding/src/components/HeliumppLogo.svelte
+@@ -0,0 +1,21 @@
++<script lang="ts">
++    // Helium++ balloon mark (designs/logo/kit/heliumpp-symbol.svg); same props as prism's HeliumLogo.
++    let { height = "28px" }: { height?: string } = $props();
++</script>
++
++<span class="heliumpp-logo" style:height aria-hidden="true">
++    <svg viewBox="0 0 256 256" fill="#D9435F"><path fill-rule="evenodd" d="M128 18a100 100 0 1 1 0 200a100 100 0 1 1 0-200ZM87 83a13 13 0 0 1 26 0v12h12a13 13 0 0 1 0 26h-12v12a13 13 0 0 1-26 0v-12h-12a13 13 0 0 1 0-26h12Z"/><path d="M128 210l17.32 30h-34.64Z"/></svg>
++</span>
++
++<style>
++    .heliumpp-logo {
++        display: inline-flex;
++        flex: 0 0 auto;
++    }
++
++    .heliumpp-logo svg {
++        display: block;
++        width: auto;
++        height: 100%;
++    }
++</style>
+--- a/components/helium_onboarding/src/pages/Dns.svelte
++++ b/components/helium_onboarding/src/pages/Dns.svelte
+@@ -1,6 +1,6 @@
+ <script lang="ts">
+     import { onMount } from "svelte";
+-    import { HeliumLogo } from "@imput/helium-prism";
++    import HeliumLogo from "../components/HeliumppLogo.svelte";
+     import { currentPage, selectedDns, customDns } from "../lib/onboarding-flow";
+     import { getDns, isValidCustomDns } from "../lib/browser";
+ 
+--- a/components/helium_onboarding/src/pages/Features.svelte
++++ b/components/helium_onboarding/src/pages/Features.svelte
+@@ -1,5 +1,5 @@
+ <script lang="ts">
+-    import { HeliumLogo } from "@imput/helium-prism";
++    import HeliumLogo from "../components/HeliumppLogo.svelte";
+     import { currentPage } from "../lib/onboarding-flow";
+ 
+     import PageHeader from "../components/PageHeader.svelte";
+--- a/components/helium_onboarding/src/pages/Finish.svelte
++++ b/components/helium_onboarding/src/pages/Finish.svelte
+@@ -1,10 +1,10 @@
+ <script lang="ts">
+     import {
+         Button,
+-        HeliumLogo,
+         IconArrowLeft,
+         IconCheck,
+     } from "@imput/helium-prism";
++    import HeliumLogo from "../components/HeliumppLogo.svelte";
+     import { s } from "../lib/strings";
+     import { setPref, openNewTab } from "../lib/browser";
+     import {
+--- a/components/helium_onboarding/src/pages/NewTab.svelte
++++ b/components/helium_onboarding/src/pages/NewTab.svelte
+@@ -1,5 +1,5 @@
+ <script lang="ts">
+-    import { HeliumLogo } from "@imput/helium-prism";
++    import HeliumLogo from "../components/HeliumppLogo.svelte";
+     import { currentPage, selectedNewTab } from "../lib/onboarding-flow";
+ 
+     import PageHeader from "../components/PageHeader.svelte";
+--- a/components/helium_onboarding/src/pages/PrivacyMode.svelte
++++ b/components/helium_onboarding/src/pages/PrivacyMode.svelte
+@@ -1,5 +1,5 @@
+ <script lang="ts">
+-    import { HeliumLogo } from "@imput/helium-prism";
++    import HeliumLogo from "../components/HeliumppLogo.svelte";
+     import { currentPage, selectedPrivacyMode } from "../lib/onboarding-flow";
+     import presets from "../lib/presets.json";
+ 
+--- a/components/helium_onboarding/src/pages/TabLayout.svelte
++++ b/components/helium_onboarding/src/pages/TabLayout.svelte
+@@ -1,5 +1,6 @@
+ <script lang="ts">
+-    import { HeliumLogo, Toggle } from "@imput/helium-prism";
++    import { Toggle } from "@imput/helium-prism";
++    import HeliumLogo from "../components/HeliumppLogo.svelte";
+     import {
+         currentPage,
+         selectedCompactMode,
+--- a/components/helium_onboarding/src/pages/Welcome.svelte
++++ b/components/helium_onboarding/src/pages/Welcome.svelte
+@@ -2,11 +2,11 @@
+     import { flushSync, onMount } from "svelte";
+     import {
+         Button,
+-        HeliumLogo,
+         IconArrowRight,
+         IconCheck,
+         Link,
+     } from "@imput/helium-prism";
++    import HeliumLogo from "../components/HeliumppLogo.svelte";
+     import { s } from "../lib/strings";
+     import { parseLocalizedString } from "../lib/i18n";
+     import { setPref, acceptLatestSchema, openNewTab } from "../lib/browser";
