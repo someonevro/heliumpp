@@ -26,7 +26,45 @@ Updated 2026-10-21 (end of session 2).
   heliumpp.desktop, only heliumpp-appimage AppArmor name, planted net.imput.helium untouched.
 - Release plan agreed with user: fewer AppImages, batch changes. Next release = KDE fixes + newer Chromium
   (security) + updater URL set to the GitHub latest.json.
-- Next: user's KDE test (bug list + Wayland/X11 + chrome://gpu).
+- 0079-auto-updates (NOT released; 0.19.4.4 still has no update URL): kDefaultManifestUrl =
+  https://github.com/someonevro/heliumpp/releases/latest/download/latest.json (GitHub /latest skips
+  pre-releases, so RELEASES MUST NOW BE PUBLISHED AS NORMAL "Latest" releases; v0.19.4.4-alpha flipped to Latest
+  with user OK). Background check 5 min after start, then every 24 h (StartHeliumAutoUpdate from
+  ChromeBrowserMainPartsLinux::PostBrowserStart); only from an AppImage. One update at a time
+  (g_update_running); after a background install About shows Relaunch instead of re-downloading.
+  Tested: build OK (4m31s); scripts/test_update.sh 7/7 PASS incl. new background case (installed after 5 min,
+  About shows "Nearly up to date", AppImage fetched once); real GitHub URL with the default address ->
+  "Helium++ is up to date" (redirect + signature OK, dummy target untouched).
+  NOT tested: a real AppImage replacing itself on a desktop, Relaunch into the new AppImage.
+- AUDIT FIXES (2026-10-24, released in v0.19.4.5-alpha):
+  * 0079 updater: destructor frees the shared "update running" flag (closing About mid-download left
+    updates stuck until restart). test_update.sh closed-tab case: FAILED before the fix, PASS after (8/8).
+  * 0080 privacy levels: settings written once when a level is chosen (helium.privacy_mode_applied), not on
+    every start, so the user's own changes survive restarts; choosing the level again resets. test_privacy_mode.sh
+    new case FAILED before, PASS after.
+  * 0081 CRASH FIX: with 2+ profiles Chromium loads the System Profile for the profile picker; our
+    privacy/theme startup code ran on it and segfaulted (null HostContentSettingsMap) -> browser could not
+    start once a second profile existed. ProfileImpl now skips IsSystemProfile(). Reproduced with gdb, fixed.
+  * 0082 multi-profile: memory/energy saver old values kept by the first profile to turn Performance mode on,
+    handed to a profile still using it, restored when the last turns it off; reduced motion stays on while any
+    profile has it; wallpaper watcher follows every profile with sync on (was: only the last one opened).
+    scripts/test_two_profiles.py PASS (2-profile start + memory saver sequence). Wallpaper part only covered
+    by single-profile test_theme.sh.
+  * test_isolated_tabs.py: delay now server-side (302 after sleep). The page timer never fired in headless
+    background tabs, normal ones too (checked), so it was a test problem, not an isolation bug. 4/4 PASS.
+  * prepare_source.sh: records each applied patch in src/.ours.applied (was one stamp -> new patches
+    silently skipped). build/pristine migrated; verified by reverting 0082 and rerunning (applied only 0082).
+  * Regression on the final build: performance toggle, performance, theme, KDE wallpaper, privacy,
+    isolated tabs, isolated downloads, update (8/8), two profiles: all PASS.
+  * Release check: after publishing (as Latest, not pre-release), `curl -sL
+    https://github.com/someonevro/heliumpp/releases/latest/download/latest.json` must show the new version.
+- RELEASE v0.19.4.5-alpha (user approved 2026-10-24, published as Latest): 0079-0082 + 0083 version bump
+  (rebuild 56m44s). AppImage sha256 e55ec8c4557250b174bab270b5b7ab7d9a41d520f9b8df45dd66118666f18adf
+  (158681592 bytes), signed latest.json. Regression before packaging: all tests PASS incl. update 8/8 and
+  two profiles. From the AppImage: --version 0.19.4.5, heliumpp.desktop, only heliumpp-appimage, planted
+  net.imput.helium untouched, two profiles start without crash. First release with auto-update; 0.19.4.4
+  and older users must download this one by hand.
+- Next: user's friend tests 0.19.4.5; user's KDE test (bug list + Wayland/X11 + chrome://gpu).
 
 ## SESSION 4 (2026-10-23)
 - Git: the project IS a git repo now (`main`, last commit 4009d8f); the "not a git repo" lines above are outdated. Session 4 changes are NOT committed.

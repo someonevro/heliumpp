@@ -1,5 +1,5 @@
 """Open chrome://settings/help in a running browser over DevTools and print the update status text.
-Usage: python3 -I cdp_about.py <debug-port> <seconds-to-wait>  (stdlib only, minimal websocket client)"""
+Usage: python3 -I cdp_about.py <debug-port> <seconds-to-wait> [close]  (close: close the tab afterwards)  (stdlib only, minimal websocket client)"""
 import base64, json, os, socket, struct, sys, time, urllib.request
 
 port, wait = int(sys.argv[1]), float(sys.argv[2])
@@ -54,3 +54,5 @@ while time.time() < deadline:
     v = r.get('result', {}).get('result', {}).get('value')
     if v != last: print('status text:', repr(v), flush=True); last = v
     time.sleep(0.5)
+if sys.argv[3:] == ['close']:
+    ws.call('Target.closeTarget', {'targetId': t})

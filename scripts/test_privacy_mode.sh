@@ -36,6 +36,16 @@ run persist
 check persist '{"helium/privacy_mode":"maximum","profile/default_content_setting_values/cookies":4}'
 run persist --privacy-mode=usability
 check persist '{"helium/privacy_mode":"usability","profile/cookie_controls_mode":2,"profile/default_content_setting_values/cookies":null,"profile/default_content_setting_values/geolocation":null,"webrtc/ip_handling_policy":"default"}'
+# the user's own change in Settings survives a restart; choosing the level again resets it
+python3 -I - "$b/pm-persist/Default/Preferences" <<'PY2'
+import json, sys
+p = json.load(open(sys.argv[1])); p["profile"]["cookie_controls_mode"] = 0; p["webrtc"]["ip_handling_policy"] = "disable_non_proxied_udp"
+json.dump(p, open(sys.argv[1], "w"))
+PY2
+run persist
+check persist '{"helium/privacy_mode":"usability","profile/cookie_controls_mode":0,"webrtc/ip_handling_policy":"disable_non_proxied_udp"}'
+run persist --privacy-mode=usability
+check persist '{"helium/privacy_mode":"usability","profile/cookie_controls_mode":2,"webrtc/ip_handling_policy":"default"}'
 
 # fingerprinting/referrer flags live in Local State (browser-wide); other flags must survive
 flags() {  # profile

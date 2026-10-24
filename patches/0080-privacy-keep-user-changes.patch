@@ -1,0 +1,41 @@
+--- a/chrome/browser/helium_privacy_mode/helium_privacy_mode.cc
++++ b/chrome/browser/helium_privacy_mode/helium_privacy_mode.cc
+@@ -47,6 +47,8 @@
+ 
+ constexpr char kSwitch[] = "privacy-mode";
+ constexpr char kModePref[] = "helium.privacy_mode";
++// The level whose settings were last written; startup re-applies only when it differs.
++constexpr char kAppliedPref[] = "helium.privacy_mode_applied";
+ 
+ enum class Permissions { kAsk, kAskRestricted, kBlock };
+ 
+@@ -91,6 +93,7 @@
+ 
+ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
+   registry->RegisterStringPref(kModePref, std::string());
++  registry->RegisterStringPref(kAppliedPref, std::string());
+   registry->RegisterBooleanPref(kPerformanceModePref, false);
+   registry->RegisterBooleanPref(kBonjourrNewTabPref, false);
+   registry->RegisterDictionaryPref(kPerfSavedPref);
+@@ -332,6 +335,7 @@
+   }
+   profile->GetPrefs()->SetString(kModePref, mode);
+   const bool restart = ApplyStored(profile);
++  profile->GetPrefs()->SetString(kAppliedPref, mode);
+   if (restart_required) {
+     *restart_required = restart;
+   }
+@@ -363,7 +367,12 @@
+   if (IsPerformanceMode(profile)) {
+     ApplyReducedMotion(true);
+   }
+-  ApplyStored(profile);
++  // Choosing a level writes its settings once; changes the user makes later in
++  // Settings must survive restarts. Choosing a level again resets them.
++  if (profile->GetPrefs()->GetString(kAppliedPref) != GetModeName(profile)) {
++    ApplyStored(profile);
++    profile->GetPrefs()->SetString(kAppliedPref, GetModeName(profile));
++  }
+ }
+ 
+ }  // namespace helium_privacy_mode

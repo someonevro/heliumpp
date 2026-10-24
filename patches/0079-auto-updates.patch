@@ -1,0 +1,188 @@
+--- a/chrome/browser/ui/webui/help/helium_appimage_updater.cc
++++ b/chrome/browser/ui/webui/help/helium_appimage_updater.cc
+@@ -14,12 +14,17 @@
+ #include "base/files/file_path.h"
+ #include "base/files/file_util.h"
+ #include "base/functional/bind.h"
++#include "base/functional/callback_helpers.h"
+ #include "base/json/json_reader.h"
+ #include "base/memory/weak_ptr.h"
++#include "base/no_destructor.h"
+ #include "base/strings/string_number_conversions.h"
+ #include "base/strings/strcat.h"
+ #include "base/strings/utf_string_conversions.h"
++#include "base/task/single_thread_task_runner.h"
+ #include "base/task/thread_pool.h"
++#include "base/time/time.h"
++#include "base/timer/timer.h"
+ #include "base/values.h"
+ #include "base/version.h"
+ #include "base/version_info/version_info.h"
+@@ -36,9 +41,10 @@
+ 
+ namespace {
+ 
+-// Where latest.json lives. Empty = updates off. shortcut: no release host chosen yet, set this
+-// (or pass --helium-update-url) once there is one.
+-constexpr char kDefaultManifestUrl[] = "";
++// Where latest.json lives: the asset of the newest GitHub release that is not marked
++// pre-release (GitHub's /latest skips pre-releases).
++constexpr char kDefaultManifestUrl[] =
++    "https://github.com/someonevro/heliumpp/releases/latest/download/latest.json";
+ // Test hooks: --helium-update-url=<latest.json url>, --helium-update-target=<file to replace>.
+ constexpr char kUpdateUrlSwitch[] = "helium-update-url";
+ constexpr char kUpdateTargetSwitch[] = "helium-update-target";
+@@ -49,6 +55,20 @@
+ constexpr size_t kMaxManifestBytes = 64 * 1024;
+ constexpr int64_t kMaxAppImageBytes = 2LL * 1024 * 1024 * 1024;
+ 
++// Background checks: first one shortly after start, then daily.
++constexpr base::TimeDelta kFirstAutoCheck = base::Minutes(5);
++constexpr base::TimeDelta kAutoCheckInterval = base::Hours(24);
++
++// One update at a time across the background check and any open About page.
++bool g_update_running = false;
++
++// Version already swapped in on disk this session; About then offers Relaunch
++// instead of downloading it again.
++std::string& InstalledVersion() {
++  static base::NoDestructor<std::string> version;
++  return *version;
++}
++
+ // https only; plain http is allowed for localhost so tests can run a local server.
+ bool IsAllowedUrl(const GURL& url) {
+   return url.is_valid() &&
+@@ -96,7 +116,12 @@
+ class HeliumAppImageUpdater : public VersionUpdater {
+  public:
+   HeliumAppImageUpdater() = default;
+-  ~HeliumAppImageUpdater() override = default;
++  // The About page drops its updater when the tab closes, maybe mid-download.
++  ~HeliumAppImageUpdater() override {
++    if (busy_) {
++      g_update_running = false;
++    }
++  }
+ 
+   void CheckForUpdate(StatusCallback callback, PromoteCallback) override {
+     if (busy_) {
+@@ -121,8 +146,16 @@
+       Report(DISABLED, 0, std::u16string());
+       return;
+     }
++    if (!InstalledVersion().empty()) {
++      version_ = InstalledVersion();
++      return Report(NEARLY_UPDATED, 0, std::u16string());
++    }
++    if (g_update_running) {
++      return Report(UPDATING, 0,
++                    u"An update is already downloading in the background.");
++    }
+ 
+-    busy_ = true;
++    busy_ = g_update_running = true;
+     Report(CHECKING, 0, std::u16string());
+     auto request = std::make_unique<network::ResourceRequest>();
+     request->url = manifest_url;
+@@ -133,13 +166,13 @@
+           semantics {
+             sender: "Helium++ update check"
+             description: "Fetches the small signed latest.json that names the newest release."
+-            trigger: "The user opens Settings > About."
++            trigger: "5 minutes after start, then daily, and when the user opens Settings > About. Only when running as an AppImage."
+             data: "None. No cookies or identifiers are sent."
+             destination: OTHER
+           }
+           policy {
+             cookies_allowed: NO
+-            setting: "Off until a release URL is configured."
++            setting: "None; only runs from an AppImage."
+             policy_exception_justification: "Not implemented."
+           })"));
+     loader_->DownloadToString(
+@@ -154,9 +187,13 @@
+     callback_.Run(status, progress, false, false, version_, size_, message);
+   }
+ 
+-  void Fail(const std::string& why) {
+-    busy_ = false;
++  void Done() {
++    busy_ = g_update_running = false;
+     loader_.reset();
++  }
++
++  void Fail(const std::string& why) {
++    Done();
+     Report(FAILED, 0, base::UTF8ToUTF16("Update failed: " + why));
+   }
+ 
+@@ -198,8 +235,7 @@
+       return Fail("the update information is malformed.");
+     }
+     if (latest <= current) {
+-      busy_ = false;
+-      loader_.reset();
++      Done();
+       return Report(UPDATED, 0, std::u16string());
+     }
+ 
+@@ -219,13 +255,13 @@
+           semantics {
+             sender: "Helium++ update download"
+             description: "Downloads the new AppImage named by the signed latest.json."
+-            trigger: "A newer version was found after the user opened Settings > About."
++            trigger: "A signed latest.json named a newer version."
+             data: "None. No cookies or identifiers are sent."
+             destination: OTHER
+           }
+           policy {
+             cookies_allowed: NO
+-            setting: "Off until a release URL is configured."
++            setting: "None; only runs from an AppImage."
+             policy_exception_justification: "Not implemented."
+           })"));
+     loader_->SetOnDownloadProgressCallback(base::BindRepeating(
+@@ -263,8 +299,8 @@
+           "the downloaded file did not match the signed checksum, or the "
+           "AppImage file could not be replaced (is its folder writable?).");
+     }
+-    busy_ = false;
+-    loader_.reset();
++    Done();
++    InstalledVersion() = version_;
+     Report(NEARLY_UPDATED, 0, std::u16string());
+   }
+ 
+@@ -285,3 +321,16 @@
+ std::unique_ptr<VersionUpdater> CreateHeliumAppImageUpdater() {
+   return std::make_unique<HeliumAppImageUpdater>();
+ }
++
++// Installs verified updates in the background; they apply on the next launch.
++// Does nothing (no network request) unless running from an AppImage.
++void StartHeliumAutoUpdate() {
++  static base::NoDestructor<HeliumAppImageUpdater> updater;
++  static base::NoDestructor<base::RepeatingTimer> timer;
++  auto check = base::BindRepeating([] {
++    updater->CheckForUpdate(base::DoNothing(), VersionUpdater::PromoteCallback());
++  });
++  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
++      FROM_HERE, check, kFirstAutoCheck);
++  timer->Start(FROM_HERE, kAutoCheckInterval, check);
++}
+--- a/chrome/browser/chrome_browser_main_linux.cc
++++ b/chrome/browser/chrome_browser_main_linux.cc
+@@ -95,8 +95,12 @@
+   ChromeBrowserMainPartsPosix::PreProfileInit();
+ }
+ 
++// Helium++ AppImage updater, chrome/browser/ui/webui/help/helium_appimage_updater.cc.
++void StartHeliumAutoUpdate();
++
+ #if BUILDFLAG(USE_DBUS) && !BUILDFLAG(IS_CHROMEOS)
+ void ChromeBrowserMainPartsLinux::PostBrowserStart() {
++  StartHeliumAutoUpdate();
+   auto* monitor = memory_pressure::MultiSourceMemoryPressureMonitor::Get();
+   if (monitor &&
+       base::FeatureList::IsEnabled(features::kLinuxLowMemoryMonitor)) {
