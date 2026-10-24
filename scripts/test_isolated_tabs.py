@@ -22,12 +22,12 @@ class H(http.server.BaseHTTPRequestHandler):
         if u.path == "/favicon.ico":
             self.send_response(404); self.end_headers(); return
         if u.path == "/slow":
-            # Not recorded: this page waits in the TAB, then navigates to /read, so the
-            # read happens only after the other tabs have set their cookies.
+            # Not recorded: the SERVER waits, then redirects to /read, so the read happens only
+            # after the other tabs have set their cookies. (A timer in the page was flaky: hidden
+            # tabs often never ran it.)
             seen.append((ident + "-loaded", self.headers.get("Cookie")))
-            wait = float(q.get("wait", ["2"])[0]) * 1000
-            self.send_response(200); self.send_header("Content-Type", "text/html"); self.end_headers()
-            self.wfile.write(("wait <script>setTimeout(()=>location='/read?id=%s',%d)</script>" % (ident, wait)).encode())
+            time.sleep(float(q.get("wait", ["2"])[0]))
+            self.send_response(302); self.send_header("Location", "/read?id=" + ident); self.end_headers()
             return
         seen.append((ident, self.headers.get("Cookie")))
         self.send_response(200); self.send_header("Content-Type", "text/html")

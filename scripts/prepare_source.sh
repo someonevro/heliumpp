@@ -33,15 +33,20 @@ step helium_apply_translations
 step helium_version
 step helium_resources
 
-if [ ! -f "$_src_dir/.ours.stamp" ]; then
-  while read -r p; do
-    [ -z "$p" ] && continue
-    patch -d "$_src_dir" -p1 --forward --no-backup-if-mismatch -s < "$root/patches/$p" \
-      || { echo "FAILED: $p" >&2; exit 1; }
-    echo "applied $p"
-  done < "$root/patches/series"
-  touch "$_src_dir/.ours.stamp"
-fi
+# One line per applied patch, so a rerun applies only patches added to the series since (and resumes
+# after a failed one) instead of skipping them all.
+applied="$_src_dir/.ours.applied"
+[ ! -f "$_src_dir/.ours.stamp" ] || [ -f "$applied" ] \
+  || { echo "$_src_dir/.ours.stamp is from an older version of this script: list its applied patches in $applied" >&2; exit 1; }
+touch "$applied"
+while read -r p; do
+  [ -z "$p" ] && continue
+  grep -qxF "$p" "$applied" && continue
+  patch -d "$_src_dir" -p1 --forward --no-backup-if-mismatch -s < "$root/patches/$p" \
+    || { echo "FAILED: $p" >&2; exit 1; }
+  echo "$p" >> "$applied"
+  echo "applied $p"
+done < "$root/patches/series"
 # Bundled Bonjourr (0073): release files are fetched, not patched in.
 "$root/scripts/fetch_bonjourr.sh" "$_src_dir/third_party/bonjourr"
 echo "OK: $_src_dir ($(grep -c . "$root/patches/series") patches). args.gn is not written: copy build/src/out/Default/args.gn (chrome_pgo_phase=2)."

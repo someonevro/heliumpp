@@ -1,0 +1,188 @@
+--- a/chrome/browser/helium_privacy_mode/helium_privacy_mode.cc
++++ b/chrome/browser/helium_privacy_mode/helium_privacy_mode.cc
+@@ -16,6 +16,7 @@
+ #include "chrome/browser/prefetch/pref_names.h"
+ #include "chrome/browser/preloading/preloading_prefs.h"
+ #include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/profiles/profile_manager.h"
+ #include "chrome/browser/profiles/profile_observer.h"
+ #include "chrome/common/pref_names.h"
+ #include "chrome/browser/helium_theme/helium_theme.h"
+@@ -139,6 +140,22 @@
+   }
+ }
+ 
++// Memory and energy saver are browser-wide. Only the first profile to turn
++// performance mode on saves their old values; they move to a profile that still
++// has it on, and are restored when the last one turns it off.
++constexpr const char* kPerfBrowserWideKeys[] = {"mem_state", "mem_aggr",
++                                                "mem_min", "battery"};
++
++Profile* OtherPerformanceModeProfile(Profile* self) {
++  for (Profile* other :
++       g_browser_process->profile_manager()->GetLoadedProfiles()) {
++    if (other != self && IsPerformanceMode(other)) {
++      return other;
++    }
++  }
++  return nullptr;
++}
++
+ // Brings memory saver, energy saver, animations and spellcheck in line with
+ // kPerformanceModePref. The saved dict is non-empty exactly while performance
+ // mode is on, so this is safe to call again for the same state.
+@@ -151,14 +168,18 @@
+   if (enabled == !prefs->GetDict(kPerfSavedPref).empty()) {
+     return;
+   }
++  Profile* other = OtherPerformanceModeProfile(profile);
+   if (enabled) {
+     base::DictValue saved;
+-    saved.Set("mem_state", local->GetInteger(tuning::kMemorySaverModeState));
+-    saved.Set("mem_aggr",
+-              local->GetInteger(tuning::kMemorySaverModeAggressiveness));
+-    saved.Set("mem_min", local->GetInteger(
+-                             tuning::kMemorySaverModeTimeBeforeDiscardInMinutes));
+-    saved.Set("battery", local->GetInteger(tuning::kBatterySaverModeState));
++    if (!other) {
++      saved.Set("mem_state", local->GetInteger(tuning::kMemorySaverModeState));
++      saved.Set("mem_aggr",
++                local->GetInteger(tuning::kMemorySaverModeAggressiveness));
++      saved.Set("mem_min",
++                local->GetInteger(
++                    tuning::kMemorySaverModeTimeBeforeDiscardInMinutes));
++      saved.Set("battery", local->GetInteger(tuning::kBatterySaverModeState));
++    }
+     saved.Set("anim_policy", prefs->GetString(prefs::kAnimationPolicy));
+     saved.Set("spell",
+               prefs->GetBoolean(spellcheck::prefs::kSpellCheckEnable));
+@@ -179,17 +200,32 @@
+                       static_cast<int>(tuning::BatterySaverModeState::kEnabled));
+   } else {
+     const base::DictValue& saved = prefs->GetDict(kPerfSavedPref);
+-    if (auto v = saved.FindInt("mem_state")) {
+-      local->SetInteger(tuning::kMemorySaverModeState, *v);
+-    }
+-    if (auto v = saved.FindInt("mem_aggr")) {
+-      local->SetInteger(tuning::kMemorySaverModeAggressiveness, *v);
+-    }
+-    if (auto v = saved.FindInt("mem_min")) {
+-      local->SetInteger(tuning::kMemorySaverModeTimeBeforeDiscardInMinutes, *v);
+-    }
+-    if (auto v = saved.FindInt("battery")) {
+-      local->SetInteger(tuning::kBatterySaverModeState, *v);
++    if (other) {
++      // Hand the browser-wide values on; the other profile keeps memory and
++      // energy saver on.
++      base::DictValue handed =
++          other->GetPrefs()->GetDict(kPerfSavedPref).Clone();
++      for (const char* key : kPerfBrowserWideKeys) {
++        if (const base::Value* v = saved.Find(key);
++            v && !handed.contains(key)) {
++          handed.Set(key, v->Clone());
++        }
++      }
++      other->GetPrefs()->SetDict(kPerfSavedPref, std::move(handed));
++    } else {
++      if (auto v = saved.FindInt("mem_state")) {
++        local->SetInteger(tuning::kMemorySaverModeState, *v);
++      }
++      if (auto v = saved.FindInt("mem_aggr")) {
++        local->SetInteger(tuning::kMemorySaverModeAggressiveness, *v);
++      }
++      if (auto v = saved.FindInt("mem_min")) {
++        local->SetInteger(tuning::kMemorySaverModeTimeBeforeDiscardInMinutes,
++                          *v);
++      }
++      if (auto v = saved.FindInt("battery")) {
++        local->SetInteger(tuning::kBatterySaverModeState, *v);
++      }
+     }
+     if (const std::string* v = saved.FindString("anim_policy")) {
+       prefs->SetString(prefs::kAnimationPolicy, *v);
+@@ -199,7 +235,7 @@
+     }
+     prefs->ClearPref(kPerfSavedPref);
+   }
+-  ApplyReducedMotion(enabled);
++  ApplyReducedMotion(enabled || other);  // browser-wide too
+   helium_theme::Apply(profile);  // pauses or resumes the desktop colour sync
+ }
+ 
+--- a/chrome/browser/helium_theme/helium_theme.cc
++++ b/chrome/browser/helium_theme/helium_theme.cc
+@@ -529,8 +529,10 @@
+ // which is fine while a single profile is open.
+ class DesktopWatcher : public ui::NativeThemeObserver {
+  public:
++  // Every profile with sync on is followed; the watchers stop when none is left.
+   void Start(base::WeakPtr<Profile> profile, base::FilePath wallpaper_override) {
+-    profile_ = profile;
++    Forget(profile.get());
++    profiles_.push_back(profile);
+     wallpaper_override_ = std::move(wallpaper_override);
+     if (started_) {
+       return;
+@@ -556,8 +558,13 @@
+ #endif
+   }
+ 
+-  // Performance mode: no file watchers, no wallpaper reads or decodes.
+-  void Stop() {
++  // Sync off or performance mode for this profile. With no profile left: no
++  // file watchers, no wallpaper reads or decodes.
++  void Stop(Profile* profile) {
++    Forget(profile);
++    if (!profiles_.empty()) {
++      return;
++    }
+     started_ = false;
+     timer_.Stop();
+     watchers_.clear();
+@@ -565,16 +572,22 @@
+   }
+ 
+   void Reload() {
+-    if (!profile_) {
+-      return;
++    for (const base::WeakPtr<Profile>& profile : profiles_) {
++      base::ThreadPool::PostTaskAndReplyWithResult(
++          FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
++          base::BindOnce(&ReadSource, wallpaper_override_),
++          base::BindOnce(&OnSource, profile));
+     }
+-    base::ThreadPool::PostTaskAndReplyWithResult(
+-        FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+-        base::BindOnce(&ReadSource, wallpaper_override_),
+-        base::BindOnce(&OnSource, profile_));
+   }
+ 
+  private:
++  // Drops `profile` and profiles that were closed.
++  void Forget(Profile* profile) {
++    std::erase_if(profiles_, [profile](const base::WeakPtr<Profile>& p) {
++      return !p || p.get() == profile;
++    });
++  }
++
+ #if BUILDFLAG(IS_LINUX)
+   // A file path is re-armed by the watcher when the file is replaced on save.
+   void WatchPath(const base::FilePath& path) {
+@@ -593,7 +606,7 @@
+                  base::BindOnce(&DesktopWatcher::Reload, base::Unretained(this)));
+   }
+ 
+-  base::WeakPtr<Profile> profile_;
++  std::vector<base::WeakPtr<Profile>> profiles_;
+   base::FilePath wallpaper_override_;
+   bool started_ = false;
+   base::OneShotTimer timer_;
+@@ -691,7 +704,7 @@
+   // The current colours stay; syncing resumes when performance mode is off.
+   if (!prefs->GetBoolean(kMatchWallpaperPref) ||
+       helium_privacy_mode::IsPerformanceMode(profile)) {
+-    Watcher().Stop();
++    Watcher().Stop(profile);
+     return;
+   }
+   Watcher().Start(profile->GetWeakPtr(), wallpaper_override);

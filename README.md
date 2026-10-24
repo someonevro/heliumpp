@@ -15,16 +15,16 @@
 
 ## Download
 
-Experimental Linux x86_64 AppImage: **[Helium++ 0.19.4.4 alpha](https://github.com/someonevro/heliumpp/releases/tag/v0.19.4.4-alpha)**
+Experimental Linux x86_64 AppImage: **[Helium++ 0.19.4.5 alpha](https://github.com/someonevro/heliumpp/releases/tag/v0.19.4.5-alpha)**
 
 ```bash
-chmod +x heliumpp-0.19.4.4-x86_64.AppImage
-./heliumpp-0.19.4.4-x86_64.AppImage
+chmod +x heliumpp-0.19.4.5-x86_64.AppImage
+./heliumpp-0.19.4.5-x86_64.AppImage
 ```
 
 > **Data warning for 0.19.4.1 (withdrawn).** Version 0.19.4.1 used real Helium's profile folder (`~/.config/net.imput.helium`). If you also use Helium, it could change Helium's settings: the "High" privacy mode makes cookies and site data get deleted whenever the browser closes, and that setting stays in Helium. From 0.19.4.2 on, Helium++ uses its own folder (`~/.config/heliumpp`) and never touches Helium's data. If you ran 0.19.4.1 next to Helium: back up `~/.config/net.imput.helium`, then in Helium check Settings > Privacy and security > Site settings > Additional content settings > On-device site data, third-party cookies, site permissions and the theme.
 
-It has only been tested headless. Normal desktop launch, other distros and the in-browser updater are unverified (the update URL is not set in this build).
+It has only been tested headless. Normal desktop launch and other distros are unverified. From 0.19.4.5 on, the browser updates itself from GitHub releases (tested with local and GitHub test servers, not yet as a real AppImage replacing itself on a desktop). If you have 0.19.4.4 or older, download 0.19.4.5 by hand once.
 
 ## Vibecoded
 
@@ -52,7 +52,7 @@ This repository does **not** contain the Chromium source tree. It holds the Heli
 - **Isolated tabs** (`Ctrl+Alt+N`): per-tab throwaway in-memory storage, no history or session traces, permissions denied by default. This is **not** a VM and does not hide your IP, DNS or fingerprint.
 - **Secure DNS choice** at first run: Cloudflare, Google, system, or custom DoH.
 - **Built-in ad blocking** inherited from Helium.
-- **Signed AppImage updater** for Linux (Ed25519-verified manifest, SHA-256 checked download).
+- **Signed AppImage updater** for Linux (Ed25519-verified manifest, SHA-256 checked download); checks GitHub 5 minutes after start and then daily, and installs updates for the next launch).
 
 ## Status
 
@@ -60,7 +60,7 @@ Honest summary of what has been demonstrated, not just coded:
 
 | Area | State |
 | --- | --- |
-| Linux build (Chromium 155.0.8059.84) | Builds and runs; `helium --version` prints `Helium++ 0.19.4.4 (Chromium 155.0.8059.84)` |
+| Linux build (Chromium 155.0.8059.84) | Builds and runs; `helium --version` prints `Helium++ 0.19.4.5 (Chromium 155.0.8059.84)` |
 | Privacy modes, performance mode | Automated tests pass (`scripts/test_privacy_mode.sh`, `scripts/test_performance_mode.sh`) |
 | Isolated tabs | Cookie isolation, popups, permissions, disk traces and wipe-on-close tested headlessly. Downloads blocked and kept off disk (tested); password manager off (not tested); clipboard writes are **not** blocked |
 | Secure DNS onboarding | Implemented; page not yet seen and DoH use not observed |

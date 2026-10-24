@@ -1,0 +1,17 @@
+--- a/chrome/browser/profiles/profile_impl.cc
++++ b/chrome/browser/profiles/profile_impl.cc
+@@ -1207,8 +1207,12 @@
+   BrowserContextDependencyManager::GetInstance()->CreateBrowserContextServices(
+       this);
+ 
+-  helium_privacy_mode::Apply(this);
+-  helium_theme::Apply(this);
++  // The System Profile (behind the profile picker shown when there are several
++  // profiles) has no content settings or theme service; touching them crashed.
++  if (!IsSystemProfile()) {
++    helium_privacy_mode::Apply(this);
++    helium_theme::Apply(this);
++  }
+ 
+   FullBrowserTransitionManager::Get()->OnProfileCreated(this);
+ 
