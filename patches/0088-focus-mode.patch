@@ -1,0 +1,281 @@
+--- a/chrome/browser/helium_focus/helium_focus.h
++++ b/chrome/browser/helium_focus/helium_focus.h
+@@ -0,0 +1,39 @@
++// Focus mode: per-site switch (page info bubble) that hides feeds, Shorts and
++// recommendations on sites it knows, by adding a stylesheet to their pages.
++
++#ifndef CHROME_BROWSER_HELIUM_FOCUS_HELIUM_FOCUS_H_
++#define CHROME_BROWSER_HELIUM_FOCUS_HELIUM_FOCUS_H_
++
++#include <string_view>
++
++class GURL;
++namespace content {
++class BrowserContext;
++class WebContents;
++}  // namespace content
++namespace user_prefs {
++class PrefRegistrySyncable;
++}
++
++namespace helium_focus {
++
++// Profile pref: list of sites (e.g. "youtube.com") with focus mode on.
++inline constexpr char kFocusSitesPref[] = "helium.focus_sites";
++
++void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
++
++// The site focus mode has rules for that `url` is on, or "" if none.
++std::string_view SupportedSite(const GURL& url);
++
++bool IsEnabled(content::BrowserContext* context, const GURL& url);
++
++// Turns focus mode on or off for the site shown in `web_contents` and applies
++// it to that tab right away (other tabs of the site follow on their next load).
++void SetEnabled(content::WebContents* web_contents, bool enabled);
++
++// Tab helper: applies focus mode whenever a page of a supported site loads.
++void AttachTabHelper(content::WebContents* web_contents);
++
++}  // namespace helium_focus
++
++#endif  // CHROME_BROWSER_HELIUM_FOCUS_HELIUM_FOCUS_H_
+--- a/chrome/browser/helium_focus/helium_focus.cc
++++ b/chrome/browser/helium_focus/helium_focus.cc
+@@ -0,0 +1,141 @@
++#include "chrome/browser/helium_focus/helium_focus.h"
++
++#include <string>
++
++#include "base/json/string_escape.h"
++#include "base/strings/strcat.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/values.h"
++#include "chrome/common/chrome_isolated_world_ids.h"
++#include "components/pref_registry/pref_registry_syncable.h"
++#include "components/prefs/pref_service.h"
++#include "components/prefs/scoped_user_pref_update.h"
++#include "components/user_prefs/user_prefs.h"
++#include "content/public/browser/browser_context.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/browser/web_contents_observer.h"
++#include "content/public/browser/web_contents_user_data.h"
++#include "url/gurl.h"
++
++namespace helium_focus {
++
++namespace {
++
++struct Rule {
++  std::string_view site;
++  std::string_view css;
++};
++
++// Selectors checked against the live sites (logged out, 2026-10-24); sites
++// change their markup, so these need upkeep.
++constexpr Rule kRules[] = {
++    {"youtube.com",
++     // Shorts: menu entries, shelves and single results.
++     "ytd-guide-entry-renderer:has(a[title=\"Shorts\"]),"
++     "ytd-mini-guide-entry-renderer[aria-label=\"Shorts\"],"
++     "grid-shelf-view-model:has(ytm-shorts-lockup-view-model),"
++     "ytd-reel-shelf-renderer,"
++     "ytd-video-renderer:has(a[href^=\"/shorts/\"]),"
++     // Home feed, "up next" column and the end-of-video wall.
++     "ytd-browse[page-subtype=\"home\"] ytd-rich-grid-renderer,"
++     "#related,ytd-watch-next-secondary-results-renderer,"
++     ".ytp-endscreen-content,.ytp-ce-element"
++     "{display:none!important}"},
++};
++
++const Rule* RuleFor(const GURL& url) {
++  if (!url.SchemeIsHTTPOrHTTPS()) {
++    return nullptr;
++  }
++  for (const Rule& rule : kRules) {
++    if (url.DomainIs(rule.site)) {
++      return &rule;
++    }
++  }
++  return nullptr;
++}
++
++class FocusTabHelper : public content::WebContentsObserver,
++                       public content::WebContentsUserData<FocusTabHelper> {
++ public:
++  // Adds (or empties, when off) our <style> in the main frame. Runs in an
++  // isolated world, so page scripts cannot see or replace the function.
++  void Apply(bool enabled) {
++    const Rule* rule = RuleFor(web_contents()->GetLastCommittedURL());
++    if (!rule) {
++      return;
++    }
++    std::string css;
++    base::EscapeJSONString(enabled ? rule->css : "", /*put_in_quotes=*/true,
++                           &css);
++    web_contents()->GetPrimaryMainFrame()->ExecuteJavaScriptInIsolatedWorld(
++        base::UTF8ToUTF16(base::StrCat(
++            {"(() => {let s = document.getElementById('helium-focus');"
++             "if (!s) {s = document.createElement('style');"
++             "s.id = 'helium-focus';"
++             "(document.head || document.documentElement).append(s);}"
++             "s.textContent = ",
++             css, ";})()"})),
++        base::NullCallback(), ISOLATED_WORLD_ID_CHROME_INTERNAL);
++  }
++
++ private:
++  explicit FocusTabHelper(content::WebContents* web_contents)
++      : content::WebContentsObserver(web_contents),
++        content::WebContentsUserData<FocusTabHelper>(*web_contents) {}
++  friend class content::WebContentsUserData<FocusTabHelper>;
++
++  void PrimaryMainDocumentElementAvailable() override {
++    if (IsEnabled(web_contents()->GetBrowserContext(),
++                  web_contents()->GetLastCommittedURL())) {
++      Apply(true);
++    }
++  }
++
++  WEB_CONTENTS_USER_DATA_KEY_DECL();
++};
++
++WEB_CONTENTS_USER_DATA_KEY_IMPL(FocusTabHelper);
++
++}  // namespace
++
++void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
++  registry->RegisterListPref(kFocusSitesPref);
++}
++
++std::string_view SupportedSite(const GURL& url) {
++  const Rule* rule = RuleFor(url);
++  return rule ? rule->site : std::string_view();
++}
++
++bool IsEnabled(content::BrowserContext* context, const GURL& url) {
++  const Rule* rule = RuleFor(url);
++  return rule && user_prefs::UserPrefs::Get(context)
++                     ->GetList(kFocusSitesPref)
++                     .contains(rule->site);
++}
++
++void SetEnabled(content::WebContents* web_contents, bool enabled) {
++  const Rule* rule = RuleFor(web_contents->GetLastCommittedURL());
++  if (!rule) {
++    return;
++  }
++  {
++    ScopedListPrefUpdate update(
++        user_prefs::UserPrefs::Get(web_contents->GetBrowserContext()),
++        kFocusSitesPref);
++    update->EraseValue(base::Value(rule->site));
++    if (enabled) {
++      update->Append(rule->site);
++    }
++  }
++  AttachTabHelper(web_contents);
++  FocusTabHelper::FromWebContents(web_contents)->Apply(enabled);
++}
++
++void AttachTabHelper(content::WebContents* web_contents) {
++  FocusTabHelper::CreateForWebContents(web_contents);
++}
++
++}  // namespace helium_focus
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -862,6 +862,8 @@
+     "font_family_cache.cc",
+     "font_family_cache.h",
+     "global_features.cc",
++    "helium_focus/helium_focus.cc",
++    "helium_focus/helium_focus.h",
+     "helium_noise/helium_noise_settings.cc",
+     "helium_noise/helium_noise_settings.h",
+     "helium_privacy_mode/helium_privacy_mode.cc",
+--- a/chrome/browser/prefs/browser_prefs.cc
++++ b/chrome/browser/prefs/browser_prefs.cc
+@@ -38,6 +38,7 @@
+ #include "chrome/browser/glic/glic_pref_names.h"
+ #include "chrome/browser/glic/suggestions/contextual_cueing_prefs.h"
+ #include "chrome/browser/gpu/gpu_mode_manager.h"
++#include "chrome/browser/helium_focus/helium_focus.h"
+ #include "chrome/browser/helium_privacy_mode/helium_privacy_mode.h"
+ #include "chrome/browser/helium_theme/helium_theme.h"
+ #include "chrome/browser/helium_workspaces/helium_workspaces.h"
+@@ -1751,6 +1752,7 @@
+                           const std::string& locale) {
+   TRACE_EVENT0("browser", "chrome::RegisterProfilePrefs");
+   // User prefs. Please keep this list alphabetized.
++  helium_focus::RegisterProfilePrefs(registry);
+   helium_privacy_mode::RegisterProfilePrefs(registry);
+   helium_theme::RegisterProfilePrefs(registry);
+   helium_workspaces::RegisterProfilePrefs(registry);
+--- a/chrome/browser/ui/tab_helpers.cc
++++ b/chrome/browser/ui/tab_helpers.cc
+@@ -3,6 +3,7 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/ui/tab_helpers.h"
++#include "chrome/browser/helium_focus/helium_focus.h"
+ #include "chrome/browser/ui/helium_isolated/helium_isolated_tabs.h"
+ 
+ #include <cstdint>
+@@ -321,6 +322,7 @@
+   }
+   // Tabs opened from an isolated tab share its private storage area.
+   helium_isolated::MaybeAttachWiper(web_contents);
++  helium_focus::AttachTabHelper(web_contents);
+ 
+   // Mark as adopted.
+   web_contents->SetUserData(&kTabContentsAttachedTabHelpersUserDataKey,
+--- a/chrome/browser/ui/views/page_info/page_info_main_view.cc
++++ b/chrome/browser/ui/views/page_info/page_info_main_view.cc
+@@ -23,6 +23,7 @@
+ #include "base/task/cancelable_task_tracker.h"
+ #include "chrome/app/vector_icons/vector_icons.h"
+ #include "chrome/browser/browsing_data/chrome_browsing_data_remover_constants.h"
++#include "chrome/browser/helium_focus/helium_focus.h"
+ #include "chrome/browser/history/history_service_factory.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/dialogs/browser_dialogs.h"
+@@ -357,6 +358,37 @@
+         views::style::STYLE_BODY_3_MEDIUM, kColorPageInfoForeground);
+   }
+ 
++  // Helium++ focus mode switch, on sites it has rules for.
++  if (content::WebContents* contents = ui_delegate_->GetWebContents();
++      contents && !helium_focus::SupportedSite(presenter_->site_url()).empty()) {
++    static constexpr auto subtitle = [](bool on) {
++      return on ? u"On: Shorts and recommendations are hidden" : u"Off";
++    };
++    auto* focus_button =
++        site_settings_view_->AddChildView(std::make_unique<RichHoverButton>(
++            views::Button::PressedCallback(),
++            PageInfoViewFactory::GetImageModel(vector_icons::kVisibilityOffIcon),
++            /*title_text=*/u"Focus mode",
++            subtitle(helium_focus::IsEnabled(contents->GetBrowserContext(),
++                                             presenter_->site_url())),
++            ui::ImageModel()));
++    focus_button->SetCallback(base::BindRepeating(
++        [](RichHoverButton* button, base::WeakPtr<content::WebContents> c) {
++          if (!c) {
++            return;
++          }
++          const bool on = !helium_focus::IsEnabled(c->GetBrowserContext(),
++                                                   c->GetLastCommittedURL());
++          helium_focus::SetEnabled(c.get(), on);
++          button->SetSubtitleText(subtitle(on));
++        },
++        focus_button, contents->GetWeakPtr()));
++    focus_button->SetTitleTextStyleAndColor(
++        views::style::STYLE_BODY_3_MEDIUM, kColorPageInfoForeground);
++    focus_button->SetSubtitleTextStyleAndColor(
++        views::style::STYLE_BODY_4, kColorPageInfoSubtitleForeground);
++  }
++
+   int link_text_id = 0;
+   int tooltip_text_id = 0;
+   if (ui_delegate_->ShouldShowSiteSettings(&link_text_id, &tooltip_text_id)) {

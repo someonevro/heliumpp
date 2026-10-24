@@ -1,0 +1,20 @@
+// Copyright 2026 The Helium++ Authors
+// You can use, redistribute, and/or modify this source code under
+// the terms of the GPL-3.0 license that can be found in the LICENSE file.
+
+// Helium++ balloon, small cut (designs/logo/kit/heliumpp-symbol-small.svg at 1/4 scale).
+CANVAS_DIMENSIONS, 64,
+CIRCLE, 32, 32, 30,
+MOVE_TO, 25.5f, 20.5f,
+ARC_TO, 6.5f, 6.5f, 0, 0, 1, 38.5f, 20.5f,
+LINE_TO, 38.5f, 25.5f,
+LINE_TO, 43.5f, 25.5f,
+ARC_TO, 6.5f, 6.5f, 0, 0, 1, 43.5f, 38.5f,
+LINE_TO, 38.5f, 38.5f,
+LINE_TO, 38.5f, 43.5f,
+ARC_TO, 6.5f, 6.5f, 0, 0, 1, 25.5f, 43.5f,
+LINE_TO, 25.5f, 38.5f,
+LINE_TO, 20.5f, 38.5f,
+ARC_TO, 6.5f, 6.5f, 0, 0, 1, 20.5f, 25.5f,
+LINE_TO, 25.5f, 25.5f,
+CLOSE

@@ -1,0 +1,183 @@
+--- a/chrome/browser/ui/views/page_info/page_info_main_view.cc
++++ b/chrome/browser/ui/views/page_info/page_info_main_view.cc
+@@ -18,6 +18,14 @@
+ #include "chrome/browser/ui/color/chrome_color_id.h"
+ #include "chrome/browser/ui/layout_constants.h"
+ #include "chrome/browser/ui/page_info/chrome_page_info_ui_delegate.h"
++#include "base/no_destructor.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/task/cancelable_task_tracker.h"
++#include "chrome/app/vector_icons/vector_icons.h"
++#include "chrome/browser/browsing_data/chrome_browsing_data_remover_constants.h"
++#include "chrome/browser/history/history_service_factory.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/dialogs/browser_dialogs.h"
+ #include "chrome/browser/ui/ui_features.h"
+ #include "chrome/browser/ui/views/accessibility/non_accessible_image_view.h"
+ #include "chrome/browser/ui/views/chrome_layout_provider.h"
+@@ -41,7 +49,18 @@
+ #include "components/vector_icons/vector_icons.h"
+ #include "content/public/browser/browser_task_traits.h"
+ #include "content/public/browser/browser_thread.h"
++#include "components/history/core/browser/history_backend.h"
++#include "components/history/core/browser/history_database.h"
++#include "components/history/core/browser/history_db_task.h"
++#include "components/history/core/browser/history_service.h"
++#include "content/public/browser/browsing_data_filter_builder.h"
++#include "content/public/browser/browsing_data_remover.h"
++#include "content/public/browser/navigation_controller.h"
+ #include "content/public/browser/web_contents.h"
++#include "content/public/common/referrer.h"
++#include "net/base/registry_controlled_domains/registry_controlled_domain.h"
++#include "ui/base/models/dialog_model.h"
++#include "ui/base/page_transition_types.h"
+ #include "ui/base/l10n/l10n_util.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+ #include "ui/base/models/image_model.h"
+@@ -141,6 +160,96 @@
+ BEGIN_METADATA(PageInfoMainView, ContainerView)
+ END_METADATA
+ 
++namespace {
++
++// The site "Forget this site" acts on: example.com for www.example.com, the host for IPs.
++std::string SiteOf(const GURL& url) {
++  std::string site = net::registry_controlled_domains::GetDomainAndRegistry(
++      url, net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
++  return site.empty() ? std::string(url.host()) : site;
++}
++
++// Deletes every history URL on `site` (any subdomain or scheme). Walks the URL
++// table itself: QueryHistory skips some rows, like failed HTTPS-upgrade attempts.
++class DeleteSiteHistoryTask : public history::HistoryDBTask {
++ public:
++  explicit DeleteSiteHistoryTask(std::string site) : site_(std::move(site)) {}
++
++  bool RunOnDBThread(history::HistoryBackend* backend,
++                     history::HistoryDatabase* db) override {
++    history::URLDatabase::URLEnumerator enumerator;
++    history::URLRow row;
++    std::vector<GURL> urls;
++    if (db->InitURLEnumeratorForEverything(&enumerator)) {
++      while (enumerator.GetNextURL(&row)) {
++        if (row.url().DomainIs(site_)) {
++          urls.push_back(row.url());
++        }
++      }
++    }
++    if (!urls.empty()) {
++      backend->DeleteURLs(urls);
++    }
++    return true;
++  }
++  void DoneRunOnMainThread() override {}
++
++ private:
++  const std::string site_;
++};
++
++// Deletes the cookies, storage, cache and history of a site (all its
++// subdomains), then leaves the site for the new tab page: reloading would be a new
++// visit that stores it all again. Deletes itself.
++class SiteForgetter : public content::BrowsingDataRemover::Observer {
++ public:
++  static void Start(content::WebContents* contents, const GURL& url) {
++    new SiteForgetter(contents, SiteOf(url));
++  }
++
++ private:
++  SiteForgetter(content::WebContents* contents, const std::string& site)
++      : contents_(contents->GetWeakPtr()) {
++    Profile* profile =
++        Profile::FromBrowserContext(contents->GetBrowserContext());
++    // The remover ignores filters for history and would wipe all of it, so the
++    // site's entries are picked out here.
++    if (history::HistoryService* history =
++            HistoryServiceFactory::GetForProfile(
++                profile, ServiceAccessType::EXPLICIT_ACCESS)) {
++      static base::NoDestructor<base::CancelableTaskTracker> tracker;
++      history->ScheduleDBTask(FROM_HERE,
++                              std::make_unique<DeleteSiteHistoryTask>(site),
++                              tracker.get());
++    }
++    auto filter = content::BrowsingDataFilterBuilder::Create(
++        content::BrowsingDataFilterBuilder::Mode::kDelete);
++    filter->AddRegisterableDomain(site);
++    profile->GetBrowsingDataRemover()->RemoveWithFilterAndReply(
++        base::Time(), base::Time::Max(),
++        // Content settings (permissions) can't be removed per site; page info
++        // has its own reset for those.
++        chrome_browsing_data_remover::DATA_TYPE_SITE_DATA |
++            content::BrowsingDataRemover::DATA_TYPE_CACHE,
++        content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB |
++            content::BrowsingDataRemover::ORIGIN_TYPE_PROTECTED_WEB,
++        std::move(filter), this);
++  }
++
++  void OnBrowsingDataRemoverDone(uint64_t failed_data_types) override {
++    if (contents_) {
++      contents_->GetController().LoadURL(
++          GURL(chrome::kChromeUINewTabURL), content::Referrer(),
++          ui::PAGE_TRANSITION_AUTO_TOPLEVEL, std::string());
++    }
++    delete this;
++  }
++
++  base::WeakPtr<content::WebContents> contents_;
++};
++
++}  // namespace
++
+ PageInfoMainView::PageInfoMainView(
+     PageInfo* presenter,
+     ChromePageInfoUiDelegate* ui_delegate,
+@@ -205,6 +314,49 @@
+         views::style::STYLE_BODY_4, kColorPageInfoSubtitleForeground);
+   }
+ 
++  // Helium++: "Forget this site", after a confirmation.
++  if (ui_delegate_->GetWebContents() &&
++      presenter_->site_url().SchemeIsHTTPOrHTTPS()) {
++    auto* forget_button =
++        site_settings_view_->AddChildView(std::make_unique<RichHoverButton>(
++            base::BindRepeating(
++                [](PageInfoMainView* view) {
++                  content::WebContents* contents =
++                      view->ui_delegate_->GetWebContents();
++                  const GURL url = view->presenter_->site_url();
++                  // Closing the bubble deletes `view`.
++                  view->navigation_handler_->CloseBubble();
++                  chrome::ShowTabModal(
++                      ui::DialogModel::Builder()
++                          .SetTitle(u"Forget " +
++                                    base::UTF8ToUTF16(SiteOf(url)) + u"?")
++                          .AddParagraph(ui::DialogModelLabel(
++                              u"Deletes this site's cookies, saved data, "
++                              u"cache and history. You will be signed out of "
++                              u"it. This can't be undone."))
++                          .AddOkButton(
++                              base::BindOnce(
++                                  [](base::WeakPtr<content::WebContents> c,
++                                     const GURL& u) {
++                                    if (c) {
++                                      SiteForgetter::Start(c.get(), u);
++                                    }
++                                  },
++                                  contents->GetWeakPtr(), url),
++                              ui::DialogModel::Button::Params().SetLabel(
++                                  u"Forget"))
++                          .AddCancelButton(base::DoNothing())
++                          .Build(),
++                      contents);
++                },
++                this),
++            PageInfoViewFactory::GetImageModel(kDeleteIcon),
++            /*title_text=*/u"Forget this site",
++            /*subtitle_text=*/std::u16string(), ui::ImageModel()));
++    forget_button->SetTitleTextStyleAndColor(
++        views::style::STYLE_BODY_3_MEDIUM, kColorPageInfoForeground);
++  }
++
+   int link_text_id = 0;
+   int tooltip_text_id = 0;
+   if (ui_delegate_->ShouldShowSiteSettings(&link_text_id, &tooltip_text_id)) {

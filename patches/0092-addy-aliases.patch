@@ -1,0 +1,375 @@
+--- a/chrome/browser/helium_aliases/helium_aliases.h
++++ b/chrome/browser/helium_aliases/helium_aliases.h
+@@ -0,0 +1,28 @@
++// Throwaway email addresses from addy.io: "Insert throwaway email" in the
++// context menu of text and email fields creates a new alias and types it in.
++
++#ifndef CHROME_BROWSER_HELIUM_ALIASES_HELIUM_ALIASES_H_
++#define CHROME_BROWSER_HELIUM_ALIASES_HELIUM_ALIASES_H_
++
++namespace content {
++class WebContents;
++}
++namespace user_prefs {
++class PrefRegistrySyncable;
++}
++
++namespace helium_aliases {
++
++// Profile pref: the user's addy.io API key, encrypted with OSCrypt, base64.
++inline constexpr char kAddyKeyPref[] = "helium.addy_key";
++
++void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
++
++// Creates an alias described with the site of `web_contents` and replaces the
++// selection of its focused field with it. Asks for the API key first when
++// none is stored (or addy.io rejected it); shows a dialog on other errors.
++void InsertAlias(content::WebContents* web_contents);
++
++}  // namespace helium_aliases
++
++#endif  // CHROME_BROWSER_HELIUM_ALIASES_HELIUM_ALIASES_H_
+--- a/chrome/browser/helium_aliases/helium_aliases.cc
++++ b/chrome/browser/helium_aliases/helium_aliases.cc
+@@ -0,0 +1,242 @@
++#include "chrome/browser/helium_aliases/helium_aliases.h"
++
++#include <memory>
++#include <optional>
++#include <string>
++#include <utility>
++
++#include "base/base64.h"
++#include "base/functional/bind.h"
++#include "base/functional/callback_helpers.h"
++#include "base/json/json_reader.h"
++#include "base/json/json_writer.h"
++#include "base/strings/strcat.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/values.h"
++#include "chrome/browser/browser_process.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/dialogs/browser_dialogs.h"
++#include "components/os_crypt/async/browser/os_crypt_async.h"
++#include "components/os_crypt/async/common/encryptor.h"
++#include "components/pref_registry/pref_registry_syncable.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/storage_partition.h"
++#include "content/public/browser/web_contents.h"
++#include "net/base/registry_controlled_domains/registry_controlled_domain.h"
++#include "net/http/http_response_headers.h"
++#include "net/traffic_annotation/network_traffic_annotation.h"
++#include "services/network/public/cpp/resource_request.h"
++#include "services/network/public/cpp/shared_url_loader_factory.h"
++#include "services/network/public/cpp/simple_url_loader.h"
++#include "services/network/public/mojom/url_response_head.mojom.h"
++#include "ui/base/interaction/element_identifier.h"
++#include "ui/base/models/dialog_model.h"
++#include "url/gurl.h"
++
++namespace helium_aliases {
++
++void AskForKey(content::WebContents* contents, std::u16string problem);
++
++namespace {
++
++DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kKeyFieldId);
++
++constexpr char kApi[] = "https://app.addy.io/api/v1/";
++
++constexpr net::NetworkTrafficAnnotationTag kAnnotation =
++    net::DefineNetworkTrafficAnnotation("helium_addy_alias", R"(
++      semantics {
++        sender: "Helium++ throwaway email"
++        description:
++          "Creates a new email alias at addy.io, the user's own account, and "
++          "inserts it into a form field."
++        trigger: "The user picks Insert throwaway email in a field's menu."
++        data:
++          "The user's addy.io API key, and the site's domain as the alias "
++          "description."
++        destination: OTHER
++        destination_other: "app.addy.io"
++      }
++      policy {
++        cookies_allowed: NO
++        setting: "Only runs when the user picks the menu item."
++        policy_exception_justification: "Not implemented."
++      })");
++
++void ShowMessage(content::WebContents* contents, std::u16string text) {
++  chrome::ShowTabModal(ui::DialogModel::Builder()
++                           .SetTitle(u"Throwaway email")
++                           .AddParagraph(ui::DialogModelLabel(std::move(text)))
++                           .AddOkButton(base::DoNothing())
++                           .Build(),
++                       contents);
++}
++
++// One alias request: account-details (default domain and format), then
++// creating the alias. Deletes itself when done.
++class AliasRequest {
++ public:
++  static void Start(content::WebContents* contents, std::string key) {
++    auto* request = new AliasRequest(contents, std::move(key));
++    request->Send("account-details", std::nullopt);
++  }
++
++ private:
++  AliasRequest(content::WebContents* contents, std::string key)
++      : contents_(contents->GetWeakPtr()),
++        site_(net::registry_controlled_domains::GetDomainAndRegistry(
++            contents->GetLastCommittedURL(),
++            net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES)),
++        key_(std::move(key)),
++        factory_(contents->GetBrowserContext()
++                     ->GetDefaultStoragePartition()
++                     ->GetURLLoaderFactoryForBrowserProcess()) {
++    if (site_.empty()) {
++      site_ = contents->GetLastCommittedURL().host();
++    }
++  }
++
++  void Send(const std::string& path, std::optional<std::string> body) {
++    auto request = std::make_unique<network::ResourceRequest>();
++    request->url = GURL(base::StrCat({kApi, path}));
++    request->method = body ? "POST" : "GET";
++    request->credentials_mode = network::mojom::CredentialsMode::kOmit;
++    request->headers.SetHeader("Authorization", "Bearer " + key_);
++    request->headers.SetHeader("X-Requested-With", "XMLHttpRequest");
++    request->headers.SetHeader("Accept", "application/json");
++    loader_ = network::SimpleURLLoader::Create(std::move(request), kAnnotation);
++    loader_->SetAllowHttpErrorResults(true);
++    if (body) {
++      loader_->AttachStringForUpload(*body, "application/json");
++    }
++    loader_->DownloadToString(
++        factory_.get(),
++        base::BindOnce(&AliasRequest::OnResponse, base::Unretained(this),
++                       body.has_value()),
++        /*max_body_size=*/256 * 1024);
++  }
++
++  void OnResponse(bool created, std::optional<std::string> body) {
++    const int status = loader_->ResponseInfo() && loader_->ResponseInfo()->headers
++                           ? loader_->ResponseInfo()->headers->response_code()
++                           : 0;
++    std::optional<base::DictValue> json =
++        body ? base::JSONReader::ReadDict(*body, base::JSON_PARSE_RFC)
++             : std::nullopt;
++    const base::DictValue* data = json ? json->FindDict("data") : nullptr;
++    if (!contents_) {
++      delete this;
++      return;
++    }
++    if (status == 401) {
++      AskForKey(contents_.get(), u"addy.io did not accept that API key.");
++    } else if (!data) {
++      ShowMessage(contents_.get(),
++                  status ? u"addy.io could not create an alias (HTTP " +
++                               base::NumberToString16(status) + u")."
++                         : u"Could not reach addy.io.");
++    } else if (!created) {
++      const std::string* domain = data->FindString("default_alias_domain");
++      const std::string* format = data->FindString("default_alias_format");
++      base::DictValue alias;
++      alias.Set("domain", domain ? *domain : "anonaddy.me");
++      // "custom" needs a local part we don't have.
++      alias.Set("format", format && *format != "custom" ? *format
++                                                         : "random_words");
++      alias.Set("description", "Helium++: " + site_);
++      Send("aliases", base::WriteJson(alias));
++      return;
++    } else if (const std::string* email = data->FindString("email")) {
++      contents_->Replace(base::UTF8ToUTF16(*email));
++    }
++    delete this;
++  }
++
++  base::WeakPtr<content::WebContents> contents_;
++  std::string site_;
++  const std::string key_;
++  scoped_refptr<network::SharedURLLoaderFactory> factory_;
++  std::unique_ptr<network::SimpleURLLoader> loader_;
++};
++
++}  // namespace
++
++// Asks for the API key, stores it encrypted, then inserts an alias.
++void AskForKey(content::WebContents* contents, std::u16string problem) {
++  ui::DialogModel::Builder builder;
++  ui::DialogModel* model = builder.model();
++  builder.SetTitle(u"Throwaway email with addy.io")
++      .AddParagraph(ui::DialogModelLabel(
++          problem + (problem.empty() ? u"" : u" ") +
++          u"Paste an API key from app.addy.io (Settings, API Keys). It is "
++          u"stored encrypted on this device."))
++      .AddTextfield(kKeyFieldId, u"API key", std::u16string(),
++                    ui::DialogModelTextfield::Params().SetAccessibleName(
++                        u"addy.io API key"))
++      .SetInitiallyFocusedField(kKeyFieldId)
++      .AddOkButton(
++          base::BindOnce(
++              [](ui::DialogModel* model,
++                 base::WeakPtr<content::WebContents> contents) {
++                const std::string key = base::UTF16ToUTF8(
++                    model->GetTextfieldByUniqueId(kKeyFieldId)->text());
++                if (!contents || key.empty()) {
++                  return;
++                }
++                g_browser_process->os_crypt_async()->GetInstance(base::BindOnce(
++                    [](base::WeakPtr<content::WebContents> contents,
++                       std::string key,
++                       scoped_refptr<os_crypt_async::Encryptor> encryptor) {
++                      std::string encrypted;
++                      if (!contents ||
++                          !encryptor->EncryptString(key, &encrypted)) {
++                        return;
++                      }
++                      Profile::FromBrowserContext(contents->GetBrowserContext())
++                          ->GetPrefs()
++                          ->SetString(kAddyKeyPref,
++                                      base::Base64Encode(encrypted));
++                      AliasRequest::Start(contents.get(), key);
++                    },
++                    contents, key));
++              },
++              model, contents->GetWeakPtr()),
++          ui::DialogModel::Button::Params().SetLabel(u"Save and insert"))
++      .AddCancelButton(base::DoNothing());
++  chrome::ShowTabModal(builder.Build(), contents);
++}
++
++void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
++  registry->RegisterStringPref(kAddyKeyPref, std::string());
++}
++
++void InsertAlias(content::WebContents* web_contents) {
++  std::string encrypted;
++  if (!base::Base64Decode(Profile::FromBrowserContext(
++                              web_contents->GetBrowserContext())
++                              ->GetPrefs()
++                              ->GetString(kAddyKeyPref),
++                          &encrypted) ||
++      encrypted.empty()) {
++    AskForKey(web_contents, std::u16string());
++    return;
++  }
++  g_browser_process->os_crypt_async()->GetInstance(base::BindOnce(
++      [](base::WeakPtr<content::WebContents> contents, std::string encrypted,
++         scoped_refptr<os_crypt_async::Encryptor> encryptor) {
++        std::string key;
++        if (!contents) {
++          return;
++        }
++        // E.g. the keyring changed: ask again rather than fail silently.
++        if (!encryptor->DecryptString(encrypted, &key) || key.empty()) {
++          AskForKey(contents.get(), u"The saved API key could not be read.");
++          return;
++        }
++        AliasRequest::Start(contents.get(), std::move(key));
++      },
++      web_contents->GetWeakPtr(), std::move(encrypted)));
++}
++
++}  // namespace helium_aliases
+--- a/chrome/app/chrome_command_ids.h
++++ b/chrome/app/chrome_command_ids.h
+@@ -336,6 +336,7 @@
+ #define IDC_CONTENT_CONTEXT_ADD_LINK_TO_READING_LIST 50112
+ #define IDC_CONTENT_CONTEXT_OPENLINK_ISOLATED 50113
+ #define IDC_CONTENT_CONTEXT_COPYCLEANLINK 50114
++#define IDC_CONTENT_CONTEXT_INSERT_ALIAS 50115
+ // Image items.
+ #define IDC_CONTENT_CONTEXT_SAVEIMAGEAS 50120
+ #define IDC_CONTENT_CONTEXT_COPYIMAGELOCATION 50121
+--- a/chrome/browser/renderer_context_menu/render_view_context_menu.cc
++++ b/chrome/browser/renderer_context_menu/render_view_context_menu.cc
+@@ -2,6 +2,7 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include "chrome/browser/helium_aliases/helium_aliases.h"
+ #include "chrome/browser/renderer_context_menu/render_view_context_menu.h"
+ 
+ #include <stddef.h>
+@@ -664,13 +665,14 @@
+        {IDC_CONTENT_CONTEXT_OPENLINK_ISOLATED, 169},
+        {IDC_CONTENT_CONTEXT_FORCE_PASTE, 170},
+        {IDC_CONTENT_CONTEXT_COPYCLEANLINK, 171},
++       {IDC_CONTENT_CONTEXT_INSERT_ALIAS, 172},
+        // To add new items:
+        //   - Add one more line above this comment block, using the UMA value
+        //     from the line below this comment block.
+        //   - Increment the UMA value in that latter line.
+        //   - Add the new item to the RenderViewContextMenuItem enum in
+        //     tools/metrics/histograms/metadata/ui/enums.xml.
+-       {kUmaMaxValueKey, 172}});
++       {kUmaMaxValueKey, 173}});
+   // LINT.ThenChange(//tools/metrics/histograms/metadata/ui/enums.xml:RenderViewContextMenuItem)
+ 
+   // LINT.IfChange(ContextMenuOptionDesktop)
+@@ -3102,6 +3104,12 @@
+   }
+   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_FORCE_PASTE,
+                                   IDS_FORCE_PASTE);
++  // Helium++: an addy.io alias for sign-up forms.
++  if (params_.form_control_type == blink::mojom::FormControlType::kInputEmail ||
++      params_.form_control_type == blink::mojom::FormControlType::kInputText) {
++    menu_model_.AddItem(IDC_CONTENT_CONTEXT_INSERT_ALIAS,
++                        u"Insert thro&waway email (addy.io)");
++  }
+ 
+ #if BUILDFLAG(IS_CHROMEOS)
+   // Insert a submenu of clipboard history descriptors.
+@@ -3478,6 +3486,9 @@
+     case IDC_CONTENT_CONTEXT_COPYCLEANLINK:
+       return params_.link_url.is_valid();
+ 
++    case IDC_CONTENT_CONTEXT_INSERT_ALIAS:
++      return true;
++
+     case IDC_CONTENT_CONTEXT_ADD_LINK_TO_READING_LIST:
+       return params_.link_url.is_valid();
+ 
+@@ -3877,6 +3888,10 @@
+       WriteURLToClipboard(StripTrackingParams(params_.link_url), id);
+       break;
+ 
++    case IDC_CONTENT_CONTEXT_INSERT_ALIAS:
++      helium_aliases::InsertAlias(source_web_contents_);
++      break;
++
+     case IDC_CONTENT_CONTEXT_ADD_LINK_TO_READING_LIST: {
+       ReadingListModel* model =
+           ReadingListModelFactory::GetForBrowserContext(browser_context_);
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -862,6 +862,8 @@
+     "font_family_cache.cc",
+     "font_family_cache.h",
+     "global_features.cc",
++    "helium_aliases/helium_aliases.cc",
++    "helium_aliases/helium_aliases.h",
+     "helium_fingerprint/fingerprint_report.cc",
+     "helium_fingerprint/fingerprint_report.h",
+     "helium_focus/helium_focus.cc",
+--- a/chrome/browser/prefs/browser_prefs.cc
++++ b/chrome/browser/prefs/browser_prefs.cc
+@@ -38,6 +38,7 @@
+ #include "chrome/browser/glic/glic_pref_names.h"
+ #include "chrome/browser/glic/suggestions/contextual_cueing_prefs.h"
+ #include "chrome/browser/gpu/gpu_mode_manager.h"
++#include "chrome/browser/helium_aliases/helium_aliases.h"
+ #include "chrome/browser/helium_focus/helium_focus.h"
+ #include "chrome/browser/helium_privacy_mode/helium_privacy_mode.h"
+ #include "chrome/browser/helium_theme/helium_theme.h"
+@@ -1752,6 +1753,7 @@
+                           const std::string& locale) {
+   TRACE_EVENT0("browser", "chrome::RegisterProfilePrefs");
+   // User prefs. Please keep this list alphabetized.
++  helium_aliases::RegisterProfilePrefs(registry);
+   helium_focus::RegisterProfilePrefs(registry);
+   helium_privacy_mode::RegisterProfilePrefs(registry);
+   helium_theme::RegisterProfilePrefs(registry);

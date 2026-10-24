@@ -80,3 +80,17 @@
 0081-skip-system-profile.patch
 0082-perf-and-wallpaper-multi-profile.patch
 0083-version-0.19.4.5.patch
+0084-heliumpp-logo.patch
+0085-update-ready-notice.patch
+0086-copy-clean-link.patch
+0087-forget-this-site.patch
+0088-focus-mode.patch
+0089-sleeping-tabs-counter.patch
+0090-hibp-sign-in-check.patch
+0091-fingerprint-report.patch
+0092-addy-aliases.patch
+0093-audit-fixes.patch
+0094-ntp-performance-row-centered.patch
+0095-download-warning-in-window.patch
+0096-wallpaper-more-desktops-flags-addy-key.patch
+0097-hibp-retry-and-flags-closed-profiles.patch

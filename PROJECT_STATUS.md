@@ -10,6 +10,92 @@ Updated 2026-10-21 (end of session 2).
 **Next (user's list):** (1) isolated mode: fix/test the about:blank popup hole, block or redirect downloads, password manager, clipboard write; (2) item 4 general speed outside performance mode (measure first); (3) restyle: horizontal layout, menus/popups, Settings and onboarding pages; (4) wallpaper image behind the new tab page and privacy chip (dropped: weather, tracker counter unless uBO stats readable); (5) red hover tint on window close; (6) DNS: visual check and a real-use test; (7) update CLAUDE.md (still says six presets; the product uses three modes) and ARCHITECTURE.md/PLATFORM_SUPPORT.md with this session's decisions; (8) run the series on a pristine tree.
 **User preferences seen this session:** wants to review changes before big edits when asked ("show me what changes"); wants honest "not verified" notes; decides between options quickly (picked option 1 even with the URL-hiding trade-off, later reverted it); likes the new tab page and drop-down window bar; wants the browser to stop looking like stock Helium.
 
+## SESSION 6 (2026-10-24, after v0.19.4.5) - NOT released yet
+- User tested 0.19.4.5 on Ubuntu: works; About page reached GitHub ("up to date").
+- Menu entry + desktop icon: scripts/appimage_desktop_entry.sh is spliced into AppRun by package_appimage.sh.
+  Writes $XDG_DATA_HOME/applications/heliumpp.desktop + icon each launch when changed; ~/Desktop icon first launch only
+  (gio trusted flag for GNOME). Tested in fake homes incl. awkward paths (GLib parses Exec back) and icon refresh.
+  NOT tested on real Ubuntu/GNOME/KDE. TEST WITH XDG_DATA_HOME SET INSIDE THE FAKE HOME (the shell exports it).
+- New logo "Lift" (balloon with a plus, Helium rose #D9435F): designs/logo/kit (+GUIDELINES.md, variants, slides).
+  scripts/make_branding.sh renders branding/ (tree layout; PNGs, .icon, svg); prepare_source.sh copies it after patches.
+  0084-heliumpp-logo.patch: onboarding uses components/HeliumppLogo.svelte (HeliumServices/HeliumPartner keep Helium's
+  logo: those are imput's services). Built (incremental) and seen in Xvfb: setup page, tab favicons, omnibox chip.
+  Test AppImage: build/test-desktop/heliumpp-logo-test.AppImage (released 0.19.4.5 file untouched, sha e55ec8c4...).
+- Still Helium's: "Helium++ Dev" heading on About; win/mac icons (not built).
+- 0085-update-ready-notice: after an install the updater calls BuildState::SetUpdate. chrome_browser_main_linux.cc
+  shows a desktop notification "Helium++ update ready" with "Restart now" (chrome::AttemptRestart). UpgradeDetectorImpl
+  also observes BuildState (update notifications are compiled out: not chrome-branded) with low/very-low thresholds 0,
+  so the app-menu chip shows at once in the horizontal layout (the vertical layout has no menu button).
+  Seen in Xvfb (Chromium's own pop-up, no D-Bus); test_update.sh 8/8 PASS. Not seen: native GNOME/KDE notification,
+  clicking "Restart now". make_branding.sh now also replaces 3 more asterisk .icon files (notification header).
+- Feature batch (user picked 1,2,3,4,5,8,9 from the "stand out" list), order 3,4,8,9,5,1,2:
+  3 DONE 0086 "Copy clean link" (link context menu, only when the link has trackers; utm_*/fbclid/gclid/...;
+    "si" only on YouTube/Spotify). scripts/test_clean_link.py PASS 5/5 (Xvfb + XTest key "l").
+    Navigation stripping already existed: uBO "URL Tracking Protection" list is on by default.
+  4 DONE 0087 "Forget this site" (page info): cookies/storage/cache via BrowsingDataRemover filter on the
+    registrable domain + history via a HistoryDBTask URL-table walk (remover ignores filters for history and
+    would wipe ALL of it; QueryHistory misses HTTPS-upgrade rows). Permissions NOT removed (CONTENT_SETTINGS is
+    not filterable: CHECK crash). Tab goes to NTP. scripts/test_forget_site.py PASS 6/6.
+  8 DONE 0088 Focus mode (page info switch, YouTube only): isolated-world <style>; pref helium.focus_sites.
+    Live YouTube check: related/endscreen/Shorts hidden, player/comments/results kept. test_focus_mode.py PASS 4/4.
+    Other sites need login to verify selectors (not done).
+  9 DONE 0089 NTP "N sleeping tabs are freeing about X" (TabResourceUsageTabHelper of discarded tabs).
+    Current total, not "today". test_sleeping_tabs.py PASS (needs internal_only_uis_enabled for chrome://discards).
+  5 DONE 0090 Have I Been Pwned on sign-in (user chose this; Helium force-disables the password manager, see
+    disable-password-manager.patch). PasswordManager::ProvisionallySaveForm, when saving is off and not a typing
+    fallback, hands the submitted password to HibpSignInCheck -> HibpBulkLeakCheck (factory, no Google account):
+    GET api.pwnedpasswords.com/range/<5 hex of SHA-1>, Add-Padding, no cookies; count>0 = leaked -> Chromium's
+    "Change your password" dialog. Only kBulkSyncedPasswordsCheck/kSignInCheck initiators; once per password/tab.
+    test_hibp.py PASS (fake service) + live check against the real service showed the dialog for password123.
+  1 DONE 0091 fingerprint report (user chose per-site report): page_load_metrics observer maps Blink use
+    counters (canvas readback, WebGL params/extensions, offline audio/getChannelData, measureText=fonts,
+    hardwareConcurrency/deviceMemory) per page incl. frames; subtitle of Helium's "Fingerprinting protection"
+    row in page info ("This page read canvas, audio and device details" / "No common fingerprinting calls seen").
+    The [HighEntropy] IDL markers and privacy-budget code are removed in this tree, so counters were the seam.
+    test_fingerprint_report.py makes screenshots (native UI); live: CreepJS -> canvas, audio, device details.
+    Not a uniqueness score (needs population data); "used" APIs can also be ordinary site code.
+  2 DONE 0092 addy.io aliases: "Insert throwaway email (addy.io)" in the context menu of text/email inputs.
+    First use asks for the API key (dialog), stored OSCryptAsync-encrypted+base64 in helium.addy_key.
+    GET account-details (default domain/format; "custom" -> random_words) then POST aliases with
+    description "Helium++: <site>"; result replaces the field selection. 401 -> asks for the key again.
+    test_addy_alias.py PASS 4/4 (fake app.addy.io). NOT tested: real addy.io account, the 401 path.
+  All 7 features from the batch are built. Still unreleased (user: "don't release yet"); patches 0084-0093.
+- 0093 audit fixes: addy key saved only when OSCrypt uses the keyring ("v11"; "v10" = built-in fallback key,
+  not saved, asked each time); fingerprint report per Page (PageUserData) and kept across bfcache, measureText
+  ("fonts") dropped; Forget this site sends every tab of the site to the NTP and NOW ACTUALLY DOES: the
+  BrowsingDataRemover only calls back observers registered with AddObserver (release builds skip silently), so
+  0087's navigation never ran and the object leaked; HIBP range reuse removed (could miss a leak); empty alias
+  description fallback. appimage_desktop_entry.sh: no menu entry for AppImage paths containing "%" (GLib can't).
+  "Restart now" + downloads: no change, restart goes through BrowserCloseManager (asks). Tests recalibrated
+  (page info rows moved down): forget (205,431), focus (200,526). All feature + regression tests PASS.
+- 0094 NTP Performance row centered (grid: switch+title line, descriptions below). 0095: the "Download is in
+  progress" close warning is tab-modal (drawn inside the browser window) instead of a separate window-modal
+  toplevel: on the user's Hyprland the separate dialog never showed, so closing just did nothing. Works the same
+  on any Wayland compositor/X11. scripts/test_close_with_download.py PASS (counts visible X toplevels; red-checked
+  with --enable-features=TabModalUsesDesktopWidget -> FAIL). Not yet seen on real Hyprland/KDE/GNOME.
+- Whole-repo audit -> 0096 + packaging fix (build 4m09s):
+  * Wallpaper sync on more desktops: XFCE (xfce4-desktop.xml), MATE (gsettings org.mate.background), Pantheon
+    (GNOME key), and window managers via hyprpaper.conf, sway config, ~/.fehbg, nitrogen (first config naming an
+    existing file wins). The parsers existed + were unit-tested since 0061 but were never called. Files/dconf
+    watched for live changes. scripts/test_wallpaper_desktops.sh 8/8 PASS (fake homes, gsettings stub).
+    Live change on a real XFCE/MATE/sway desktop NOT tested. Still none: Deepin, COSMIC, LXQt, swww.
+  * Privacy flags (browser-wide) vs levels (per profile): a new profile's implicit Medium wiped a Maximum profile's
+    fingerprinting/referrer flags. Implicit default no longer writes flags; explicit choices keep the strictest
+    level of all loaded profiles. scripts/test_privacy_flags_profiles.py: new-profile-alone case FAILED before,
+    3/3 PASS after. (Closed-profile limit fixed in 0097.)
+  * addy.io: a key with a line break in the middle (paste trims only the ends) hit a CHECK in SetHeader and
+    crashed the browser on every use (key was saved first). Now rejected; dialog asks again. Paste path NOT
+    tested (test types the key); test_addy_alias.py PASS.
+  * package_appimage.sh: upstream AppRun's AppArmor re-exec dropped "$@" (link opened on first launch on Ubuntu
+    was lost); now passes them on. Checked on a copy of AppRun (sh -n); no AppImage rebuilt.
+  * Regression PASS: privacy_mode, two_profiles, addy_alias, wallpaper_kde, wallpaper_desktops, theme.
+- 0097 (build 4m59s): HIBP sign-in check: a password whose lookup failed (offline, HTTP error) stayed marked
+  "checked" and was never looked up again in that tab; now unmarked on error. test_hibp.py new "retry after
+  error" case PASS (2 lookups). Privacy flags: each profile's level is kept in Local State helium.privacy_levels,
+  so explicit Medium in one profile keeps a CLOSED Maximum profile's flags (deleted profiles ignored).
+  test_privacy_flags_profiles.py 5/5 PASS; privacy_mode + two_profiles PASS. Neither new case red-checked on the
+  old binary (rebuilt before running). Profiles never started with 0097+ are unknown until their first start.
+
 ## SESSION 5 (2026-10-24) - released as v0.19.4.4-alpha
 - 0077-performance-toggle-and-level-names: Performance mode switch in Settings > Appearance (writes
   helium.performance_mode; a pref observer in helium_privacy_mode.cc does the memory/energy saver,

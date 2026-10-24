@@ -1,0 +1,40 @@
+--- a/chrome/browser/resources/new_tab_page/app.css
++++ b/chrome/browser/resources/new_tab_page/app.css
+@@ -675,17 +675,24 @@
+   opacity: 0.85;
+ }
+ 
++/* Switch and title centered on one line, the descriptions centered below: the
++   switch stays put when the on/off text changes length. */
+ #performanceRow {
+   align-items: center;
+-  display: flex;
+-  gap: 12px;
++  column-gap: 10px;
++  display: grid;
++  grid-template-columns: auto auto;
++  justify-content: center;
+   margin: 22px auto 0;
+-  text-align: start;
+-  /* Fixed width: with fit-content the switch jumped sideways when the on/off
+-     description changed length. */
++  row-gap: 2px;
++  text-align: center;
+   width: min(440px, 86vw);
+ }
+ 
++#performanceRow > div {
++  display: contents;
++}
++
+ #performanceSwitch {
+   background: color-mix(in oklab, var(--color-new-tab-page-primary-foreground) 18%, transparent);
+   border: 0;
+@@ -726,6 +733,7 @@
+ #performanceRow .desc {
+   color: var(--color-new-tab-page-secondary-foreground);
+   font-size: 12px;
++  grid-column: 1 / -1;
+ }
+ 
+ /* Performance mode: no transitions on this page. */

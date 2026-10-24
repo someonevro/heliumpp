@@ -47,6 +47,8 @@ while read -r p; do
   echo "$p" >> "$applied"
   echo "applied $p"
 done < "$root/patches/series"
+# Helium++ logo: PNGs from scripts/make_branding.sh, copied over the tree (patch -p1 cannot carry them).
+cp -r "$root/branding/." "$_src_dir/"
 # Bundled Bonjourr (0073): release files are fetched, not patched in.
 "$root/scripts/fetch_bonjourr.sh" "$_src_dir/third_party/bonjourr"
 echo "OK: $_src_dir ($(grep -c . "$root/patches/series") patches). args.gn is not written: copy build/src/out/Default/args.gn (chrome_pgo_phase=2)."

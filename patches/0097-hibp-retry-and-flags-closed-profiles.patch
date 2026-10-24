@@ -1,0 +1,210 @@
+--- a/components/password_manager/core/browser/password_manager.cc
++++ b/components/password_manager/core/browser/password_manager.cc
+@@ -691,19 +691,19 @@
+   void Check(const GURL& url,
+              const std::u16string& username,
+              const std::u16string& password) {
+-    if (password.empty() ||
+-        !checked_.insert(base::SHA1HashString(base::UTF16ToUTF8(password)))
+-             .second) {
++    std::string hash = base::SHA1HashString(base::UTF16ToUTF8(password));
++    if (password.empty() || !checked_.insert(hash).second) {
+       return;
+     }
+     if (!check_) {
+       check_ = LeakDetectionCheckFactoryImpl().TryCreateBulkLeakCheck(
+           this, client_->GetIdentityManager(), client_->GetURLLoaderFactory());
+       if (!check_) {
++        checked_.erase(hash);
+         return;
+       }
+     }
+-    urls_.push_back(url);
++    pending_.emplace_back(url, std::move(hash));
+     std::vector<LeakCheckCredential> credentials;
+     credentials.emplace_back(username, password);
+     check_->CheckCredentials(LeakDetectionInitiator::kSignInCheck,
+@@ -713,11 +713,11 @@
+   void OnFinishedCredential(LeakCheckCredential credential,
+                             IsLeaked is_leaked) override {
+     PasswordForm form;
+-    form.url = urls_.empty() ? GURL() : urls_.front();
++    form.url = pending_.empty() ? GURL() : pending_.front().first;
+     form.signon_realm = form.url.DeprecatedGetOriginAsURL().spec();
+     form.username_value = credential.username();
+-    if (!urls_.empty()) {
+-      urls_.pop_front();
++    if (!pending_.empty()) {
++      pending_.pop_front();
+     }
+     if (is_leaked) {
+       client_->NotifyUserCredentialsWereLeaked(LeakedPasswordDetails(
+@@ -726,9 +726,13 @@
+     }
+   }
+ 
+-  // E.g. offline: drop the queue; the next submission starts a fresh checker.
++  // E.g. offline: drop the queue; the next submission starts a fresh checker
++  // and checks these passwords again.
+   void OnError(LeakDetectionError error) override {
+-    urls_.clear();
++    for (const auto& [url, hash] : pending_) {
++      checked_.erase(hash);
++    }
++    pending_.clear();
+     base::SequencedTaskRunner::GetCurrentDefault()->DeleteSoon(
+         FROM_HERE, std::move(check_));
+   }
+@@ -736,7 +740,8 @@
+  private:
+   const raw_ptr<PasswordManagerClient> client_;
+   std::unique_ptr<BulkLeakCheck> check_;
+-  base::circular_deque<GURL> urls_;
++  // Submitted page and password hash of each check still waiting for an answer.
++  base::circular_deque<std::pair<GURL, std::string>> pending_;
+   base::flat_set<std::string> checked_;
+ };
+ 
+--- a/chrome/browser/helium_privacy_mode/helium_privacy_mode.cc
++++ b/chrome/browser/helium_privacy_mode/helium_privacy_mode.cc
+@@ -16,6 +16,8 @@
+ #include "chrome/browser/prefetch/pref_names.h"
+ #include "chrome/browser/preloading/preloading_prefs.h"
+ #include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/profiles/profile_attributes_entry.h"
++#include "chrome/browser/profiles/profile_attributes_storage.h"
+ #include "chrome/browser/profiles/profile_manager.h"
+ #include "chrome/browser/profiles/profile_observer.h"
+ #include "chrome/common/pref_names.h"
+@@ -39,6 +41,8 @@
+ #include "components/pref_registry/pref_registry_syncable.h"
+ #include "base/values.h"
+ #include "components/prefs/pref_change_registrar.h"
++#include "components/prefs/pref_registry_simple.h"
++#include "components/prefs/scoped_user_pref_update.h"
+ #include "components/prefs/pref_service.h"
+ #include "components/webui/flags/pref_service_flags_storage.h"
+ 
+@@ -50,6 +54,8 @@
+ constexpr char kModePref[] = "helium.privacy_mode";
+ // The level whose settings were last written; startup re-applies only when it differs.
+ constexpr char kAppliedPref[] = "helium.privacy_mode_applied";
++// Local State: profile folder name -> level, for every profile seen.
++constexpr char kLevelsPref[] = "helium.privacy_levels";
+ 
+ enum class Permissions { kAsk, kAskRestricted, kBlock };
+ 
+@@ -92,6 +98,10 @@
+ constexpr int kPerfDiscardMinutes = 5;
+ }  // namespace
+ 
++void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
++  registry->RegisterDictionaryPref(kLevelsPref);
++}
++
+ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
+   registry->RegisterStringPref(kModePref, std::string());
+   registry->RegisterStringPref(kAppliedPref, std::string());
+@@ -289,16 +299,18 @@
+ // Rewrites the managed flags in Local State, leaving the user's other flags
+ // alone. Returns true if the stored set changed (a restart is needed).
+ // Flags are browser-wide but levels are per profile: keep the strictest level
+-// of every loaded profile, so a new profile (default Medium) does not silently
+-// drop the protections of a profile on Maximum.
+-// shortcut: profiles not loaded right now are not seen; reading their Preferences
+-// files would cover them if users mix levels across many profiles.
++// of every other profile (open or not, deleted ones skipped), so choosing
++// Medium in one profile does not drop the protections of one on Maximum.
+ bool ApplyFlags(Profile* self, Mode mode) {
+-  for (Profile* other :
+-       g_browser_process->profile_manager()->GetLoadedProfiles()) {
++  ProfileManager* manager = g_browser_process->profile_manager();
++  const std::string self_name = self->GetBaseName().AsUTF8Unsafe();
++  for (const auto [name, level] :
++       g_browser_process->local_state()->GetDict(kLevelsPref)) {
+     Mode other_mode;
+-    if (other != self && GetMode(other->GetPrefs()->GetString(kModePref),
+-                                 &other_mode)) {
++    if (name != self_name && level.is_string() &&
++        GetMode(level.GetString(), &other_mode) &&
++        manager->GetProfileAttributesStorage().GetProfileAttributesWithPath(
++            manager->user_data_dir().AppendASCII(name))) {
+       mode.strong_fingerprinting |= other_mode.strong_fingerprinting;
+       mode.no_cross_origin_referrer |= other_mode.no_cross_origin_referrer;
+     }
+@@ -373,6 +385,20 @@
+ 
+ }  // namespace
+ 
++namespace {
++// Keeps this profile's entry in kLevelsPref current.
++void RecordLevel(Profile* profile) {
++  const std::string name = profile->GetBaseName().AsUTF8Unsafe();
++  const std::string mode = GetModeName(profile);
++  const std::string* stored =
++      g_browser_process->local_state()->GetDict(kLevelsPref).FindString(name);
++  if (!stored || *stored != mode) {
++    ScopedDictPrefUpdate(g_browser_process->local_state(), kLevelsPref)
++        ->Set(name, mode);
++  }
++}
++}  // namespace
++
+ std::string GetModeName(Profile* profile) {
+   return profile->GetPrefs()->GetString(kModePref);
+ }
+@@ -387,6 +413,7 @@
+   profile->GetPrefs()->SetString(kModePref, mode);
+   const bool restart = ApplyStored(profile);
+   profile->GetPrefs()->SetString(kAppliedPref, mode);
++  RecordLevel(profile);
+   if (restart_required) {
+     *restart_required = restart;
+   }
+@@ -410,6 +437,7 @@
+     ApplyStored(profile, /*write_flags=*/false);
+     profile->GetPrefs()->SetString(kAppliedPref, "medium");
+   }
++  RecordLevel(profile);
+   if (!profile->GetUserData(kPerfWatcherKey)) {
+     profile->SetUserData(kPerfWatcherKey,
+                          std::make_unique<PerformanceModeWatcher>(profile));
+--- a/chrome/browser/helium_privacy_mode/helium_privacy_mode.h
++++ b/chrome/browser/helium_privacy_mode/helium_privacy_mode.h
+@@ -6,6 +6,7 @@
+ 
+ #include <string>
+ 
++class PrefRegistrySimple;
+ class Profile;
+ namespace content {
+ class WebContents;
+@@ -25,6 +26,9 @@
+ 
+ // Registers helium.privacy_mode ("" = no mode chosen, nothing is enforced).
+ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
++// Registers helium.privacy_levels: each profile's level, so the browser-wide
++// flags can follow profiles that are not loaded.
++void RegisterLocalStatePrefs(PrefRegistrySimple* registry);
+ 
+ // If --privacy-mode=<mode> ("usability", "medium" or "maximum") is given, stores
+ // it in helium.privacy_mode. Then enforces the stored mode on |profile|: cookies,
+@@ -32,7 +36,7 @@
+ // background mode. Unknown modes are logged and ignored. Applied on every
+ // profile start, so manual changes to these settings are reset at restart.
+ // Fingerprinting and referrer are feature flags in Local State (browser-wide,
+-// the last mode applied wins) and need a restart.
++// the strictest level of any profile wins) and need a restart.
+ void Apply(Profile* profile);
+ 
+ // Stores |mode| ("usability", "medium" or "maximum") in helium.privacy_mode and
+--- a/chrome/browser/prefs/browser_prefs.cc
++++ b/chrome/browser/prefs/browser_prefs.cc
+@@ -1428,6 +1428,7 @@
+       registry);
+ #endif
+   autofill::prefs::RegisterLocalStatePrefs(registry);
++  helium_privacy_mode::RegisterLocalStatePrefs(registry);
+   breadcrumbs::RegisterPrefs(registry);
+   browser_shutdown::RegisterPrefs(registry);
+   BrowserProcessImpl::RegisterPrefs(registry);

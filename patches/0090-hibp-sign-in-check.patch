@@ -1,0 +1,309 @@
+--- a/components/password_manager/core/browser/leak_detection/leak_detection_check_factory_impl.cc
++++ b/components/password_manager/core/browser/leak_detection/leak_detection_check_factory_impl.cc
+@@ -14,7 +14,23 @@
+ #include "services/network/public/cpp/shared_url_loader_factory.h"
+ 
+ #if !BUILDFLAG(IS_ANDROID)
++#include "base/containers/circular_deque.h"
++#include "base/containers/flat_map.h"
++#include "base/hash/sha1.h"
++#include "base/memory/raw_ptr.h"
++#include "base/memory/weak_ptr.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/strings/string_split.h"
++#include "base/strings/string_util.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/task/sequenced_task_runner.h"
++#include "components/password_manager/core/browser/leak_detection/bulk_leak_check_delegate_interface.h"
+ #include "components/password_manager/core/browser/leak_detection/bulk_leak_check_impl.h"
++#include "components/password_manager/core/browser/leak_detection/leak_detection_request_utils.h"
++#include "net/traffic_annotation/network_traffic_annotation.h"
++#include "services/network/public/cpp/resource_request.h"
++#include "services/network/public/cpp/simple_url_loader.h"
++#include "url/gurl.h"
+ #endif  // !BUILDFLAG(IS_ANDROID)
+ 
+ namespace password_manager {
+@@ -31,6 +47,138 @@
+   return google_apis::GetAPIKey(channel);
+ }
+ 
++#if !BUILDFLAG(IS_ANDROID)
++// Helium++: password checkup without a Google account, against Have I Been
++// Pwned's Pwned Passwords range API. Only the first 5 hex digits of each
++// password's SHA-1 leave the browser ("k-anonymity"); the match against the
++// returned suffixes happens here. Padding is requested so response sizes don't
++// hint at the prefix. Runs only when the user starts the check.
++class HibpBulkLeakCheck : public BulkLeakCheck {
++ public:
++  HibpBulkLeakCheck(
++      BulkLeakCheckDelegateInterface* delegate,
++      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory)
++      : delegate_(delegate), url_loader_factory_(std::move(url_loader_factory)) {}
++
++  void CheckCredentials(LeakDetectionInitiator initiator,
++                        std::vector<LeakCheckCredential> credentials) override {
++    // Only the user's own actions (a checkup, a sign-in); automatic (proactive)
++    // checkups would contact the service unasked.
++    if (initiator != LeakDetectionInitiator::kBulkSyncedPasswordsCheck &&
++        initiator != LeakDetectionInitiator::kSignInCheck) {
++      delegate_->OnError(LeakDetectionError::kNotSignIn);
++      return;
++    }
++    for (LeakCheckCredential& credential : credentials) {
++      queue_.push_back(std::move(credential));
++    }
++    if (!loader_) {
++      Next();
++    }
++  }
++
++  size_t GetPendingChecksCount() const override { return queue_.size(); }
++
++ private:
++  static std::string HashOf(const LeakCheckCredential& credential) {
++    return base::HexEncode(base::as_byte_span(
++        base::SHA1HashString(base::UTF16ToUTF8(credential.password()))));
++  }
++
++  void Next() {
++    if (queue_.empty()) {
++      return;
++    }
++    const std::string prefix = HashOf(queue_.front()).substr(0, 5);
++    if (ranges_.contains(prefix)) {
++      // Posted: the delegate may call back into this object.
++      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++          FROM_HERE, base::BindOnce(&HibpBulkLeakCheck::Finish,
++                                    weak_factory_.GetWeakPtr()));
++      return;
++    }
++    static constexpr net::NetworkTrafficAnnotationTag kAnnotation =
++        net::DefineNetworkTrafficAnnotation("helium_hibp_password_check", R"(
++          semantics {
++            sender: "Helium++ password checkup"
++            description:
++              "Checks saved passwords against Have I Been Pwned's list of "
++              "passwords from data breaches. Sends the first 5 hex digits of "
++              "a password's SHA-1 hash, never the password or the full hash."
++            trigger:
++              "The user starts a password check in the password manager, or "
++              "submits a password on a site while password saving is off."
++            data: "5 hex digits of a SHA-1 hash."
++            destination: OTHER
++            destination_other: "api.pwnedpasswords.com"
++          }
++          policy {
++            cookies_allowed: NO
++            setting: "Only runs on a password check or a password submission."
++            policy_exception_justification: "Not implemented."
++          })");
++    auto request = std::make_unique<network::ResourceRequest>();
++    request->url = GURL("https://api.pwnedpasswords.com/range/" + prefix);
++    request->credentials_mode = network::mojom::CredentialsMode::kOmit;
++    request->headers.SetHeader("Add-Padding", "true");
++    loader_ = network::SimpleURLLoader::Create(std::move(request), kAnnotation);
++    loader_->DownloadToString(
++        url_loader_factory_.get(),
++        base::BindOnce(&HibpBulkLeakCheck::OnRange, weak_factory_.GetWeakPtr(),
++                       prefix),
++        /*max_body_size=*/1024 * 1024);
++  }
++
++  void OnRange(const std::string& prefix, std::optional<std::string> body) {
++    loader_.reset();
++    if (!body) {
++      queue_.clear();
++      delegate_->OnError(LeakDetectionError::kNetworkError);
++      return;
++    }
++    ranges_[prefix] = std::move(*body);
++    Finish();
++  }
++
++  void Finish() {
++    if (queue_.empty()) {
++      return;
++    }
++    LeakCheckCredential credential = std::move(queue_.front());
++    queue_.pop_front();
++    const std::string hash = HashOf(credential);
++    bool leaked = false;
++    // Lines are "SUFFIX:COUNT"; padding lines have a count of 0.
++    for (std::string_view line :
++         base::SplitStringPiece(ranges_[hash.substr(0, 5)], "\n",
++                                base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY)) {
++      const size_t colon = line.find(':');
++      int count = 0;
++      if (colon != std::string_view::npos &&
++          base::EqualsCaseInsensitiveASCII(line.substr(0, colon),
++                                           std::string_view(hash).substr(5)) &&
++          base::StringToInt(line.substr(colon + 1), &count) && count > 0) {
++        leaked = true;
++        break;
++      }
++    }
++    // The delegate may delete this once nothing is pending.
++    base::WeakPtr<HibpBulkLeakCheck> self = weak_factory_.GetWeakPtr();
++    delegate_->OnFinishedCredential(std::move(credential), IsLeaked(leaked));
++    if (self) {
++      Next();
++    }
++  }
++
++  const raw_ptr<BulkLeakCheckDelegateInterface> delegate_;
++  scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
++  base::circular_deque<LeakCheckCredential> queue_;
++  base::flat_map<std::string, std::string> ranges_;
++  std::unique_ptr<network::SimpleURLLoader> loader_;
++  base::WeakPtrFactory<HibpBulkLeakCheck> weak_factory_{this};
++};
++#endif  // !BUILDFLAG(IS_ANDROID)
++
+ }  // namespace
+ 
+ LeakDetectionCheckFactoryImpl::LeakDetectionCheckFactoryImpl() = default;
+@@ -56,8 +204,8 @@
+     signin::IdentityManager* identity_manager,
+     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) const {
+   if (!LeakDetectionCheckImpl::HasAccountForRequest(identity_manager)) {
+-    delegate->OnError(LeakDetectionError::kNotSignIn);
+-    return nullptr;
++    return std::make_unique<HibpBulkLeakCheck>(delegate,
++                                               std::move(url_loader_factory));
+   }
+   return std::make_unique<BulkLeakCheckImpl>(delegate, identity_manager,
+                                              std::move(url_loader_factory));
+--- a/components/password_manager/core/browser/password_manager.h
++++ b/components/password_manager/core/browser/password_manager.h
+@@ -100,6 +100,8 @@
+ // Per-tab password manager. Handles creation and management of UI elements,
+ // receiving password form data from the renderer and managing the password
+ // database through the PasswordStore.
++class HibpSignInCheck;
++
+ class PasswordManager : public PasswordManagerInterface {
+  public:
+   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
+@@ -508,6 +510,9 @@
+   // Helper for making the requests on leak detection.
+   LeakDetectionDelegate leak_delegate_;
+ 
++  // Helium++: Have I Been Pwned check of submitted passwords while saving is off.
++  std::unique_ptr<HibpSignInCheck> hibp_sign_in_check_;
++
+   // Fields that can be considered for username in case of Username First Flow.
+   base::LRUCache<PossibleUsernameFieldIdentifier, PossibleUsernameData>
+       possible_usernames_ =
+--- a/components/password_manager/core/browser/password_manager.cc
++++ b/components/password_manager/core/browser/password_manager.cc
+@@ -21,6 +21,8 @@
+ #include "base/strings/strcat.h"
+ #include "base/strings/string_util.h"
+ #include "base/strings/utf_string_conversions.h"
++#include "base/task/sequenced_task_runner.h"
++#include "services/network/public/cpp/shared_url_loader_factory.h"
+ #include "base/threading/platform_thread.h"
+ #include "base/time/time.h"
+ #include "base/types/optional_util.h"
+@@ -42,7 +44,14 @@
+ #include "components/password_manager/core/browser/credential_cache.h"
+ #include "components/password_manager/core/browser/features/password_features.h"
+ #include "components/password_manager/core/browser/field_info_manager.h"
++#include "components/password_manager/core/browser/leak_detection/bulk_leak_check.h"
++#include "components/password_manager/core/browser/leak_detection/bulk_leak_check_delegate_interface.h"
++#include "components/password_manager/core/browser/leak_detection/leak_detection_check_factory_impl.h"
+ #include "components/password_manager/core/browser/leak_detection/leak_detection_request_utils.h"
++#include "components/password_manager/core/browser/leak_detection_dialog_utils.h"
++#include "base/containers/circular_deque.h"
++#include "base/containers/flat_set.h"
++#include "base/hash/sha1.h"
+ #include "components/password_manager/core/browser/origin_credential_store.h"
+ #include "components/password_manager/core/browser/password_autofill_manager.h"
+ #include "components/password_manager/core/browser/password_change_service_interface.h"
+@@ -670,6 +679,67 @@
+                              PrefRegistry::NO_REGISTRATION_FLAGS);
+ }
+ 
++
++// Helium++: Helium keeps password saving off, and with it Chromium's sign-in leak
++// check never runs. This checks each password submitted on a page against Have
++// I Been Pwned (only 5 hex digits of its SHA-1 are sent) and shows Chromium's
++// leaked-password warning. Each password is checked once per tab.
++class HibpSignInCheck : public BulkLeakCheckDelegateInterface {
++ public:
++  explicit HibpSignInCheck(PasswordManagerClient* client) : client_(client) {}
++
++  void Check(const GURL& url,
++             const std::u16string& username,
++             const std::u16string& password) {
++    if (password.empty() ||
++        !checked_.insert(base::SHA1HashString(base::UTF16ToUTF8(password)))
++             .second) {
++      return;
++    }
++    if (!check_) {
++      check_ = LeakDetectionCheckFactoryImpl().TryCreateBulkLeakCheck(
++          this, client_->GetIdentityManager(), client_->GetURLLoaderFactory());
++      if (!check_) {
++        return;
++      }
++    }
++    urls_.push_back(url);
++    std::vector<LeakCheckCredential> credentials;
++    credentials.emplace_back(username, password);
++    check_->CheckCredentials(LeakDetectionInitiator::kSignInCheck,
++                             std::move(credentials));
++  }
++
++  void OnFinishedCredential(LeakCheckCredential credential,
++                            IsLeaked is_leaked) override {
++    PasswordForm form;
++    form.url = urls_.empty() ? GURL() : urls_.front();
++    form.signon_realm = form.url.DeprecatedGetOriginAsURL().spec();
++    form.username_value = credential.username();
++    if (!urls_.empty()) {
++      urls_.pop_front();
++    }
++    if (is_leaked) {
++      client_->NotifyUserCredentialsWereLeaked(LeakedPasswordDetails(
++          CreateLeakType(IsSaved(false), IsReused(false), IsSyncing(false)),
++          std::move(form), /*in_account_store=*/false));
++    }
++  }
++
++  // E.g. offline: drop the queue; the next submission starts a fresh checker.
++  void OnError(LeakDetectionError error) override {
++    urls_.clear();
++    base::SequencedTaskRunner::GetCurrentDefault()->DeleteSoon(
++        FROM_HERE, std::move(check_));
++  }
++
++ private:
++  const raw_ptr<PasswordManagerClient> client_;
++  std::unique_ptr<BulkLeakCheck> check_;
++  base::circular_deque<GURL> urls_;
++  base::flat_set<std::string> checked_;
++};
++
+ PasswordManager::PasswordManager(PasswordManagerClient* client)
+     : client_(client),
+       account_store_cb_list_subscription_(
+@@ -1262,6 +1332,17 @@
+     return nullptr;
+   }
+ 
++  if (!is_manual_fallback && driver &&
++      !client_->IsSavingAndFillingEnabled(driver->GetLastCommittedOrigin(),
++                                          current_form_url)) {
++    if (!hibp_sign_in_check_) {
++      hibp_sign_in_check_ = std::make_unique<HibpSignInCheck>(client_);
++    }
++    const PasswordForm& pending = matched_manager->GetPendingCredentials();
++    hibp_sign_in_check_->Check(current_form_url, pending.username_value,
++                               pending.password_value.value());
++  }
++
+   // |matched_manager->ProvisionallySave| returning true means that there is a
+   // nonempty password field. If such |matched_manager| contains any of
+   // possible usernames, clear it from single username candidates.
