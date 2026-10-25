@@ -4,7 +4,7 @@ Runs the browser in a private Xvfb display (never the real desktop), right-click
 presses the item's mnemonic "l" through the X test extension, then reads the clipboard in the page.
 A link without trackers must not get the item: the clipboard keeps its sentinel.
 Run from the project root: python3 -I scripts/test_clean_link.py"""
-import base64, ctypes, functools, http.server, json, os, shutil, socket, struct, subprocess, threading, time
+import sys, ctypes, functools, http.server, json, os, shutil, subprocess, threading, time
 import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -19,42 +19,8 @@ CASES = [  # link, what "Copy clean link" must copy (None: item absent)
 ]
 ROW = 60
 
-def connect(url):
-    host, rest = url[5:].split('/', 1)
-    s = socket.create_connection(("127.0.0.1", int(host.split(':')[1])), timeout=30)
-    key = base64.b64encode(os.urandom(16)).decode()
-    s.sendall(f'GET /{rest} HTTP/1.1\r\nHost: {host}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n'
-              f'Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n'.encode())
-    buf = b''
-    while b'\r\n\r\n' not in buf:
-        buf += s.recv(4096)
-    assert b' 101 ' in buf.split(b'\r\n')[0], buf
-    return s, buf.split(b'\r\n\r\n', 1)[1]
-
-class WS:
-    def __init__(self, url):
-        self.s, self.buf = connect(url); self.n = 0
-    def send(self, method, params=None, session=None):
-        self.n += 1
-        d = {'id': self.n, 'method': method, 'params': params or {}}
-        if session: d['sessionId'] = session
-        data = json.dumps(d).encode(); mask = os.urandom(4)
-        hdr = b'\x81' + (bytes([0x80 | len(data)]) if len(data) < 126 else b'\xfe' + struct.pack('>H', len(data)))
-        self.s.sendall(hdr + mask + bytes(b ^ mask[i % 4] for i, b in enumerate(data)))
-        return self.n
-    def _need(self, n):
-        while len(self.buf) < n: self.buf += self.s.recv(65536)
-        out, self.buf = self.buf[:n], self.buf[n:]; return out
-    def recv(self):
-        b1, b2 = self._need(2); ln = b2 & 0x7f
-        if ln == 126: ln = struct.unpack('>H', self._need(2))[0]
-        elif ln == 127: ln = struct.unpack('>Q', self._need(8))[0]
-        return json.loads(self._need(ln))
-    def call(self, method, params=None, session=None):
-        i = self.send(method, params, session)
-        while True:
-            m = self.recv()
-            if m.get('id') == i: return m
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from cdp import WS  # noqa: E402
 
 def press(key):  # a real key press on the Xvfb display, so it reaches the native menu
     x11, xtst = ctypes.CDLL('libX11.so.6'), ctypes.CDLL('libXtst.so.6')

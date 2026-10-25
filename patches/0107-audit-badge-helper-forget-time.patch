@@ -1,0 +1,137 @@
+--- a/chrome/browser/ui/views/tabs/tab.cc
++++ b/chrome/browser/ui/views/tabs/tab.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/ui/views/tabs/tab.h"
+ 
++#include "chrome/browser/ui/views/tabs/common/tab_view.h"
++
+ #include <stddef.h>
+ 
+ #include <algorithm>
+@@ -73,9 +75,6 @@
+ #include "ui/base/pointer/touch_ui_controller.h"
+ #include "ui/base/theme_provider.h"
+ #include "ui/compositor/clip_recorder.h"
+-#include "ui/compositor/paint_recorder.h"
+-#include "ui/color/color_id.h"
+-#include "ui/gfx/geometry/point_f.h"
+ #include "ui/compositor/compositor.h"
+ #include "ui/gfx/animation/tween.h"
+ #include "ui/gfx/canvas.h"
+@@ -906,18 +905,7 @@
+ 
+   if (showing_icon_ && tab_handle_.Get() &&
+       helium_privacy_mode::IsIsolatedWebContents(tab_handle_.Get()->GetContents())) {
+-    // Isolated tab badge, same as vertical tabs (tabs/common/tab_view.cc).
+-    ui::PaintRecorder recorder(info.context(), size());
+-    gfx::Canvas* canvas = recorder.canvas();
+-    const gfx::Rect icon = icon_->bounds();
+-    const gfx::PointF center(icon.right() - 2.0f, icon.bottom() - 2.0f);
+-    cc::PaintFlags flags;
+-    flags.setAntiAlias(true);
+-    flags.setStyle(cc::PaintFlags::kFill_Style);
+-    flags.setColor(GetColorProvider()->GetColor(ui::kColorSysSurface));
+-    canvas->DrawCircle(center, 5.5f, flags);
+-    flags.setColor(GetColorProvider()->GetColor(ui::kColorSysPrimary));
+-    canvas->DrawCircle(center, 3.75f, flags);
++    TabView::PaintIsolatedBadge(info, *this, icon_->bounds());
+   }
+ }
+ 
+--- a/chrome/browser/ui/views/tabs/common/tab_view.h
++++ b/chrome/browser/ui/views/tabs/common/tab_view.h
+@@ -63,6 +63,13 @@
+   friend class TabStyleViewDelegateImpl;
+ 
+  public:
++  // Isolated-tab badge on the bottom-right of |icon_bounds| (in |view|'s
++  // coordinates): accent dot with a ring in the surface colour. Shared with the
++  // horizontal tab (tabs/tab.cc).
++  static void PaintIsolatedBadge(const views::PaintInfo& info,
++                                 const views::View& view,
++                                 const gfx::Rect& icon_bounds);
++
+   static constexpr base::TimeDelta kGlowHoverAnimationDuration =
+       base::Milliseconds(50);
+ 
+--- a/chrome/browser/ui/views/tabs/common/tab_view.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_view.cc
+@@ -827,22 +827,27 @@
+   View::PaintChildren(info);
+ 
+   if (isolated_) {
+-    // Small badge on the bottom-right of the favicon: accent dot with a ring in
+-    // the surface colour so it reads on any tab background.
+-    ui::PaintRecorder recorder(info.context(), size());
+-    gfx::Canvas* canvas = recorder.canvas();
+-    const gfx::Rect icon = icon_->bounds();
+-    const gfx::PointF center(icon.right() - 2.0f, icon.bottom() - 2.0f);
+-    cc::PaintFlags flags;
+-    flags.setAntiAlias(true);
+-    flags.setStyle(cc::PaintFlags::kFill_Style);
+-    flags.setColor(GetColorProvider()->GetColor(ui::kColorSysSurface));
+-    canvas->DrawCircle(center, 5.5f, flags);
+-    flags.setColor(GetColorProvider()->GetColor(ui::kColorSysPrimary));
+-    canvas->DrawCircle(center, 3.75f, flags);
++    PaintIsolatedBadge(info, *this, icon_->bounds());
+   }
+ }
+ 
++// static
++void TabView::PaintIsolatedBadge(const views::PaintInfo& info,
++                                 const views::View& view,
++                                 const gfx::Rect& icon_bounds) {
++  ui::PaintRecorder recorder(info.context(), view.size());
++  gfx::Canvas* canvas = recorder.canvas();
++  const gfx::PointF center(icon_bounds.right() - 2.0f,
++                           icon_bounds.bottom() - 2.0f);
++  cc::PaintFlags flags;
++  flags.setAntiAlias(true);
++  flags.setStyle(cc::PaintFlags::kFill_Style);
++  flags.setColor(view.GetColorProvider()->GetColor(ui::kColorSysSurface));
++  canvas->DrawCircle(center, 5.5f, flags);
++  flags.setColor(view.GetColorProvider()->GetColor(ui::kColorSysPrimary));
++  canvas->DrawCircle(center, 3.75f, flags);
++}
++
+ void TabView::OnPaint(gfx::Canvas* canvas) {
+   // Split pinned tabs have a merged background that is rendered in
+   // `SplitTabView`.
+--- a/chrome/browser/ui/views/page_info/page_info_main_view.cc
++++ b/chrome/browser/ui/views/page_info/page_info_main_view.cc
+@@ -2,6 +2,7 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include "chrome/browser/helium_time/helium_time.h"
+ #include "chrome/browser/ui/views/page_info/page_info_main_view.h"
+ 
+ #include <memory>
+@@ -218,6 +219,7 @@
+       : profile_(Profile::FromBrowserContext(contents->GetBrowserContext())),
+         site_(site) {
+     Profile* profile = profile_;
++    helium_time::ForgetSite(profile, site);
+     // The remover ignores filters for history and would wipe all of it, so the
+     // site's entries are picked out here.
+     if (history::HistoryService* history =
+--- a/chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.cc
++++ b/chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.cc
+@@ -2,6 +2,7 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include "chrome/browser/helium_time/helium_time.h"
+ #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
+ 
+ #include <stdint.h>
+@@ -414,6 +415,8 @@
+   //////////////////////////////////////////////////////////////////////////////
+   // DATA_TYPE_HISTORY
+   if ((remove_mask & constants::DATA_TYPE_HISTORY) && may_delete_history) {
++    // Helium++ time per site is a list of visited sites too.
++    helium_time::ClearSince(profile_, delete_begin_);
+     history::HistoryService* history_service =
+         HistoryServiceFactory::GetForProfile(
+             profile_, ServiceAccessType::EXPLICIT_ACCESS);

@@ -26,6 +26,7 @@ for f in helium chrome_100_percent.pak chrome_200_percent.pak helium_crashpad_ha
     cp "$out/$f" "$app/opt/helium/"
 done
 cp "$out"/locales/*.pak "$app/opt/helium/locales/"
+mkdir -p "$app/opt/helium/fonts"; cp "$out"/fonts/* "$app/opt/helium/fonts/"
 find "$app/opt/helium" -type f -exec file {} + | awk -F: '/ELF/ {print $1}' | xargs strip --strip-unneeded
 # Own desktop id/icon (heliumpp, matches GetDesktopName in 0066) so desktops never mix us up with real Helium.
 sed 's/^Name=Helium$/Name=Helium++/; s/^Icon=helium$/Icon=heliumpp/; /^\[Desktop Entry\]$/a StartupWMClass=heliumpp' \

@@ -10,6 +10,77 @@ Updated 2026-10-21 (end of session 2).
 **Next (user's list):** (1) isolated mode: fix/test the about:blank popup hole, block or redirect downloads, password manager, clipboard write; (2) item 4 general speed outside performance mode (measure first); (3) restyle: horizontal layout, menus/popups, Settings and onboarding pages; (4) wallpaper image behind the new tab page and privacy chip (dropped: weather, tracker counter unless uBO stats readable); (5) red hover tint on window close; (6) DNS: visual check and a real-use test; (7) update CLAUDE.md (still says six presets; the product uses three modes) and ARCHITECTURE.md/PLATFORM_SUPPORT.md with this session's decisions; (8) run the series on a pristine tree.
 **User preferences seen this session:** wants to review changes before big edits when asked ("show me what changes"); wants honest "not verified" notes; decides between options quickly (picked option 1 even with the URL-hiding trade-off, later reverted it); likes the new tab page and drop-down window bar; wants the browser to stop looking like stock Helium.
 
+## SESSION 7 (2026-10-25, after v0.19.4.6) - NOT committed, NOT released
+- 0099-updater-about-follows-running-update: user saw About stuck on "Updating" (0.19.4.5). Cause: About
+  opened while another update ran (5-min background check, or a second About tab) got one UPDATING report
+  and nothing after. Now it subscribes to the running update (base::RepeatingCallbackList): live %, final
+  status; if the tab running it closes, waiters get "Update stopped ... Open this page again". (0.19.4.6
+  already cleared the spinner at the end via 0085's BuildState re-check; no progress, and the closed-tab
+  case still hung.) Repro with the real 0.19.4.5 AppImage + GitHub: download/install itself works.
+  test_update.sh new "second-tab" case: FAIL before, PASS after; full suite 9/9 PASS.
+- 0100: horizontal tabs (tabs/tab.cc) draw the isolated-tab badge + ", isolated tab" a11y name, like
+  vertical. SEEN in Xvfb (build/shots/hbadge-top.png, LAYOUT=0 shot_virtual.sh). helium.browser.layout
+  default Classic -> Vertical (onboarding already preselected vertical; affects profiles that never set it).
+  Vertical default not seen on screen.
+- 0101-micro-motion-new-tab: NTP items rise in staggered (transform/opacity only), search focus scale,
+  press scale on switches; off with prefers-reduced-motion (performance mode forces it, 0068) and
+  data-reduced. Build OK; NOT seen animating.
+- Regression after build: privacy_mode, two_profiles, theme, isolated_downloads, performance_mode PASS.
+- User approved: Satoshi, acrylic, Zephium ideas b (sky NTP), e (time per site + focus), g (custom shortcuts).
+- 0102-satoshi-ui-font: skia::MakeTypefaceFromName loads <exe>/fonts/Satoshi-Variable(Italic).ttf for family
+  "Satoshi" (variable wght instance, regular nudged 400->450), PlatformFontSkia uses it as the default UI font
+  when present. NEVER registered with fontconfig, so web pages cannot see it. WebUI gets it by @font-face in
+  text_defaults_md.css from chrome://resources/fonts/* (shared_resources_data_source request filter reads the
+  file on a worker thread; .ttf -> font/ttf); WebUI md font list drops Roboto when Satoshi is used; setup page
+  --font = Satoshi first. Files: scripts/fetch_fonts.sh (official Fontshare zip, sha256-pinned TTFs + FFL.txt,
+  into build/fonts/satoshi, NOT in git: license forbids repository redistribution); compile.sh copies them to
+  out/Default/fonts (so scripts/run.sh has them); package_appimage.sh ships opt/helium/fonts.
+  scripts/test_ui_font.py PASS: web page byName/byLocal false + fetch blocked; settings + newtab use Satoshi.
+  Probe positive control: an installed font (DejaVu Sans) IS detected. Native UI A/B screenshot shows Satoshi.
+- 0103-acrylic-window: Helium's Mac-only "native frame materials" enabled on Linux as "Acrylic window"
+  (pref helium.browser.native_frame_materials): surfaces skip backgrounds, OpaqueBrowserFrameView paints the frame
+  colour at alpha 0xB8 over edges + client area, BrowserView drops our 0032 solid fill, colour key frame_style
+  kGlass (else ThemeChangeOptimization skips the live repaint), BrowserWidget pref observer -> ThemeChanged.
+  Settings toggle relabelled "Acrylic window"; setup TabLayout page has an "Acrylic window" switch (setPref).
+  VERIFIED in Xvfb + build/tools xcompmgr (Arch pkg, signature checked, not installed) over a striped root:
+  see-through tinted sidebar; off = unchanged; live via settingsPrivate; setup switch saves pref.
+  NOT done: KDE blur hint (no blur on KDE/GNOME, plain see-through); real Hyprland blur not seen.
+- 0104-shortcut-isolated-tab: Helium already has Settings > System > Shortcuts. "New isolated tab"
+  (IDS_WILDCARD label) now listed; VERIFIED: assigned Ctrl+Alt+I via the page's handler, pressed in Xvfb,
+  an isolated tab (badge) opened.
+- 0105-sky-new-tab: sky layer by local time (night/dawn/day/dusk), colours = color-mix of theme accent and page
+  background (+ hue-shifted accent for warm horizons), sun/moon on a low arc, CSS star field (twinkle off with
+  reduced motion / performance mode), clock + date above the greeting. SEEN at 4 times via CDP timezone
+  override (build/shots/sky-grid.png, dark mode).
+- 0106-time-per-site-focus-rounds: chrome/browser/helium_time/. 15 s browser-wide ticker (started in
+  ChromeBrowserMainParts::PostBrowserStart) adds time to the registrable domain of the focused window's active
+  tab; skipped when idle >= 60 s (unless audible), incognito, isolated tabs, Maximum privacy, or
+  helium.time.enabled off (Settings > Appearance toggle). helium.time.days keeps 7 local days. Focus rounds:
+  helium.focus_round.{sites,until}; NavigationThrottle (primary main frame) returns BLOCK_REQUEST with a
+  system-colour "Focus round: <site> opens again at HH:MM" page; starting a round reloads open tabs on shut
+  sites. NTP foot: "X on the web today" + top 3 + Reset; "Focus 25 min / 50 min / Sites to shut (n)" with an
+  inline site editor (normalised: scheme/path/www stripped). scripts/test_time_focus.py ALL PASS (30 s counted
+  on disk, NTP lists it, shut site blocked, other site loads, loads again after Stop). Not tested: Maximum/
+  incognito exclusion, idle detection on Wayland (CalculateIdleTime may report 0 there -> counts while focused).
+- AUDIT FIXES (user: "fix all of them"):
+  1 focus bypass via Back (bfcache restores skip throttles; reproduced): StartFocus flushes every profile tab's
+    back-forward cache. 2 0100's default change would flip "Use defaults" users (no saved layout) to vertical
+    on update: built-in default back to Classic; Welcome "Use defaults" now calls setTabLayout("vertical")
+    (verified: layout 2 after clicking it on a profile without a saved layout). 3 time data now cleared by
+    Clear browsing data (history; days from the range start, null = all, ChromeBrowsingDataRemoverDelegate)
+    and by Forget this site (helium_time::ForgetSite). 4 error pages (focus page) not counted. 5 counts batched
+    in memory, written every 20 ticks / profile or day change / last window closed (AppTerminating) /
+    quit+logout (ClosingAllBrowsers; SIGTERM path skips AppTerminating - found by the new test).
+    6 test_time_focus: Back case, clear-history case, at-quit write, Maximum records nothing (Back + clear
+    FAILED on the old binary, PASS after); test_forget_site checks time data too (not red-checked).
+    7 TabView::PaintIsolatedBadge shared by tab.cc and tab_view.cc (0107; seen in both layouts).
+    8 scripts/cdp.py: the DevTools websocket client, imported by cdp_about.py + 12 test scripts (-298 lines).
+- PREVIOUS pending decisions (now resolved): Satoshi font (ITF FFL 2.0: embedding in own desktop app allowed; no modification/
+  subsetting/conversion; must not be offered to third parties as a selectable font, so it must stay out of
+  web content and out of the public git repo); acrylic setup option (Linux window is already translucent;
+  Chromium's glass frame is Mac-only; blur depends on compositor); Zephium ideas (MPL-2.0, Rust/WebKit,
+  not Chromium: only ideas transfer, user wants to approve each before implementation).
+
 ## SESSION 6 (2026-10-24, after v0.19.4.5) - released as v0.19.4.6-alpha
 - RELEASE v0.19.4.6-alpha (user asked 2026-10-24, published as Latest): 0084-0097 + 0098 version bump (rebuild
   1h00m). AppImage sha256 5a2c8f80b2fd996b13b18ec8e05f2a8b6b82afcde6f1765ccb644d8fe38fe7c5 (158632440 bytes),

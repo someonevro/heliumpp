@@ -1,0 +1,82 @@
+--- a/chrome/browser/ui/webui/help/helium_appimage_updater.cc
++++ b/chrome/browser/ui/webui/help/helium_appimage_updater.cc
+@@ -8,6 +8,7 @@
+ #include <string>
+ #include <vector>
+ 
++#include "base/callback_list.h"
+ #include "base/command_line.h"
+ #include "base/environment.h"
+ #include "base/files/file.h"
+@@ -63,6 +64,18 @@
+ // One update at a time across the background check and any open About page.
+ bool g_update_running = false;
+ 
++// Status of the running update, for About pages opened while it runs (they would otherwise
++// show "Updating" forever).
++using StatusList = base::RepeatingCallbackList<void(VersionUpdater::Status,
++                                                    int,
++                                                    const std::string&,
++                                                    int64_t,
++                                                    const std::u16string&)>;
++StatusList& Watchers() {
++  static base::NoDestructor<StatusList> list;
++  return *list;
++}
++
+ // Version already swapped in on disk this session; About then offers Relaunch
+ // instead of downloading it again.
+ std::string& InstalledVersion() {
+@@ -121,6 +134,9 @@
+   ~HeliumAppImageUpdater() override {
+     if (busy_) {
+       g_update_running = false;
++      Watchers().Notify(FAILED, 0, version_, size_,
++                        u"Update stopped because the page that started it was "
++                        u"closed. Open this page again to retry.");
+     }
+   }
+ 
+@@ -152,8 +168,9 @@
+       return Report(NEARLY_UPDATED, 0, std::u16string());
+     }
+     if (g_update_running) {
+-      return Report(UPDATING, 0,
+-                    u"An update is already downloading in the background.");
++      watch_ = Watchers().Add(base::BindRepeating(
++          &HeliumAppImageUpdater::OnRunningStatus, base::Unretained(this)));
++      return Report(UPDATING, 0, std::u16string());
+     }
+ 
+     busy_ = g_update_running = true;
+@@ -186,6 +203,22 @@
+  private:
+   void Report(Status status, int progress, const std::u16string& message) {
+     callback_.Run(status, progress, false, false, version_, size_, message);
++    if (!watch_) {
++      Watchers().Notify(status, progress, version_, size_, message);
++    }
++  }
++
++  void OnRunningStatus(Status status,
++                       int progress,
++                       const std::string& version,
++                       int64_t size,
++                       const std::u16string& message) {
++    version_ = version;
++    size_ = size;
++    if (status != CHECKING && status != UPDATING) {
++      watch_ = {};
++    }
++    callback_.Run(status, progress, false, false, version_, size_, message);
+   }
+ 
+   void Done() {
+@@ -309,6 +342,7 @@
+   }
+ 
+   StatusCallback callback_;
++  base::CallbackListSubscription watch_;
+   std::unique_ptr<network::SimpleURLLoader> loader_;
+   base::FilePath target_;
+   base::FilePath download_path_;

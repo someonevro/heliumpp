@@ -53,6 +53,22 @@ n=$(grep -c "GET /heliumpp-9.0.0.2" "$t/server.log")
 grep -q "Updating" "$t/closed1.txt" && grep -q "Nearly up to date" "$t/closed2.txt" && [ "$n" = 2 ] \
   && echo "PASS closed-tab (About downloads again after the first About tab closed mid-download)" \
   || { fail=1; echo "FAIL closed-tab: downloads=$n, first: $(tail -1 "$t/closed1.txt") second: $(tail -1 "$t/closed2.txt")"; }
+# A second About tab opened mid-download follows its progress, and is told when the first tab
+# closes and stops the download (it used to show "Updating" forever).
+head -c 40000000 /dev/urandom > "$t/www/heliumpp-9.0.0.3-x86_64.AppImage"
+"$root/scripts/release_sign.sh" sign "$t/www/heliumpp-9.0.0.3-x86_64.AppImage" "http://127.0.0.1:$port" >/dev/null
+echo old > "$t/target"
+XDG_CONFIG_HOME="$root/build/xdg/config" XDG_CACHE_HOME="$root/build/xdg/cache" "$root/build/src/out/Default/helium" \
+  --user-data-dir="$t/profile" --headless=new --no-first-run --no-sandbox --disable-gpu --remote-debugging-port=9333 \
+  --helium-update-url="http://127.0.0.1:$port/latest.json" --helium-update-target="$t/target" about:blank >/dev/null 2>&1 & bpid=$!
+sleep 4
+python3 -I "$root/scripts/cdp_about.py" 9333 6 close > "$t/second1.txt" & first=$!
+sleep 3
+python3 -I "$root/scripts/cdp_about.py" 9333 10 > "$t/second2.txt"
+wait $first; kill $bpid 2>/dev/null; wait $bpid 2>/dev/null; sleep 1
+grep -q "Updating Helium++ (" "$t/second2.txt" && tail -1 "$t/second2.txt" | grep -q "Update stopped" \
+  && echo "PASS second-tab (second About tab shows progress, then that the first tab stopped it)" \
+  || { fail=1; echo "FAIL second-tab: $(tr '\n' ' ' < "$t/second2.txt")"; }
 # Background check (5 min after start) installs it without the About page; About then offers
 # Relaunch instead of downloading the same file a second time.
 IMG=heliumpp-9.0.0.1-x86_64.AppImage MUTATE= WAIT=320 run background replaced

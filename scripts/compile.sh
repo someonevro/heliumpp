@@ -14,6 +14,10 @@ fi
 # Same for the onboarding "new tab page" previews (made by scripts/make_ntp_previews.sh, binary, so not in a patch).
 mkdir -p "$root/build/src/components/helium_onboarding/src/assets/ntp-previews"
 cp "$root"/shared/ntp-previews/*.webp "$root/build/src/components/helium_onboarding/src/assets/ntp-previews/"
+# UI font (not in git, see fetch_fonts.sh), next to the binary where the browser looks for it.
+"$root/scripts/fetch_fonts.sh"
+mkdir -p "$root/build/src/out/Default/fonts"
+cp "$root"/build/fonts/satoshi/* "$root/build/src/out/Default/fonts/"
 # vite never cleans its output dir; stale hashed files overflow the grd's fixed resource ID range
 # (IdRangeOverflow). Wiping it forces a vite run on every compile (costs ~a minute) but is always correct.
 rm -rf "$root/build/src/out/Default/gen/components/helium_onboarding/dist"

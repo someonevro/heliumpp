@@ -1,0 +1,12 @@
+--- a/chrome/browser/ui/browser_shortcuts/browser_shortcut_metadata.cc
++++ b/chrome/browser/ui/browser_shortcuts/browser_shortcut_metadata.cc
+@@ -98,6 +98,9 @@
+       return Label(IDS_NEW_WINDOW);
+     case IDC_NEW_INCOGNITO_WINDOW:
+       return Label(IDS_NEW_INCOGNITO_WINDOW);
++    case IDC_HELIUM_NEW_ISOLATED_TAB:
++      // English only: a new translated string would rebuild ~1 h.
++      return Label(IDS_WILDCARD, u"New isolated tab");
+     case IDC_NEW_TAB:
+       return Label(IDS_NEW_TAB);
+     case IDC_NEW_SPLIT_TAB:

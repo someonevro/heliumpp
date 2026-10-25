@@ -1,0 +1,239 @@
+--- a/skia/ext/font_utils.h
++++ b/skia/ext/font_utils.h
+@@ -28,6 +28,12 @@
+ // Returns a default SkTypeface returned by a platform-specific SkFontMgr.
+ SK_API sk_sp<SkTypeface> DefaultTypeface();
+ 
++// Helium++ UI font. Loaded from <exe dir>/fonts by MakeTypefaceFromName only, never
++// registered with fontconfig, so web pages cannot see or use it.
++inline constexpr char kUiFontFamily[] = "Satoshi";
++// True if the UI font files are present next to the executable (Linux only).
++SK_API bool HasUiFont();
++
+ // Returns a Typeface matching the given criteria as returned the
+ // platform-specific SkFontMgr that was compiled in. This Typeface may be
+ // different on different platforms.
+--- a/skia/ext/font_utils.cc
++++ b/skia/ext/font_utils.cc
+@@ -5,6 +5,19 @@
+ #include "skia/ext/font_utils.h"
+ 
+ #include "base/check.h"
++#include <algorithm>
++#include <map>
++#include <utility>
++
++#include "base/base_paths.h"
++#include "base/files/file_path.h"
++#include "base/files/file_util.h"
++#include "base/no_destructor.h"
++#include "base/path_service.h"
++#include "base/strings/string_util.h"
++#include "base/synchronization/lock.h"
++#include "third_party/skia/include/core/SkFontArguments.h"
++#include "third_party/skia/include/core/SkStream.h"
+ #include "build/build_config.h"
+ #include "skia/ext/codec_utils.h"
+ #include "src/core/SkFontDescriptor.h"
+@@ -124,9 +137,64 @@
+   g_fontmgr_override = fontmgr.release();
+ }
+ 
++namespace {
++
++base::FilePath UiFontFile(bool italic) {
++  base::FilePath exe;
++  if (!base::PathService::Get(base::DIR_EXE, &exe)) {
++    return base::FilePath();
++  }
++  return exe.Append("fonts").Append(italic ? "Satoshi-VariableItalic.ttf"
++                                           : "Satoshi-Variable.ttf");
++}
++
++// One instance of the variable font per (weight, italic), created on first use.
++sk_sp<SkTypeface> UiTypeface(SkFontMgr* fm, SkFontStyle style) {
++  const bool italic = style.slant() != SkFontStyle::kUpright_Slant;
++  // Satoshi's 400 is light at UI sizes (12-14 px); nudge regular text up a little.
++  int weight = style.weight() == SkFontStyle::kNormal_Weight ? 450 : style.weight();
++  weight = std::clamp(weight, 300, 900);
++  static base::NoDestructor<base::Lock> lock;
++  static base::NoDestructor<std::map<std::pair<int, bool>, sk_sp<SkTypeface>>>
++      cache;
++  base::AutoLock hold(*lock);
++  sk_sp<SkTypeface>& face = (*cache)[{weight, italic}];
++  if (!face) {
++    std::unique_ptr<SkStreamAsset> stream =
++        SkStream::MakeFromFile(UiFontFile(italic).value().c_str());
++    if (!stream) {
++      return nullptr;
++    }
++    const SkFontArguments::VariationPosition::Coordinate wght = {
++        SkSetFourByteTag('w', 'g', 'h', 't'), static_cast<float>(weight)};
++    SkFontArguments args;
++    args.setVariationDesignPosition({&wght, 1});
++    face = fm->makeFromStream(std::move(stream), args);
++  }
++  return face;
++}
++
++}  // namespace
++
++bool HasUiFont() {
++#if BUILDFLAG(IS_LINUX)
++  static const bool present = base::PathExists(UiFontFile(false)) &&
++                              base::PathExists(UiFontFile(true));
++  return present;
++#else
++  return false;
++#endif
++}
++
+ sk_sp<SkTypeface> MakeTypefaceFromName(const char* name, SkFontStyle style) {
+   sk_sp<SkFontMgr> fm = DefaultFontMgr();
+   CHECK(fm);
++  if (name && base::EqualsCaseInsensitiveASCII(name, kUiFontFamily) &&
++      HasUiFont()) {
++    if (sk_sp<SkTypeface> face = UiTypeface(fm.get(), style)) {
++      return face;
++    }
++  }
+   sk_sp<SkTypeface> face = fm->legacyMakeTypeface(name, style);
+   return face;
+ }
+--- a/ui/gfx/platform_font_skia.cc
++++ b/ui/gfx/platform_font_skia.cc
+@@ -175,7 +175,7 @@
+   // GTK) for the default UI font.
+   if (auto* linux_ui = ui::LinuxUi::instance()) {
+     const auto& font_settings = linux_ui->GetDefaultFontDescription();
+-    family = font_settings.family;
++    family = skia::HasUiFont() ? skia::kUiFontFamily : font_settings.family;
+     size_pixels = font_settings.size_pixels;
+     style = font_settings.style;
+     weight = static_cast<Font::Weight>(font_settings.weight);
+--- a/content/browser/webui/shared_resources_data_source.cc
++++ b/content/browser/webui/shared_resources_data_source.cc
+@@ -6,6 +6,16 @@
+ 
+ #include <set>
+ 
++#include "base/base_paths.h"
++#include <algorithm>
++#include "base/functional/bind.h"
++#include "base/files/file_path.h"
++#include "base/files/file_util.h"
++#include "base/memory/ref_counted_memory.h"
++#include "base/path_service.h"
++#include "base/strings/string_util.h"
++#include "base/task/thread_pool.h"
++
+ #include "content/public/browser/web_ui_data_source.h"
+ #include "services/network/public/mojom/content_security_policy.mojom.h"
+ #include "ui/base/webui/web_ui_util.h"
+@@ -46,7 +56,39 @@
+ 
+ }  // namespace
+ 
++namespace {
++
++// Helium++ UI font (Satoshi) for WebUI pages: served from <exe dir>/fonts as
++// chrome://resources/fonts/<file>. Web pages cannot load chrome:// URLs, so the
++// font stays out of reach of websites (license, fingerprinting).
++constexpr const char* kUiFontFiles[] = {"fonts/Satoshi-Variable.ttf",
++                                        "fonts/Satoshi-VariableItalic.ttf"};
++
++bool IsUiFontPath(const std::string& path) {
++  return std::ranges::find(kUiFontFiles, path) != std::end(kUiFontFiles);
++}
++
++scoped_refptr<base::RefCountedMemory> ReadUiFont(const std::string& path) {
++  base::FilePath exe;
++  std::string data;
++  if (base::PathService::Get(base::DIR_EXE, &exe)) {
++    base::ReadFileToString(exe.AppendASCII(path), &data);
++  }
++  return base::MakeRefCounted<base::RefCountedString>(std::move(data));
++}
++
++}  // namespace
++
+ void PopulateSharedResourcesDataSource(WebUIDataSource* source) {
++  source->SetRequestFilter(
++      base::BindRepeating(&IsUiFontPath),
++      base::BindRepeating([](const std::string& path,
++                             WebUIDataSource::GotDataCallback callback) {
++        base::ThreadPool::PostTaskAndReplyWithResult(
++            FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
++            base::BindOnce(&ReadUiFont, path), std::move(callback));
++      }));
++
+   source->OverrideContentSecurityPolicy(
+       network::mojom::CSPDirectiveName::WorkerSrc, "worker-src blob: 'self';");
+ 
+--- a/content/browser/webui/web_ui_data_source_impl.cc
++++ b/content/browser/webui/web_ui_data_source_impl.cc
+@@ -518,6 +518,10 @@
+     return "application/wasm";
+   }
+ 
++  if (base::EndsWith(file_path, ".ttf", base::CompareCase::INSENSITIVE_ASCII)) {
++    return "font/ttf";
++  }
++
+   if (base::EndsWith(file_path, ".woff2",
+                      base::CompareCase::INSENSITIVE_ASCII)) {
+     return "application/font-woff2";
+--- a/ui/webui/resources/css/text_defaults_md.css
++++ b/ui/webui/resources/css/text_defaults_md.css
+@@ -36,6 +36,22 @@
+ }
+ </if>
+ 
++/* Helium++ UI font, served to WebUI pages only (shared_resources_data_source.cc).
++   Without the file the requests fail and the next font in the list is used. */
++@font-face {
++  font-family: 'Satoshi';
++  font-style: normal;
++  font-weight: 300 900;
++  src: url(../fonts/Satoshi-Variable.ttf) format('truetype');
++}
++
++@font-face {
++  font-family: 'Satoshi';
++  font-style: italic;
++  font-weight: 300 900;
++  src: url(../fonts/Satoshi-VariableItalic.ttf) format('truetype');
++}
++
+ body {
+   font-family: $i18nRaw{fontfamilyMd};
+   font-size: 81.25%;
+--- a/ui/base/webui/web_ui_util.cc
++++ b/ui/base/webui/web_ui_util.cc
+@@ -45,7 +45,8 @@
+ 
+ std::string GetFontFamilyMd() {
+ #if BUILDFLAG(IS_LINUX)
+-  return "Roboto, " + GetFontFamily();
++  const std::string family = GetFontFamily();
++  return family.starts_with("\"Satoshi\"") ? family : "Roboto, " + family;
+ #else
+   return GetFontFamily();
+ #endif
+--- a/components/helium_onboarding/src/app.css
++++ b/components/helium_onboarding/src/app.css
+@@ -1,4 +1,14 @@
++/* Helium++ UI font (served to WebUI pages only); the bundled font stays as fallback. */
++@font-face {
++    font-family: "Satoshi";
++    font-style: normal;
++    font-weight: 300 900;
++    src: url(chrome://resources/fonts/Satoshi-Variable.ttf) format("truetype");
++}
++
+ :root {
++    --font: "Satoshi", "Instrument Sans Variable", system-ui, Helvetica, Arial, sans-serif;
++
+     --page-scroll-gradient-mask: linear-gradient(
+         to bottom,
+         rgba(0, 0, 0, 1) 90%,

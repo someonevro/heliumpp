@@ -1,0 +1,75 @@
+--- a/chrome/browser/ui/views/tabs/tab.cc
++++ b/chrome/browser/ui/views/tabs/tab.cc
+@@ -22,6 +22,7 @@
+ #include "build/build_config.h"
+ #include "cc/paint/paint_flags.h"
+ #include "chrome/browser/dictation/dictation_keyed_service.h"
++#include "chrome/browser/helium_privacy_mode/helium_privacy_mode.h"
+ #include "chrome/browser/glic/browser_ui/tab_underline_controller.h"
+ #include "chrome/browser/glic/browser_ui/tab_underline_view.h"
+ #include "chrome/browser/glic/public/glic_enabling.h"
+@@ -72,6 +73,9 @@
+ #include "ui/base/pointer/touch_ui_controller.h"
+ #include "ui/base/theme_provider.h"
+ #include "ui/compositor/clip_recorder.h"
++#include "ui/compositor/paint_recorder.h"
++#include "ui/color/color_id.h"
++#include "ui/gfx/geometry/point_f.h"
+ #include "ui/compositor/compositor.h"
+ #include "ui/gfx/animation/tween.h"
+ #include "ui/gfx/canvas.h"
+@@ -899,6 +903,22 @@
+ 
+   clip_recorder.ClipPathWithAntiAliasing(clip_path);
+   View::PaintChildren(info);
++
++  if (showing_icon_ && tab_handle_.Get() &&
++      helium_privacy_mode::IsIsolatedWebContents(tab_handle_.Get()->GetContents())) {
++    // Isolated tab badge, same as vertical tabs (tabs/common/tab_view.cc).
++    ui::PaintRecorder recorder(info.context(), size());
++    gfx::Canvas* canvas = recorder.canvas();
++    const gfx::Rect icon = icon_->bounds();
++    const gfx::PointF center(icon.right() - 2.0f, icon.bottom() - 2.0f);
++    cc::PaintFlags flags;
++    flags.setAntiAlias(true);
++    flags.setStyle(cc::PaintFlags::kFill_Style);
++    flags.setColor(GetColorProvider()->GetColor(ui::kColorSysSurface));
++    canvas->DrawCircle(center, 5.5f, flags);
++    flags.setColor(GetColorProvider()->GetColor(ui::kColorSysPrimary));
++    canvas->DrawCircle(center, 3.75f, flags);
++  }
+ }
+ 
+ void Tab::OnPaint(gfx::Canvas* canvas) {
+@@ -998,6 +1018,10 @@
+ // consistency.
+ void Tab::UpdateAccessibleName() {
+   std::u16string name = controller_->GetAccessibleTabName(this);
++  if (!name.empty() && tab_handle_.Get() &&
++      helium_privacy_mode::IsIsolatedWebContents(tab_handle_.Get()->GetContents())) {
++    name += u", isolated tab";
++  }
+   if (!name.empty()) {
+     GetViewAccessibility().SetName(name);
+   } else {
+--- a/components/helium_onboarding/src/pages/Welcome.svelte
++++ b/components/helium_onboarding/src/pages/Welcome.svelte
+@@ -9,7 +9,7 @@
+     import HeliumLogo from "../components/HeliumppLogo.svelte";
+     import { s } from "../lib/strings";
+     import { parseLocalizedString } from "../lib/i18n";
+-    import { setPref, acceptLatestSchema, openNewTab } from "../lib/browser";
++    import { setPref, setTabLayout, acceptLatestSchema, openNewTab } from "../lib/browser";
+     import {
+         currentPage,
+         hasSeenIntro,
+@@ -21,6 +21,9 @@
+     const useDefaults = async () => {
+         acceptLatestSchema();
+         await setPref('services.user_consented', true);
++        // The built-in layout default stays horizontal for existing profiles;
++        // new ones get vertical tabs here and from the layout step.
++        await setTabLayout("vertical", false);
+         await setPref('completed_onboarding', true);
+         openNewTab();
+     }

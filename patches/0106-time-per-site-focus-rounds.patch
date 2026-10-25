@@ -1,0 +1,881 @@
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -871,6 +871,8 @@
+     "helium_noise/helium_noise_settings.cc",
+     "helium_noise/helium_noise_settings.h",
+     "helium_privacy_mode/helium_privacy_mode.cc",
++    "helium_time/helium_time.cc",
++    "helium_time/helium_time.h",
+     "helium_theme/helium_theme.cc",
+     "helium_workspaces/helium_workspaces.cc",
+     "helium_workspaces/helium_workspaces.h",
+--- a/chrome/browser/prefs/browser_prefs.cc
++++ b/chrome/browser/prefs/browser_prefs.cc
+@@ -41,6 +41,7 @@
+ #include "chrome/browser/helium_aliases/helium_aliases.h"
+ #include "chrome/browser/helium_focus/helium_focus.h"
+ #include "chrome/browser/helium_privacy_mode/helium_privacy_mode.h"
++#include "chrome/browser/helium_time/helium_time.h"
+ #include "chrome/browser/helium_theme/helium_theme.h"
+ #include "chrome/browser/helium_workspaces/helium_workspaces.h"
+ #include "chrome/browser/hid/hid_policy_allowed_devices.h"
+@@ -1758,6 +1759,7 @@
+   helium_focus::RegisterProfilePrefs(registry);
+   helium_privacy_mode::RegisterProfilePrefs(registry);
+   helium_theme::RegisterProfilePrefs(registry);
++  helium_time::RegisterProfilePrefs(registry);
+   helium_workspaces::RegisterProfilePrefs(registry);
+   AccessibilityLabelsService::RegisterProfilePrefs(registry);
+   registry->RegisterBooleanPref(prefs::kRendererAccessibilityEnabled, true);
+--- a/chrome/browser/chrome_browser_main.cc
++++ b/chrome/browser/chrome_browser_main.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/chrome_browser_main.h"
+ 
++#include "chrome/browser/helium_time/helium_time.h"
++
+ #include <memory>
+ #include <string>
+ #include <tuple>
+@@ -1736,6 +1738,7 @@
+ 
+ void ChromeBrowserMainParts::PostBrowserStart() {
+   TRACE_EVENT0("startup", "ChromeBrowserMainParts::PostBrowserStart");
++  helium_time::StartTracking();
+   for (auto& chrome_extra_part : chrome_extra_parts_) {
+     chrome_extra_part->PostBrowserStart();
+   }
+--- a/chrome/browser/chrome_content_browser_client_navigation_throttles.cc
++++ b/chrome/browser/chrome_content_browser_client_navigation_throttles.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/chrome_content_browser_client_navigation_throttles.h"
+ 
++#include "chrome/browser/helium_time/helium_time.h"
++
+ #include "base/command_line.h"
+ #include "base/feature_list.h"
+ #include "build/build_config.h"
+@@ -296,6 +298,8 @@
+     // should be cared by adding an attribute flag to
+     // NavigationThrottleRegistry::AddThrottle().
+     page_load_metrics::MetricsNavigationThrottle::CreateAndAdd(registry);
++    // Helium++ focus rounds: shut sites show a "closed for focus" page.
++    helium_time::MaybeAddFocusThrottle(registry);
+ 
+     // Appends the X-Geo header to the navigation request if needed.
+     if (auto throttle =
+--- a/chrome/browser/ui/webui/new_tab_page/new_tab_page.mojom
++++ b/chrome/browser/ui/webui/new_tab_page/new_tab_page.mojom
+@@ -26,6 +26,12 @@
+ };
+ 
+ // The background image URL and styling.
++// Helium++: time on one site today.
++struct SiteTime {
++  string site;
++  int64 seconds;
++};
++
+ struct BackgroundImage {
+   // URL to the background image. Can point to untrusted content.
+   url.mojom.Url url;
+@@ -181,6 +187,15 @@
+   SetPerformanceMode(bool enabled);
+   // Tabs asleep (discarded) in this profile and the memory they used before.
+   GetSleepingTabs() => (int32 count, int64 bytes);
++  // Time on websites today (this device only), biggest first. |enabled| is
++  // false when counting is off or not done (Maximum privacy).
++  GetTimeToday() => (bool enabled, array<SiteTime> sites);
++  ResetTimeToday();
++  // Focus round: shut sites and when the round ends (ms since epoch, 0 = none).
++  GetFocus() => (array<string> sites, double until_ms);
++  SetFocusSites(array<string> sites) => (array<string> sites);
++  StartFocus(int32 minutes);
++  StopFocus();
+   // Gets current doodle if there is one.
+   GetDoodle() => (Doodle? doodle);
+   // Called when a module the given id is dismissed.
+--- a/chrome/browser/ui/webui/new_tab_page/new_tab_page_handler.h
++++ b/chrome/browser/ui/webui/new_tab_page/new_tab_page_handler.h
+@@ -130,6 +130,13 @@
+   void GetPerformanceMode(GetPerformanceModeCallback callback) override;
+   void SetPerformanceMode(bool enabled) override;
+   void GetSleepingTabs(GetSleepingTabsCallback callback) override;
++  void GetTimeToday(GetTimeTodayCallback callback) override;
++  void ResetTimeToday() override;
++  void GetFocus(GetFocusCallback callback) override;
++  void SetFocusSites(const std::vector<std::string>& sites,
++                     SetFocusSitesCallback callback) override;
++  void StartFocus(int32_t minutes) override;
++  void StopFocus() override;
+   void GetPrivacyMode(GetPrivacyModeCallback callback) override;
+   void SetPrivacyMode(const std::string& mode,
+                       SetPrivacyModeCallback callback) override;
+--- a/chrome/browser/ui/webui/new_tab_page/new_tab_page_handler.cc
++++ b/chrome/browser/ui/webui/new_tab_page/new_tab_page_handler.cc
+@@ -49,6 +49,7 @@
+ #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
+ #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
+ #include "chrome/browser/helium_privacy_mode/helium_privacy_mode.h"
++#include "chrome/browser/helium_time/helium_time.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/search/background/ntp_custom_background_service.h"
+ #include "chrome/browser/search/background/ntp_custom_background_service_factory.h"
+@@ -645,6 +646,44 @@
+   helium_privacy_mode::SetPerformanceMode(profile_, enabled);
+ }
+ 
++void NewTabPageHandler::GetTimeToday(GetTimeTodayCallback callback) {
++  const bool enabled =
++      profile_->GetPrefs()->GetBoolean(helium_time::kEnabledPref) &&
++      helium_privacy_mode::GetModeName(profile_) != "maximum";
++  std::vector<new_tab_page::mojom::SiteTimePtr> sites;
++  if (enabled) {
++    for (const auto& [site, seconds] : helium_time::TimeToday(profile_)) {
++      sites.push_back(new_tab_page::mojom::SiteTime::New(site, seconds));
++    }
++  }
++  std::move(callback).Run(enabled, std::move(sites));
++}
++
++void NewTabPageHandler::ResetTimeToday() {
++  helium_time::ResetToday(profile_);
++}
++
++void NewTabPageHandler::GetFocus(GetFocusCallback callback) {
++  const base::Time until = helium_time::FocusUntil(profile_);
++  std::move(callback).Run(helium_time::FocusSites(profile_),
++                          until.is_null() ? 0 : until.InMillisecondsFSinceUnixEpoch());
++}
++
++void NewTabPageHandler::SetFocusSites(const std::vector<std::string>& sites,
++                                      SetFocusSitesCallback callback) {
++  helium_time::SetFocusSites(profile_, sites);
++  std::move(callback).Run(helium_time::FocusSites(profile_));
++}
++
++void NewTabPageHandler::StartFocus(int32_t minutes) {
++  // A round is 5 minutes to 3 hours; the page offers 25 and 50.
++  helium_time::StartFocus(profile_, base::Minutes(std::clamp(minutes, 5, 180)));
++}
++
++void NewTabPageHandler::StopFocus() {
++  helium_time::StopFocus(profile_);
++}
++
+ void NewTabPageHandler::GetSleepingTabs(GetSleepingTabsCallback callback) {
+   int count = 0;
+   int64_t bytes = 0;
+--- a/chrome/browser/resources/new_tab_page/app.ts
++++ b/chrome/browser/resources/new_tab_page/app.ts
+@@ -246,6 +246,10 @@
+       performanceMode_: {type: Boolean},
+       sleepingTabs_: {type: Object},
+       now_: {type: Object},
++      timeToday_: {type: Object},
++      focusSites_: {type: Array},
++      focusUntil_: {type: Number},
++      editingFocus_: {type: Boolean},
+       privacyRestart_: {type: Boolean},
+ 
+       /**
+@@ -402,6 +406,11 @@
+   // Drives the sky and the clock; refreshed every 30 s.
+   protected accessor now_: Date = new Date();
+   private clockTimer_: number = 0;
++  protected accessor timeToday_: {enabled: boolean, sites: Array<{site: string, seconds: bigint}>} =
++      {enabled: false, sites: []};
++  protected accessor focusSites_: string[] = [];
++  protected accessor focusUntil_: number = 0;
++  protected accessor editingFocus_: boolean = false;
+   protected accessor sleepingTabs_: {count: number, bytes: bigint} = {count: 0, bytes: 0n};
+   protected accessor privacyRestart_: boolean = false;
+   protected readonly privacyModes_ = [
+@@ -560,7 +569,10 @@
+   override connectedCallback() {
+     super.connectedCallback();
+     this.refreshPrivacyMode_();
+-    this.clockTimer_ = setInterval(() => this.now_ = new Date(), 30000);
++    this.clockTimer_ = setInterval(() => {
++      this.now_ = new Date();
++      this.refreshTime_();
++    }, 30000);
+     document.addEventListener('visibilitychange', this.refreshPrivacyMode_);
+     window.addEventListener('focus', this.refreshPrivacyMode_);
+     realboxCanShowSecondarySideMediaQueryList.addEventListener(
+@@ -1493,8 +1505,78 @@
+     this.pageHandler_.getSleepingTabs().then(({count, bytes}) => {
+       this.sleepingTabs_ = {count, bytes};
+     });
++    this.refreshTime_();
+   };
+ 
++  private refreshTime_() {
++    this.pageHandler_.getTimeToday().then(({enabled, sites}) => {
++      this.timeToday_ = {enabled, sites};
++    });
++    this.pageHandler_.getFocus().then(({sites, untilMs}) => {
++      this.focusSites_ = sites;
++      this.focusUntil_ = untilMs;
++    });
++  }
++
++  // "1 h 5 min", "12 min", "under a minute".
++  protected duration_(seconds: number): string {
++    const minutes = Math.floor(seconds / 60);
++    if (minutes < 1) {
++      return 'under a minute';
++    }
++    const h = Math.floor(minutes / 60);
++    return h ? `${h} h ${minutes % 60} min` : `${minutes} min`;
++  }
++
++  protected timeTotal_(): string {
++    return this.duration_(
++        this.timeToday_.sites.reduce((sum, s) => sum + Number(s.seconds), 0));
++  }
++
++  protected onResetTimeClick_() {
++    this.pageHandler_.resetTimeToday();
++    this.timeToday_ = {...this.timeToday_, sites: []};
++  }
++
++  protected focusActive_(): boolean {
++    return this.focusUntil_ > this.now_.getTime();
++  }
++
++  protected focusEnd_(): string {
++    return new Date(this.focusUntil_).toLocaleTimeString(
++        [], {hour: '2-digit', minute: '2-digit'});
++  }
++
++  protected onStartFocusClick_(e: Event) {
++    const minutes = Number((e.currentTarget as HTMLElement).dataset['minutes']);
++    if (!this.focusSites_.length) {
++      this.editingFocus_ = true;
++      return;
++    }
++    this.pageHandler_.startFocus(minutes);
++    this.focusUntil_ = Date.now() + minutes * 60000;
++    this.editingFocus_ = false;
++  }
++
++  protected onStopFocusClick_() {
++    this.pageHandler_.stopFocus();
++    this.focusUntil_ = 0;
++  }
++
++  protected onEditFocusClick_() {
++    this.editingFocus_ = !this.editingFocus_;
++  }
++
++  protected onFocusSitesSubmit_(e: Event) {
++    e.preventDefault();
++    const input = this.shadowRoot.querySelector<HTMLInputElement>('#focusSitesInput')!;
++    this.pageHandler_.setFocusSites(input.value.split(/[\s,]+/).filter(s => s))
++        .then(({sites}) => {
++          this.focusSites_ = sites;
++          this.editingFocus_ = false;
++        });
++  }
++
+   protected onPerformanceClick_() {
+     this.performanceMode_ = !this.performanceMode_;
+     this.pageHandler_.setPerformanceMode(this.performanceMode_);
+--- a/chrome/browser/resources/new_tab_page/app.html
++++ b/chrome/browser/resources/new_tab_page/app.html
+@@ -73,3 +73,31 @@
+   ` : ''}
+   <div id="contentBottomSpacer"></div>
+ </div>
++<div id="foot">
++  ${this.timeToday_.enabled && this.timeToday_.sites.length ? html`
++    <div id="timeToday">
++      <span class="total">${this.timeTotal_()} on the web today</span>
++      ${this.timeToday_.sites.slice(0, 3).map(s => html`
++        <span class="site">${s.site} <b>${this.duration_(Number(s.seconds))}</b></span>`)}
++      <button class="link" @click="${this.onResetTimeClick_}"
++          title="Forget today's times">Reset</button>
++    </div>` : ''}
++  <div id="focusRow">
++    ${this.focusActive_() ? html`
++      <span>Focus until ${this.focusEnd_()} · ${this.focusSites_.length}
++        ${this.focusSites_.length === 1 ? 'site' : 'sites'} shut</span>
++      <button @click="${this.onStopFocusClick_}">Stop</button>` : html`
++      <button data-minutes="25" @click="${this.onStartFocusClick_}">Focus 25 min</button>
++      <button data-minutes="50" @click="${this.onStartFocusClick_}">50 min</button>
++      <button class="link" @click="${this.onEditFocusClick_}">
++        Sites to shut (${this.focusSites_.length})</button>`}
++  </div>
++  ${this.editingFocus_ ? html`
++    <form id="focusEdit" @submit="${this.onFocusSitesSubmit_}">
++      <input id="focusSitesInput" type="text" spellcheck="false"
++          aria-label="Sites to shut during focus, separated by commas"
++          .value="${this.focusSites_.join(', ')}"
++          placeholder="youtube.com, reddit.com, x.com">
++      <button type="submit">Save</button>
++    </form>` : ''}
++</div>
+--- a/chrome/browser/resources/new_tab_page/app.css
++++ b/chrome/browser/resources/new_tab_page/app.css
+@@ -832,6 +832,82 @@
+   grid-column: 1 / -1;
+ }
+ 
++/* Foot of the page: time on the web today and focus rounds (Zephium-inspired). */
++#foot {
++  align-items: center;
++  bottom: 22px;
++  color: var(--color-new-tab-page-secondary-foreground);
++  display: flex;
++  flex-direction: column;
++  font-size: 13px;
++  gap: 8px;
++  left: 50%;
++  position: fixed;
++  transform: translateX(-50%);
++  width: min(720px, 92vw);
++  z-index: 1;
++}
++
++#timeToday,
++#focusRow,
++#focusEdit {
++  align-items: center;
++  display: flex;
++  flex-wrap: wrap;
++  gap: 6px 14px;
++  justify-content: center;
++}
++
++#timeToday .total {
++  color: var(--color-new-tab-page-primary-foreground);
++}
++
++#timeToday b {
++  font-weight: 600;
++}
++
++#foot button {
++  background: color-mix(in oklab, var(--color-new-tab-page-primary-foreground) 10%, transparent);
++  border: 0;
++  border-radius: 999px;
++  color: var(--color-new-tab-page-primary-foreground);
++  cursor: pointer;
++  font: inherit;
++  padding: 5px 14px;
++  transition: background 0.15s, transform 0.12s;
++}
++
++#foot button:hover {
++  background: color-mix(in oklab, var(--color-new-tab-page-focus-ring) 35%, transparent);
++}
++
++#foot button:active {
++  transform: scale(0.94);
++}
++
++#foot button.link {
++  background: none;
++  color: var(--color-new-tab-page-secondary-foreground);
++  padding: 5px 6px;
++  text-decoration: underline;
++}
++
++#focusSitesInput {
++  background: color-mix(in oklab, var(--color-new-tab-page-primary-foreground) 10%, transparent);
++  border: 0;
++  border-radius: 999px;
++  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-new-tab-page-primary-foreground) 22%, transparent);
++  color: var(--color-new-tab-page-primary-foreground);
++  font: inherit;
++  outline: none;
++  padding: 6px 14px;
++  width: min(420px, 70vw);
++}
++
++#focusSitesInput:focus-visible {
++  box-shadow: inset 0 0 0 1.5px var(--color-new-tab-page-focus-ring);
++}
++
+ /* Micro motion: the page rises in item by item, controls give press feedback. Only transform
+    and opacity (compositor-only, no relayout). Off in performance mode (below). */
+ @keyframes rise-in {
+--- a/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts
++++ b/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts
+@@ -128,6 +128,11 @@
+         sub-label="Turns off animations, the wallpaper colour sync and spellcheck, unloads background tabs after 5 minutes and turns on energy saver.">
+     </settings-toggle-button>
+     <settings-toggle-button class="hr"
++        pref-key="helium.time.enabled"
++        label="Count time on websites"
++        sub-label="Shows today's time per site on the new tab page. Stored on this device only, kept 7 days; never counted in incognito, isolated tabs or Maximum privacy.">
++    </settings-toggle-button>
++    <settings-toggle-button class="hr"
+         ?hidden="${!this.showNativeFrameMaterialsOption_}"
+         pref-key="helium.browser.native_frame_materials"
+         label="Acrylic window"
+--- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
++++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+@@ -14,6 +14,7 @@
+ #include "build/chromeos_buildflags.h"
+ #include "chrome/browser/accessibility/tree_fixing/pref_names.h"
+ #include "chrome/browser/helium_privacy_mode/helium_privacy_mode.h"
++#include "chrome/browser/helium_time/helium_time.h"
+ #include "chrome/browser/autofill/generated_find_and_fill_with_gemini_pref.h"
+ #include "chrome/browser/browser_process.h"
+ #include "chrome/browser/browser_process_platform_part.h"
+@@ -334,6 +335,7 @@
+       settings_api::PrefType::kBoolean;
+   (*s_allowlist)[helium_privacy_mode::kBonjourrNewTabPref] =
+       settings_api::PrefType::kBoolean;
++  (*s_allowlist)[helium_time::kEnabledPref] = settings_api::PrefType::kBoolean;
+   (*s_allowlist)[helium_privacy_mode::kPerformanceModePref] =
+       settings_api::PrefType::kBoolean;
+ 
+--- /dev/null
++++ b/chrome/browser/helium_time/helium_time.h
+@@ -0,0 +1,66 @@
++// Time spent on websites (counted on this device only) and focus rounds that
++// shut chosen sites for a while. Created by Helium++.
++
++#ifndef CHROME_BROWSER_HELIUM_TIME_HELIUM_TIME_H_
++#define CHROME_BROWSER_HELIUM_TIME_HELIUM_TIME_H_
++
++#include <stdint.h>
++
++#include <string>
++#include <utility>
++#include <vector>
++
++#include "base/time/time.h"
++
++class GURL;
++class Profile;
++
++namespace content {
++class NavigationThrottleRegistry;
++}
++
++namespace user_prefs {
++class PrefRegistrySyncable;
++}
++
++namespace helium_time {
++
++inline constexpr char kEnabledPref[] = "helium.time.enabled";
++// {"YYYY-MM-DD": {"site": seconds}}, local days, last 7 kept.
++inline constexpr char kDaysPref[] = "helium.time.days";
++inline constexpr char kFocusSitesPref[] = "helium.focus_round.sites";
++inline constexpr char kFocusUntilPref[] = "helium.focus_round.until";
++
++void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
++
++// Starts the browser-wide 15-second counter. Call once after startup.
++void StartTracking();
++
++// Registrable domain of |url| ("mail.google.com" -> "google.com"), else host.
++std::string SiteFor(const GURL& url);
++
++// "https://www.YouTube.com/x" -> "youtube.com"; "" when it is not a host.
++std::string NormalizeSite(const std::string& input);
++
++// Today's seconds per site, biggest first.
++std::vector<std::pair<std::string, int64_t>> TimeToday(Profile* profile);
++void ResetToday(Profile* profile);
++// "Forget this site": drops |site| from every day.
++void ForgetSite(Profile* profile, const std::string& site);
++// Clearing history: drops every day from |begin|'s day on (null = all).
++void ClearSince(Profile* profile, base::Time begin);
++
++std::vector<std::string> FocusSites(Profile* profile);
++void SetFocusSites(Profile* profile, const std::vector<std::string>& sites);
++// Null when no round is running.
++base::Time FocusUntil(Profile* profile);
++// Starts a round and reloads open tabs on the shut sites so they close too.
++void StartFocus(Profile* profile, base::TimeDelta length);
++void StopFocus(Profile* profile);
++
++// Adds the throttle that shows the "closed for focus" page.
++void MaybeAddFocusThrottle(content::NavigationThrottleRegistry& registry);
++
++}  // namespace helium_time
++
++#endif  // CHROME_BROWSER_HELIUM_TIME_HELIUM_TIME_H_
+--- /dev/null
++++ b/chrome/browser/helium_time/helium_time.cc
+@@ -0,0 +1,372 @@
++// Created by Helium++. See helium_time.h.
++
++#include "chrome/browser/helium_time/helium_time.h"
++
++#include <algorithm>
++#include <map>
++#include <memory>
++
++#include "base/i18n/time_formatting.h"
++#include "base/memory/weak_ptr.h"
++#include "base/no_destructor.h"
++#include "base/strings/escape.h"
++#include "base/strings/strcat.h"
++#include "base/strings/string_util.h"
++#include "base/strings/stringprintf.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/timer/timer.h"
++#include "base/values.h"
++#include "chrome/browser/helium_privacy_mode/helium_privacy_mode.h"
++#include "chrome/browser/lifetime/application_lifetime_desktop.h"
++#include "chrome/browser/lifetime/termination_notification.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "components/pref_registry/pref_registry_syncable.h"
++#include "components/prefs/pref_service.h"
++#include "components/prefs/scoped_user_pref_update.h"
++#include "components/tabs/public/tab_interface.h"
++#include "content/public/browser/back_forward_cache.h"
++#include "content/public/browser/navigation_controller.h"
++#include "content/public/browser/navigation_handle.h"
++#include "content/public/browser/navigation_throttle.h"
++#include "content/public/browser/navigation_throttle_registry.h"
++#include "content/public/browser/reload_type.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/web_contents.h"
++#include "net/base/net_errors.h"
++#include "net/base/registry_controlled_domains/registry_controlled_domain.h"
++#include "ui/base/idle/idle.h"
++#include "url/gurl.h"
++
++namespace helium_time {
++
++namespace {
++
++constexpr base::TimeDelta kTick = base::Seconds(15);
++// No input for this long counts as away, unless the tab plays sound.
++constexpr int kIdleSeconds = 60;
++constexpr int kDaysKept = 7;
++// shortcut: counts are written to prefs every 20 ticks (5 min), when the
++// profile or day changes, and at quit, instead of rewriting Preferences every
++// 15 s; up to 5 minutes are lost on a crash.
++constexpr int kTicksPerWrite = 20;
++
++std::string DayKey(base::Time time) {
++  base::Time::Exploded e;
++  time.LocalExplode(&e);
++  return base::StringPrintf("%04d-%02d-%02d", e.year, e.month, e.day_of_month);
++}
++
++struct Pending {
++  base::WeakPtr<Profile> profile;
++  std::string day;
++  std::map<std::string, int> seconds;
++  int ticks = 0;
++};
++
++Pending& GetPending() {
++  static base::NoDestructor<Pending> pending;
++  return *pending;
++}
++
++// |profile|'s not yet written seconds for today, or null.
++std::map<std::string, int>* PendingFor(Profile* profile) {
++  Pending& p = GetPending();
++  return p.profile.get() == profile && p.day == DayKey(base::Time::Now())
++             ? &p.seconds
++             : nullptr;
++}
++
++void Flush() {
++  Pending& p = GetPending();
++  Profile* profile = p.profile.get();
++  if (profile && !p.seconds.empty()) {
++    ScopedDictPrefUpdate update(profile->GetPrefs(), kDaysPref);
++    base::DictValue& days = update.Get();
++    const std::string oldest =
++        DayKey(base::Time::Now() - base::Days(kDaysKept - 1));
++    std::vector<std::string> old;
++    for (const auto [key, value] : days) {
++      if (key < oldest) {
++        old.push_back(key);
++      }
++    }
++    for (const std::string& key : old) {
++      days.Remove(key);
++    }
++    base::DictValue* day = days.EnsureDict(p.day);
++    for (const auto& [site, seconds] : p.seconds) {
++      day->Set(site, day->FindInt(site).value_or(0) + seconds);
++    }
++  }
++  p.seconds.clear();
++  p.ticks = 0;
++}
++
++void Tick() {
++  BrowserWindowInterface* window =
++      GetLastActiveBrowserWindowInterfaceWithAnyProfile();
++  if (!window || !window->IsActive()) {
++    return;
++  }
++  Profile* profile = window->GetProfile();
++  PrefService* prefs = profile->GetPrefs();
++  // Never recorded for incognito or Maximum privacy.
++  if (profile->IsOffTheRecord() || !prefs->GetBoolean(kEnabledPref) ||
++      helium_privacy_mode::GetModeName(profile) == "maximum") {
++    return;
++  }
++  tabs::TabInterface* tab = window->GetActiveTabInterface();
++  content::WebContents* contents = tab ? tab->GetContents() : nullptr;
++  // Error pages (like the focus-round page) keep the blocked site's address.
++  if (!contents || helium_privacy_mode::IsIsolatedWebContents(contents) ||
++      contents->GetPrimaryMainFrame()->IsErrorDocument()) {
++    return;
++  }
++  if (ui::CalculateIdleTime() >= kIdleSeconds &&
++      !contents->IsCurrentlyAudible()) {
++    return;
++  }
++  const std::string site = SiteFor(contents->GetLastCommittedURL());
++  if (site.empty()) {
++    return;
++  }
++
++  Pending& p = GetPending();
++  const std::string today = DayKey(base::Time::Now());
++  if (p.profile.get() != profile || p.day != today) {
++    Flush();
++    p.profile = profile->GetWeakPtr();
++    p.day = today;
++  }
++  p.seconds[site] += static_cast<int>(kTick.InSeconds());
++  if (++p.ticks >= kTicksPerWrite) {
++    Flush();
++  }
++}
++
++// The shut site that |url| belongs to, or "" when it is open.
++std::string ShutSite(Profile* profile, const GURL& url) {
++  if (FocusUntil(profile).is_null() || !url.SchemeIsHTTPOrHTTPS()) {
++    return std::string();
++  }
++  const std::string host = base::ToLowerASCII(url.host());
++  for (const std::string& site : FocusSites(profile)) {
++    if (host == site || base::EndsWith(host, "." + site)) {
++      return site;
++    }
++  }
++  return std::string();
++}
++
++class FocusThrottle : public content::NavigationThrottle {
++ public:
++  using content::NavigationThrottle::NavigationThrottle;
++
++  ThrottleCheckResult WillStartRequest() override { return Check(); }
++  ThrottleCheckResult WillRedirectRequest() override { return Check(); }
++  const char* GetNameForLogging() override { return "HeliumFocusThrottle"; }
++
++ private:
++  ThrottleCheckResult Check() {
++    Profile* profile = Profile::FromBrowserContext(
++        navigation_handle()->GetWebContents()->GetBrowserContext());
++    const std::string site = ShutSite(profile, navigation_handle()->GetURL());
++    if (site.empty()) {
++      return PROCEED;
++    }
++    const std::string until =
++        base::UTF16ToUTF8(base::TimeFormatTimeOfDay(FocusUntil(profile)));
++    // System colours only (no fixed palette); follows light/dark.
++    std::string html = base::StrCat(
++        {"<!doctype html><meta charset=utf-8><title>Focus round</title>"
++         "<style>:root{color-scheme:light dark;font-family:system-ui,sans-serif}"
++         "body{display:grid;place-items:center;height:100vh;margin:0;"
++         "background:Canvas;color:CanvasText}p{opacity:.7}</style>"
++         "<div><h1>Focus round</h1><p>",
++         base::EscapeForHTML(site), " opens again at ", base::EscapeForHTML(until),
++         ".</p></div>"});
++    return ThrottleCheckResult(BLOCK_REQUEST, net::ERR_BLOCKED_BY_CLIENT,
++                               std::move(html));
++  }
++};
++
++}  // namespace
++
++void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
++  registry->RegisterBooleanPref(kEnabledPref, true);
++  registry->RegisterDictionaryPref(kDaysPref);
++  registry->RegisterListPref(kFocusSitesPref);
++  registry->RegisterDoublePref(kFocusUntilPref, 0);
++}
++
++void StartTracking() {
++  static base::NoDestructor<base::RepeatingTimer> timer;
++  timer->Start(FROM_HERE, kTick, base::BindRepeating(&Tick));
++  // Last window closed, and quit/logout (SIGTERM skips the first one).
++  static base::NoDestructor<base::CallbackListSubscription> on_quit(
++      browser_shutdown::AddAppTerminatingCallback(base::BindOnce(&Flush)));
++  static base::NoDestructor<base::CallbackListSubscription> on_close_all(
++      chrome::AddClosingAllBrowsersCallback(base::BindRepeating([](bool closing) {
++        if (closing) {
++          Flush();
++        }
++      })));
++}
++
++std::string SiteFor(const GURL& url) {
++  if (!url.SchemeIsHTTPOrHTTPS()) {
++    return std::string();
++  }
++  std::string site = net::registry_controlled_domains::GetDomainAndRegistry(
++      url, net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
++  return site.empty() ? std::string(url.host()) : site;
++}
++
++std::string NormalizeSite(const std::string& input) {
++  std::string text(base::TrimWhitespaceASCII(input, base::TRIM_ALL));
++  if (text.empty()) {
++    return std::string();
++  }
++  GURL url(text.find("://") == std::string::npos ? "https://" + text : text);
++  if (!url.is_valid() || !url.SchemeIsHTTPOrHTTPS() || url.host().empty()) {
++    return std::string();
++  }
++  std::string host = base::ToLowerASCII(url.host());
++  if (base::StartsWith(host, "www.")) {
++    host = host.substr(4);
++  }
++  return host;
++}
++
++std::vector<std::pair<std::string, int64_t>> TimeToday(Profile* profile) {
++  std::vector<std::pair<std::string, int64_t>> out;
++  const base::DictValue* today = profile->GetPrefs()
++                                     ->GetDict(kDaysPref)
++                                     .FindDict(DayKey(base::Time::Now()));
++  if (today) {
++    for (const auto [site, seconds] : *today) {
++      if (seconds.is_int()) {
++        out.emplace_back(site, seconds.GetInt());
++      }
++    }
++  }
++  if (const auto* pending = PendingFor(profile)) {
++    for (const auto& [site, seconds] : *pending) {
++      auto it = std::ranges::find(out, site, &std::pair<std::string, int64_t>::first);
++      if (it == out.end()) {
++        out.emplace_back(site, seconds);
++      } else {
++        it->second += seconds;
++      }
++    }
++  }
++  std::ranges::sort(out, [](const auto& a, const auto& b) {
++    return a.second > b.second;
++  });
++  return out;
++}
++
++void ResetToday(Profile* profile) {
++  if (auto* pending = PendingFor(profile)) {
++    pending->clear();
++  }
++  ScopedDictPrefUpdate update(profile->GetPrefs(), kDaysPref);
++  update->Remove(DayKey(base::Time::Now()));
++}
++
++void ForgetSite(Profile* profile, const std::string& site) {
++  if (GetPending().profile.get() == profile) {
++    GetPending().seconds.erase(site);
++  }
++  ScopedDictPrefUpdate update(profile->GetPrefs(), kDaysPref);
++  for (auto [day, sites] : update.Get()) {
++    if (sites.is_dict()) {
++      sites.GetDict().Remove(site);
++    }
++  }
++}
++
++void ClearSince(Profile* profile, base::Time begin) {
++  if (GetPending().profile.get() == profile) {
++    GetPending().seconds.clear();
++  }
++  if (begin.is_null()) {
++    profile->GetPrefs()->ClearPref(kDaysPref);
++    return;
++  }
++  const std::string first = DayKey(begin);
++  ScopedDictPrefUpdate update(profile->GetPrefs(), kDaysPref);
++  std::vector<std::string> gone;
++  for (const auto [day, sites] : update.Get()) {
++    if (day >= first) {
++      gone.push_back(day);
++    }
++  }
++  for (const std::string& day : gone) {
++    update->Remove(day);
++  }
++}
++
++std::vector<std::string> FocusSites(Profile* profile) {
++  std::vector<std::string> out;
++  for (const base::Value& site :
++       profile->GetPrefs()->GetList(kFocusSitesPref)) {
++    if (site.is_string()) {
++      out.push_back(site.GetString());
++    }
++  }
++  return out;
++}
++
++void SetFocusSites(Profile* profile, const std::vector<std::string>& sites) {
++  base::ListValue list;
++  for (const std::string& input : sites) {
++    std::string site = NormalizeSite(input);
++    if (!site.empty() && std::ranges::find(list, base::Value(site)) == list.end()) {
++      list.Append(std::move(site));
++    }
++  }
++  profile->GetPrefs()->SetList(kFocusSitesPref, std::move(list));
++}
++
++base::Time FocusUntil(Profile* profile) {
++  const base::Time until = base::Time::FromSecondsSinceUnixEpoch(
++      profile->GetPrefs()->GetDouble(kFocusUntilPref));
++  return until > base::Time::Now() ? until : base::Time();
++}
++
++void StartFocus(Profile* profile, base::TimeDelta length) {
++  profile->GetPrefs()->SetDouble(
++      kFocusUntilPref,
++      (base::Time::Now() + length).InSecondsFSinceUnixEpoch());
++  for (BrowserWindowInterface* window : GetAllBrowserWindowInterfaces()) {
++    if (window->GetProfile() != profile) {
++      continue;
++    }
++    TabStripModel* tabs = window->GetTabStripModel();
++    for (int i = 0; i < tabs->count(); ++i) {
++      content::WebContents* contents = tabs->GetWebContentsAt(i);
++      // Back/Forward would otherwise restore a shut site from memory, without
++      // a request the throttle could stop.
++      contents->GetController().GetBackForwardCache().Flush();
++      if (!ShutSite(profile, contents->GetLastCommittedURL()).empty()) {
++        contents->GetController().Reload(content::ReloadType::NORMAL, false);
++      }
++    }
++  }
++}
++
++void StopFocus(Profile* profile) {
++  profile->GetPrefs()->SetDouble(kFocusUntilPref, 0);
++}
++
++void MaybeAddFocusThrottle(content::NavigationThrottleRegistry& registry) {
++  if (registry.GetNavigationHandle().IsInPrimaryMainFrame()) {
++    registry.AddThrottle(std::make_unique<FocusThrottle>(registry));
++  }
++}
++
++}  // namespace helium_time

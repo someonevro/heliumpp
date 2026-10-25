@@ -1,0 +1,199 @@
+--- a/chrome/browser/resources/new_tab_page/app.ts
++++ b/chrome/browser/resources/new_tab_page/app.ts
+@@ -245,6 +245,7 @@
+       privacyMode_: {type: String},
+       performanceMode_: {type: Boolean},
+       sleepingTabs_: {type: Object},
++      now_: {type: Object},
+       privacyRestart_: {type: Boolean},
+ 
+       /**
+@@ -398,6 +399,9 @@
+   protected accessor realboxShown_: boolean = false;
+   protected accessor privacyMode_: string = '';
+   protected accessor performanceMode_: boolean = false;
++  // Drives the sky and the clock; refreshed every 30 s.
++  protected accessor now_: Date = new Date();
++  private clockTimer_: number = 0;
+   protected accessor sleepingTabs_: {count: number, bytes: bigint} = {count: 0, bytes: 0n};
+   protected accessor privacyRestart_: boolean = false;
+   protected readonly privacyModes_ = [
+@@ -556,6 +560,7 @@
+   override connectedCallback() {
+     super.connectedCallback();
+     this.refreshPrivacyMode_();
++    this.clockTimer_ = setInterval(() => this.now_ = new Date(), 30000);
+     document.addEventListener('visibilitychange', this.refreshPrivacyMode_);
+     window.addEventListener('focus', this.refreshPrivacyMode_);
+     realboxCanShowSecondarySideMediaQueryList.addEventListener(
+@@ -659,6 +664,7 @@
+ 
+   override disconnectedCallback() {
+     super.disconnectedCallback();
++    clearInterval(this.clockTimer_);
+     document.removeEventListener('visibilitychange', this.refreshPrivacyMode_);
+     window.removeEventListener('focus', this.refreshPrivacyMode_);
+     realboxCanShowSecondarySideMediaQueryList.removeEventListener(
+@@ -1539,6 +1545,25 @@
+     }
+   }
+ 
++  // "14:32 · Saturday 25 October" in the user's locale.
++  protected clock_(): string {
++    const time = this.now_.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
++    const date = this.now_.toLocaleDateString(
++        [], {weekday: 'long', day: 'numeric', month: 'long'});
++    return `${time} · ${date}`;
++  }
++
++  // Time of day for the sky: phase name plus where the sun (day) or moon
++  // (night) sits on its arc, as percentages of the page.
++  protected sky_(): {phase: string, x: number, y: number} {
++    const h = this.now_.getHours() + this.now_.getMinutes() / 60;
++    const phase = h < 5 || h >= 21 ? 'night' : h < 8 ? 'dawn' :
++        h < 17 ? 'day' : 'dusk';
++    const p = h >= 6 && h < 18 ? (h - 6) / 12 : ((h + 6) % 24) / 12;
++    // Low arc near the top edge, so the orb never sits behind the text.
++    return {phase, x: 8 + 84 * p, y: 24 - 18 * Math.sin(Math.PI * p)};
++  }
++
+   protected greeting_(): string {
+     const hour = new Date().getHours();
+     const part = hour < 5 ? 'Night' : hour < 12 ? 'Morning' :
+--- a/chrome/browser/resources/new_tab_page/app.html
++++ b/chrome/browser/resources/new_tab_page/app.html
+@@ -1,5 +1,11 @@
++<div id="sky" data-phase="${this.sky_().phase}"
++    style="--orb-x: ${this.sky_().x}%; --orb-y: ${this.sky_().y}%">
++  <div class="stars"></div>
++  <div class="orb"></div>
++</div>
+ <div id="content" ?data-reduced="${this.performanceMode_}">
+   <div id="greeting">
++    <div id="clock">${this.clock_()}</div>
+     <h1>${this.greeting_()}</h1>
+     <div class="sub">Where to today?</div>
+     <form id="searchForm" @submit="${this.onSearchSubmit_}">
+--- a/chrome/browser/resources/new_tab_page/app.css
++++ b/chrome/browser/resources/new_tab_page/app.css
+@@ -567,8 +567,102 @@
+   }
+ }
+ 
+-/* Browser-specific look: calm centred greeting, glow tinted by the theme accent. */
+-:host::before {
++/* Sky by time of day (Zephium-inspired). Every colour is mixed from the theme
++   accent and the page background, so it follows the wallpaper. */
++#sky {
++  --accent: var(--color-new-tab-page-focus-ring);
++  --ground: var(--color-new-tab-page-background, transparent);
++  --warm: oklch(from var(--accent) 0.75 0.13 calc(h + 60));
++  background: linear-gradient(
++      var(--sky-top), var(--sky-mid) 55%, var(--sky-horizon));
++  inset: 0;
++  overflow: hidden;
++  pointer-events: none;
++  position: fixed;
++  z-index: 0;
++}
++
++#sky[data-phase='night'] {
++  --sky-top: color-mix(in oklab, var(--accent) 8%, color-mix(in oklab, var(--ground) 55%, black));
++  --sky-mid: color-mix(in oklab, var(--accent) 14%, color-mix(in oklab, var(--ground) 70%, black));
++  --sky-horizon: color-mix(in oklab, var(--accent) 22%, var(--ground));
++  --orb: color-mix(in oklab, var(--accent) 15%, white);
++  --orb-size: 18px;
++  --stars: 1;
++}
++
++#sky[data-phase='dawn'] {
++  --sky-top: color-mix(in oklab, var(--accent) 26%, var(--ground));
++  --sky-mid: color-mix(in oklab, var(--accent) 18%, var(--ground));
++  --sky-horizon: color-mix(in oklab, var(--warm) 40%, var(--ground));
++  --orb: color-mix(in oklab, var(--warm) 75%, white);
++  --orb-size: 24px;
++  --stars: 0.25;
++}
++
++#sky[data-phase='day'] {
++  --sky-top: color-mix(in oklab, var(--accent) 36%, var(--ground));
++  --sky-mid: color-mix(in oklab, var(--accent) 22%, var(--ground));
++  --sky-horizon: color-mix(in oklab, var(--accent) 12%, var(--ground));
++  --orb: color-mix(in oklab, var(--warm) 45%, white);
++  --orb-size: 26px;
++  --stars: 0;
++}
++
++#sky[data-phase='dusk'] {
++  --sky-top: color-mix(in oklab, var(--accent) 16%, color-mix(in oklab, var(--ground) 80%, black));
++  --sky-mid: color-mix(in oklab, var(--accent) 22%, var(--ground));
++  --sky-horizon: color-mix(in oklab, var(--warm) 45%, var(--ground));
++  --orb: color-mix(in oklab, var(--warm) 80%, white);
++  --orb-size: 24px;
++  --stars: 0.5;
++}
++
++#sky .orb {
++  background: radial-gradient(circle, var(--orb) 0 24%,
++      color-mix(in oklab, var(--orb) 25%, transparent) 30%, transparent 70%);
++  border-radius: 50%;
++  height: calc(var(--orb-size) * 4);
++  left: var(--orb-x);
++  opacity: 0.8;
++  position: absolute;
++  top: var(--orb-y);
++  transform: translate(-50%, -50%);
++  width: calc(var(--orb-size) * 4);
++}
++
++/* Fixed star field from a few repeating dot layers: no images, no script. */
++#sky .stars {
++  animation: twinkle 7s ease-in-out infinite alternate;
++  background:
++    radial-gradient(1.5px 1.5px at 20% 30%, white, transparent),
++    radial-gradient(1px 1px at 70% 15%, white, transparent),
++    radial-gradient(1.5px 1.5px at 45% 60%, white, transparent),
++    radial-gradient(1px 1px at 85% 45%, white, transparent),
++    radial-gradient(1px 1px at 10% 75%, white, transparent);
++  background-size: 260px 220px;
++  inset: 0 0 35% 0;
++  opacity: calc(var(--stars) * 0.7);
++  position: absolute;
++}
++
++@keyframes twinkle {
++  to {
++    opacity: calc(var(--stars) * 0.35);
++  }
++}
++
++#clock {
++  color: var(--color-new-tab-page-secondary-foreground);
++  font-size: 15px;
++  font-variant-numeric: tabular-nums;
++  letter-spacing: 0.02em;
++  margin-bottom: 14px;
++}
++
++/* Browser-specific look: calm centred greeting, glow tinted by the theme accent.
++   Drawn over the sky; the dark fade keeps the text readable on any phase. */
++#sky::after {
+   background:
+     radial-gradient(70% 60% at 50% 40%,
+       color-mix(in oklab, var(--color-new-tab-page-focus-ring) 22%, transparent),
+@@ -767,6 +861,7 @@
+ }
+ 
+ @media (prefers-reduced-motion: reduce) {
++  #sky *,
+   #content * {
+     animation: none !important;
+     transition: none !important;
+@@ -774,6 +869,7 @@
+ }
+ 
+ /* Performance mode: no transitions on this page. */
++:host(:has(#content[data-reduced])) #sky *,
+ #content[data-reduced] * {
+   animation: none !important;
+   transition: none !important;

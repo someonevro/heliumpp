@@ -1,0 +1,183 @@
+--- a/chrome/browser/ui/ui_features.cc
++++ b/chrome/browser/ui/ui_features.cc
+@@ -43,6 +43,10 @@
+ bool HeliumNativeFrameAvailable() {
+ #if BUILDFLAG(IS_MAC)
+   return base::FeatureList::IsEnabled(kHeliumNativeFrameMaterials);
++#elif BUILDFLAG(IS_LINUX)
++  // Helium++ "acrylic window": the window is already translucent on Linux; the
++  // frame paints a see-through tint (opaque_browser_frame_view.cc).
++  return true;
+ #else
+   return false;
+ #endif
+--- a/chrome/browser/ui/views/helium/native_frame_materials.cc
++++ b/chrome/browser/ui/views/helium/native_frame_materials.cc
+@@ -17,7 +17,7 @@
+ namespace helium {
+ 
+ bool ShouldUseNativeFrameMaterials(const BrowserView* browser_view) {
+-#if BUILDFLAG(IS_MAC)
++#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+   if (!features::HeliumNativeFrameAvailable() || !browser_view) {
+     return false;
+   }
+--- a/chrome/browser/ui/views/frame/opaque_browser_frame_view.cc
++++ b/chrome/browser/ui/views/frame/opaque_browser_frame_view.cc
+@@ -65,6 +65,7 @@
+ #include "ui/views/window/frame_caption_button.h"
+ #include "ui/views/window/vector_icons/vector_icons.h"
+ #include "ui/views/window/window_shape.h"
++#include "chrome/browser/ui/views/helium/native_frame_materials.h"
+ 
+ #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+ #include "ui/views/controls/menu/menu_runner.h"
+@@ -814,6 +815,11 @@
+ 
+   const bool active = ShouldPaintAsActive();
+   SkColor frame_color = GetFrameColor(BrowserFrameActiveState::kUseCurrent);
++  // Acrylic window: the other surfaces skip their backgrounds, so this tint is
++  // all that covers the desktop (which compositors like Hyprland blur).
++  if (helium::ShouldUseNativeFrameMaterials(GetBrowserView())) {
++    frame_color = SkColorSetA(frame_color, 0xB8);
++  }
+   if (window_title_) {
+     window_title_->SetEnabledColor(
+         GetCaptionColor(BrowserFrameActiveState::kUseCurrent));
+@@ -867,6 +873,12 @@
+   } else {
+     PaintRestoredFrameBorder(canvas);
+   }
++  // The frame background only covers the edges and top; in acrylic mode the
++  // client area is see-through too, so tint it the same way.
++  if (helium::ShouldUseNativeFrameMaterials(GetBrowserView())) {
++    canvas->FillRect(layout_->CalculateClientAreaBounds(width(), height()),
++                     frame_color);
++  }
+ 
+   // The window icon and title are painted by their respective views.
+   /* TODO(pkasting):  If this window is active, we should also draw a drop
+--- a/chrome/browser/ui/views/frame/browser_widget.h
++++ b/chrome/browser/ui/views/frame/browser_widget.h
+@@ -7,6 +7,7 @@
+ 
+ #include "base/memory/raw_ptr.h"
+ #include "build/build_config.h"
++#include "components/prefs/pref_change_registrar.h"
+ #include "content/public/browser/keyboard_event_processing_result.h"
+ #include "ui/base/mojom/menu_source_type.mojom-forward.h"
+ #include "ui/base/mojom/window_show_state.mojom-forward.h"
+@@ -189,6 +190,8 @@
+   // Observes changes in glass frame eligibility from GlassFrameService to
+   // trigger a widget theme update when eligibility transitions.
+   base::CallbackListSubscription glass_frame_subscription_;
++  // Repaints when the acrylic window setting changes (Linux).
++  PrefChangeRegistrar acrylic_pref_registrar_;
+ 
+   // Indicates the drag state for this window. The value can be kWindowDrag
+   // if the accociated browser is the dragged browser or kTabDrag
+--- a/chrome/browser/ui/views/frame/browser_widget.cc
++++ b/chrome/browser/ui/views/frame/browser_widget.cc
+@@ -31,6 +31,8 @@
+ #include "chrome/browser/ui/views/frame/browser_root_view.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/frame/glass_frame_service.h"
++#include "chrome/common/pref_names.h"
++#include "components/prefs/pref_service.h"
+ #include "chrome/browser/ui/views/frame/system_menu_model_builder.h"
+ #include "chrome/browser/ui/views/frame/top_container_view.h"
+ #include "chrome/browser/ui/views/helium/native_frame_materials.h"
+@@ -227,6 +229,10 @@
+   }
+ 
+ #if BUILDFLAG(IS_LINUX)
++  acrylic_pref_registrar_.Init(browser_view_->GetProfile()->GetPrefs());
++  acrylic_pref_registrar_.Add(
++      prefs::kHeliumNativeFrameMaterials,
++      base::BindRepeating(&BrowserWidget::ThemeChanged, base::Unretained(this)));
+   SelectNativeTheme();
+ #else
+   SetNativeTheme(ui::NativeTheme::GetInstanceForNativeUi());
+@@ -531,6 +537,13 @@
+       key.frame_style = ui::ColorProviderKey::FrameStyle::kGlass;
+     }
+   }
++#if BUILDFLAG(IS_LINUX)
++  // Acrylic window: a distinct key, so ThemeChanged() is not skipped as a
++  // no-op when the setting flips.
++  if (helium::ShouldUseNativeFrameMaterials(browser_view_)) {
++    key.frame_style = ui::ColorProviderKey::FrameStyle::kGlass;
++  }
++#endif
+ 
+   return key;
+ }
+--- a/chrome/browser/ui/views/frame/browser_view.cc
++++ b/chrome/browser/ui/views/frame/browser_view.cc
+@@ -3,6 +3,8 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/ui/views/frame/browser_view.h"
++
++#include "chrome/browser/ui/views/helium/native_frame_materials.h"
+ #include "chrome/browser/ui/helium_isolated/helium_isolated_tabs.h"
+ 
+ #include <stdint.h>
+@@ -5932,6 +5934,11 @@
+ 
+ void BrowserView::OnThemeChanged() {
+   views::ClientView::OnThemeChanged();
++  // Acrylic window: no solid fill behind the page card, so the frame's
++  // see-through tint shows in the gap instead.
++  SetBackground(helium::ShouldUseNativeFrameMaterials(this)
++                    ? nullptr
++                    : views::CreateSolidBackground(kColorToolbar));
+   if (!initialized_) {
+     return;
+   }
+--- a/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts
++++ b/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts
+@@ -130,8 +130,8 @@
+     <settings-toggle-button class="hr"
+         ?hidden="${!this.showNativeFrameMaterialsOption_}"
+         pref-key="helium.browser.native_frame_materials"
+-        label="$i18n{nativeFrameMaterials}"
+-        sub-label="$i18n{nativeFrameMaterialsDescription}">
++        label="Acrylic window"
++        sub-label="The sidebar and toolbar let your wallpaper show through. Blurred where the desktop supports it (Hyprland); plain see-through elsewhere.">
+     </settings-toggle-button>
+     <settings-toggle-button class="hr" elide-label
+         ?hidden="${!this.pageVisibility_.homeButton}"
+--- a/components/helium_onboarding/src/pages/TabLayout.svelte
++++ b/components/helium_onboarding/src/pages/TabLayout.svelte
+@@ -8,6 +8,7 @@
+     } from "../lib/onboarding-flow";
+ 
+     import PageHeader from "../components/PageHeader.svelte";
++    import { preferences, setPref } from "../lib/browser/prefs";
+ 
+     const visible = $derived($currentPage === "TabLayout");
+     const selected = $derived($selectedTabLayout);
+@@ -60,6 +61,12 @@
+                 checked={$selectedCompactMode}
+                 onchange={(enabled) => selectedCompactMode.set(enabled)}
+             />
++            <Toggle
++                name="Acrylic window"
++                desc="The sidebar and toolbar let your wallpaper show through. Blurred where the desktop supports it (Hyprland); plain see-through elsewhere. Applies right away."
++                checked={!!$preferences["browser.native_frame_materials"]}
++                onchange={(enabled) => setPref("browser.native_frame_materials", enabled)}
++            />
+         </div>
+     </div>
+ </div>
+--- a/components/helium_onboarding/src/lib/browser/prefs.ts
++++ b/components/helium_onboarding/src/lib/browser/prefs.ts
+@@ -12,6 +12,7 @@
+     'services.browser_updates': boolean,
+     'services.ublock_assets': boolean,
+     'ntp.bonjourr': boolean,
++    'browser.native_frame_materials': boolean,
+ };
+ 
+ export type PrefKey = keyof Preferences;

@@ -8,7 +8,7 @@ the new tab page, and example.org must keep its cookie, storage and history.
 SHOT=1 saves screenshots of each step to build/forget-*.png (to re-find the click spots after UI changes);
 GDB=1 runs the browser under gdb and writes a backtrace to build/test-forget.gdb if it crashes.
 Run from the project root: python3 -I scripts/test_forget_site.py"""
-import base64, ctypes, http.server, json, os, shutil, socket, sqlite3, struct, subprocess, threading, time
+import sys, datetime, ctypes, http.server, json, os, shutil, sqlite3, subprocess, threading, time
 import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -19,42 +19,8 @@ SITES = ["www.example.com", "sub.example.com", "example.org"]
 PAGE_INFO_ICON = (115, 47)
 FORGET_BUTTON = (205, 431)
 
-def connect(url):
-    host, rest = url[5:].split('/', 1)
-    s = socket.create_connection(("127.0.0.1", int(host.split(':')[1])), timeout=30)
-    key = base64.b64encode(os.urandom(16)).decode()
-    s.sendall(f'GET /{rest} HTTP/1.1\r\nHost: {host}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n'
-              f'Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n'.encode())
-    buf = b''
-    while b'\r\n\r\n' not in buf:
-        buf += s.recv(4096)
-    assert b' 101 ' in buf.split(b'\r\n')[0], buf
-    return s, buf.split(b'\r\n\r\n', 1)[1]
-
-class WS:
-    def __init__(self, url):
-        self.s, self.buf = connect(url); self.n = 0
-    def send(self, method, params=None, session=None):
-        self.n += 1
-        d = {'id': self.n, 'method': method, 'params': params or {}}
-        if session: d['sessionId'] = session
-        data = json.dumps(d).encode(); mask = os.urandom(4)
-        hdr = b'\x81' + (bytes([0x80 | len(data)]) if len(data) < 126 else b'\xfe' + struct.pack('>H', len(data)))
-        self.s.sendall(hdr + mask + bytes(b ^ mask[i % 4] for i, b in enumerate(data)))
-        return self.n
-    def _need(self, n):
-        while len(self.buf) < n: self.buf += self.s.recv(65536)
-        out, self.buf = self.buf[:n], self.buf[n:]; return out
-    def recv(self):
-        b1, b2 = self._need(2); ln = b2 & 0x7f
-        if ln == 126: ln = struct.unpack('>H', self._need(2))[0]
-        elif ln == 127: ln = struct.unpack('>Q', self._need(8))[0]
-        return json.loads(self._need(ln))
-    def call(self, method, params=None, session=None):
-        i = self.send(method, params, session)
-        while True:
-            m = self.recv()
-            if m.get('id') == i: return m
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from cdp import WS  # noqa: E402
 
 def xinput(key=None, click=None):  # real input on the Xvfb display, so it reaches browser UI
     x11, xtst = ctypes.CDLL('libX11.so.6'), ctypes.CDLL('libXtst.so.6')
@@ -91,11 +57,14 @@ class Page(http.server.BaseHTTPRequestHandler):
 srv = http.server.ThreadingHTTPServer(("127.0.0.1", HTTP), Page)
 threading.Thread(target=srv.serve_forever, daemon=True).start()
 prof = os.path.join(BUILD, "profile-forget")
+TODAY = datetime.date.today().isoformat()
 shutil.rmtree(prof, ignore_errors=True); os.makedirs(prof + "/Default")
 with open(prof + "/Default/Preferences", "w") as f:
     # HTTPS-First would block the plain-http test sites; "applied" keeps the preset from turning it back on.
     json.dump({"helium": {"completed_onboarding": True, "privacy_mode": "medium", "privacy_mode_applied": "medium",
-                          "services": {"schema_version": 1, "user_consented": True}},
+                          "services": {"schema_version": 1, "user_consented": True},
+                          # time per site (0106): example.com must go, example.org stay
+                          "time": {"days": {TODAY: {"example.com": 600, "example.org": 300}}}},
                "https_only_mode_enabled": False, "https_first_balanced_mode_enabled": False}, f)
 xvfb = subprocess.Popen(['Xvfb', DISP, '-screen', '0', '1200x800x24'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 time.sleep(1)
@@ -142,7 +111,9 @@ finally:
 db = sqlite3.connect(f"file:{prof}/Default/History?mode=ro", uri=True)
 left = sorted({u.split('/')[2] for (u,) in db.execute("SELECT url FROM urls") if u.startswith("http")})
 results.append(("history hosts after", left, ["example.org"]))
-ok = len(results) == 6
+days = json.load(open(prof + "/Default/Preferences"))["helium"].get("time", {}).get("days", {})
+results.append(("time-per-site sites after", sorted(days.get(TODAY, {})), ["example.org"]))
+ok = len(results) == 7
 for name, got, want in results:
     print("%-30s %-45s%s" % (name, got, "" if got == want else "  <-- FAIL (want %s)" % want))
     ok &= got == want
