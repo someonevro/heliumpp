@@ -1,0 +1,81 @@
+--- a/base/version_info/BUILD.gn
++++ b/base/version_info/BUILD.gn
+@@ -14,6 +14,7 @@
+   ]
+ 
+   deps = [
++    ":generate_helium_version",
+     "//base:sanitizer_buildflags",
+     "//build:branding_buildflags",
+   ]
+@@ -37,6 +38,12 @@
+   }
+ }
+ 
++process_version("generate_helium_version") {
++  template_file = "helium_version_values.h.version"
++  sources = [ "//chrome/VERSION" ]
++  output = "$target_gen_dir/helium_version_values.h"
++}
++
+ process_version("generate_version_info") {
+   template_file = "version_info_values.h.version"
+   sources = [
+--- a/base/version_info/version_info.h
++++ b/base/version_info/version_info.h
+@@ -25,9 +25,9 @@
+   return PRODUCT_NAME;
+ }
+ 
+-constexpr std::string_view GetHeliumVersionNumber() {
+-  return HELIUM_PRODUCT_VERSION;
+-}
++// The Helium++ version, e.g. "0.19.4.7". Not constexpr on purpose (see
++// helium_version_values.h.version).
++std::string_view GetHeliumVersionNumber();
+ 
+ // Returns the version number, e.g. "6.0.490.1".
+ constexpr std::string_view GetVersionNumber() {
+--- a/base/version_info/version_info.cc
++++ b/base/version_info/version_info.cc
+@@ -10,9 +10,14 @@
+ #include "base/strings/strcat.h"
+ #include "base/strings/string_number_conversions.h"
+ #include "base/version.h"
++#include "base/version_info/helium_version_values.h"
+ 
+ namespace version_info {
+ 
++std::string_view GetHeliumVersionNumber() {
++  return HELIUM_PRODUCT_VERSION;
++}
++
+ int GetMajorVersionNumberAsInt() {
+   DCHECK(GetVersion().IsValid());
+   return GetVersion().components()[0];
+--- a/base/version_info/version_info_values.h.version
++++ b/base/version_info/version_info_values.h.version
+@@ -7,7 +7,6 @@
+ 
+ #define PRODUCT_NAME "@PRODUCT_FULLNAME@"
+ #define PRODUCT_VERSION "@MAJOR@.@MINOR@.@BUILD@.@PATCH@"
+-#define HELIUM_PRODUCT_VERSION "@HELIUM_MAJOR@.@HELIUM_MINOR@.@HELIUM_PATCH@.@HELIUM_PLATFORM@"
+ #define LAST_CHANGE "@LASTCHANGE@"
+ #define IS_OFFICIAL_BUILD @OFFICIAL_BUILD@
+ 
+--- /dev/null
++++ b/base/version_info/helium_version_values.h.version
+@@ -0,0 +1,13 @@
++// Copyright 2026 The Helium++ Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// Only version_info.cc includes this, so a Helium++ version bump rebuilds one
++// file instead of everything that includes version_info.h.
++
++#ifndef BASE_VERSION_INFO_HELIUM_VERSION_VALUES_H_
++#define BASE_VERSION_INFO_HELIUM_VERSION_VALUES_H_
++
++#define HELIUM_PRODUCT_VERSION "@HELIUM_MAJOR@.@HELIUM_MINOR@.@HELIUM_PATCH@.@HELIUM_PLATFORM@"
++
++#endif  // BASE_VERSION_INFO_HELIUM_VERSION_VALUES_H_

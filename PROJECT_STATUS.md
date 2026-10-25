@@ -10,7 +10,19 @@ Updated 2026-10-21 (end of session 2).
 **Next (user's list):** (1) isolated mode: fix/test the about:blank popup hole, block or redirect downloads, password manager, clipboard write; (2) item 4 general speed outside performance mode (measure first); (3) restyle: horizontal layout, menus/popups, Settings and onboarding pages; (4) wallpaper image behind the new tab page and privacy chip (dropped: weather, tracker counter unless uBO stats readable); (5) red hover tint on window close; (6) DNS: visual check and a real-use test; (7) update CLAUDE.md (still says six presets; the product uses three modes) and ARCHITECTURE.md/PLATFORM_SUPPORT.md with this session's decisions; (8) run the series on a pristine tree.
 **User preferences seen this session:** wants to review changes before big edits when asked ("show me what changes"); wants honest "not verified" notes; decides between options quickly (picked option 1 even with the URL-hiding trade-off, later reverted it); likes the new tab page and drop-down window bar; wants the browser to stop looking like stock Helium.
 
-## SESSION 7 (2026-10-25, after v0.19.4.6) - NOT committed, NOT released
+## SESSION 7 (2026-10-25, after v0.19.4.6) - released as v0.19.4.7-alpha
+- 0108-split-helium-version: HELIUM_PRODUCT_VERSION moved from version_info_values.h (reached ~everything via
+  version_info.h) to helium_version_values.h included only by version_info.cc; GetHeliumVersionNumber() no
+  longer constexpr (all callers runtime). Touching chrome/VERSION now rebuilds 1293 steps in 6.5 min (measured)
+  instead of ~32k steps / ~1 h. 0109 version 0.19.4.7.
+- RELEASE v0.19.4.7-alpha: AppImage sha256 857584e06f003f5d6c138e7d84f26212214ef2f4ce0700596b372d15d4e244e4
+  (158783992 bytes), signed latest.json. Before packaging: full 19-suite regression PASS on 0107 code; after the
+  version split: test_update 9/9, privacy_mode, ui_font, time_focus PASS. AppImage: --version 0.19.4.7, fonts
+  inside byte-identical to the pinned official files, AppRun keeps "$@", Xvfb screenshot shows Satoshi UI.
+- NEXT: Windows cross-compile (user chose it over a native VM build: host 15 GB RAM). Needs from the VM: OpenSSH
+  server, port forward 2222->22, VS 2026 (18.x) Community + Desktop C++ + ATL/MFC, Windows SDK 10.0.28000.2270 +
+  Debugging Tools, Python; run depot_tools win_toolchain/package_from_installed.py; zip stays local (Microsoft
+  files, never publish). Then out/Win with target_os="win", port Linux-only patches.
 - 0099-updater-about-follows-running-update: user saw About stuck on "Updating" (0.19.4.5). Cause: About
   opened while another update ran (5-min background check, or a second About tab) got one UPDATING report
   and nothing after. Now it subscribes to the running update (base::RepeatingCallbackList): live %, final
