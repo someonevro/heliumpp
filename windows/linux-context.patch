@@ -1,0 +1,104 @@
+Windows-only. Helium's Linux patch hunks (helium-linux cf878d4: change-chromium-branding, add-error-for-missing-desktop-file,
+disable-tab-strokes) for the 4 files whose Linux context our patches need. All are Linux-guarded or in files Windows
+does not compile. The grdp text is in post-name-substitution form, since apply_ours.py runs after that step.
+
+--- a/chrome/common/channel_info_posix.cc
++++ b/chrome/common/channel_info_posix.cc
+@@ -78,18 +78,13 @@ std::string GetChannelName(WithExtendedS
+ }
+ 
+ std::string GetChannelSuffixForDataDir() {
+-  switch (GetChannel()) {
+-    case version_info::Channel::BETA:
+-      return "-beta";
+-    case version_info::Channel::DEV:
+-      return "-unstable";
+-    case version_info::Channel::CANARY:
+-      return "-canary";
+-    default:
++#if !defined(OFFICIAL_BUILD)
++  return ".dev";
++#else
+       // Stable, extended stable, and unknown (e.g. in unbranded builds) don't
+       // get a suffix.
+       return std::string();
+-  }
++#endif
+ }
+ 
+ #if BUILDFLAG(IS_LINUX)
+@@ -144,11 +139,11 @@ std::string GetDesktopName(base::Environ
+   // Allow $CHROME_DESKTOP to override the built-in value, so that development
+   // versions can set themselves as the default without interfering with
+   // non-official, packaged versions using the built-in value.
+-  std::optional<std::string> name = env->GetVar("CHROME_DESKTOP");
++  std::optional<std::string> name = env->GetVar("HELIUM_DESKTOP");
+   if (name.has_value() && !name.value().empty()) {
+     return name.value();
+   }
+-  return "chromium-browser.desktop";
++  return "helium.desktop";
+ #endif
+ }
+ #endif  // BUILDFLAG(IS_LINUX)
+--- a/chrome/common/chrome_paths_linux.cc
++++ b/chrome/common/chrome_paths_linux.cc
+@@ -81,7 +81,7 @@ bool GetDefaultUserDataDirectory(base::F
+   std::unique_ptr<base::Environment> env(base::Environment::Create());
+   base::FilePath config_dir;
+   std::optional<std::string> chrome_config_home_str =
+-      env->GetVar("CHROME_CONFIG_HOME");
++      env->GetVar("HELIUM_CONFIG_HOME");
+   if (chrome_config_home_str.has_value() &&
+       base::IsStringUTF8(chrome_config_home_str.value())) {
+     config_dir = base::FilePath::FromUTF8Unsafe(chrome_config_home_str.value());
+@@ -90,13 +90,7 @@ bool GetDefaultUserDataDirectory(base::F
+         GetXDGDirectory(env.get(), kXdgConfigHomeEnvVar, kDotConfigDir);
+   }
+ 
+-#if BUILDFLAG(GOOGLE_CHROME_FOR_TESTING_BRANDING)
+-  std::string data_dir_basename = "google-chrome-for-testing";
+-#elif BUILDFLAG(GOOGLE_CHROME_BRANDING)
+-  std::string data_dir_basename = "google-chrome";
+-#else
+-  std::string data_dir_basename = "chromium";
+-#endif
++  std::string data_dir_basename = "net.imput.helium";
+   *result = config_dir.Append(data_dir_basename + GetChannelSuffixForDataDir());
+   return true;
+ }
+--- a/chrome/app/settings_chromium_strings.grdp
++++ b/chrome/app/settings_chromium_strings.grdp
+@@ -88,9 +88,18 @@
+         </message>
+       </then>
+       <else>
++      <if expr="is_linux">
++        <then>
++        <message name="IDS_SETTINGS_DEFAULT_BROWSER_SECONDARY" desc="The text displayed when Helium is launched on Linux, but has no existing .desktop file.">
++          Helium cannot be set as default, because no <ph name="DESKTOP_FILENAME">$1<ex>helium.desktop</ex></ph> file was found in any of: ~/.local/share/applications, /usr/share/applications, /usr/local/share/applications.
++        </message>
++        </then>
++        <else>
+         <message name="IDS_SETTINGS_DEFAULT_BROWSER_SECONDARY" desc="The text displayed when Chromium is installed in side-by-side mode, which does not support setting as the default browser.">
+           This is a secondary installation of Helium, and cannot be made your default browser.
+         </message>
++        </else>
++      </if>
+       </else>
+     </if>
+   </if>
+--- a/chrome/browser/ui/views/frame/browser_view.cc
++++ b/chrome/browser/ui/views/frame/browser_view.cc
+@@ -1491,9 +1491,9 @@ bool BrowserView::GetTabStripVisible() c
+ }
+ 
+ bool BrowserView::ShouldDrawTabStrokes() const {
+-#if BUILDFLAG(IS_CHROMEOS)
++#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
+   return false;
+-#else   // BUILDFLAG(IS_CHROMEOS)
++#else   // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
+ 
+   if (web_app::AppBrowserController::From(browser()) &&
+       !web_app::AppBrowserController::From(browser())->has_tab_strip()) {

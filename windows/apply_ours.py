@@ -10,6 +10,9 @@ _HPP = Path(__file__).resolve().parent.parent
 
 
 def apply(source_tree, patch_bin_path):
+    # Our patches were made on the Linux tree; give them the Linux context they expect.
+    patches.apply_patches([_HPP / 'windows' / 'linux-context.patch'], source_tree,
+                          patch_bin_path=patch_bin_path)
     for series_dir in (_HPP / 'patches', _HPP / 'windows' / 'patches'):
         patches.apply_patches(
             patches.generate_patches_from_series(series_dir, resolve=True),
