@@ -5,6 +5,9 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; b="$root/build"
 export XDG_CONFIG_HOME="$b/xdg/config" XDG_CACHE_HOME="$b/xdg/cache"
 real_state="${XDG_STATE_HOME:-$HOME/.local/state}"
 export XDG_STATE_HOME="$b/xdg/state"   # isolate from the real desktop wallpaper; restored for the informational check
+# No desktop type either: on KDE the browser also reads system-wide defaults (/etc/xdg/kdeglobals,
+# /usr/share wallpapers), which would give a "new" profile the distro's color.
+export XDG_CURRENT_DESKTOP=
 "$b/venv/bin/python" - "$b" <<'PY'
 import sys; from PIL import Image
 b=sys.argv[1]
