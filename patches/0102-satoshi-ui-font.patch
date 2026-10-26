@@ -35,7 +35,7 @@
  #include "build/build_config.h"
  #include "skia/ext/codec_utils.h"
  #include "src/core/SkFontDescriptor.h"
-@@ -124,9 +137,64 @@
+@@ -124,9 +137,66 @@
    g_fontmgr_override = fontmgr.release();
  }
  
@@ -46,8 +46,10 @@
 +  if (!base::PathService::Get(base::DIR_EXE, &exe)) {
 +    return base::FilePath();
 +  }
-+  return exe.Append("fonts").Append(italic ? "Satoshi-VariableItalic.ttf"
-+                                           : "Satoshi-Variable.ttf");
++  // FILE_PATH_LITERAL: FilePath is wide on Windows.
++  return exe.Append(FILE_PATH_LITERAL("fonts"))
++      .Append(italic ? FILE_PATH_LITERAL("Satoshi-VariableItalic.ttf")
++                     : FILE_PATH_LITERAL("Satoshi-Variable.ttf"));
 +}
 +
 +// One instance of the variable font per (weight, italic), created on first use.
@@ -63,7 +65,7 @@
 +  sk_sp<SkTypeface>& face = (*cache)[{weight, italic}];
 +  if (!face) {
 +    std::unique_ptr<SkStreamAsset> stream =
-+        SkStream::MakeFromFile(UiFontFile(italic).value().c_str());
++        SkStream::MakeFromFile(UiFontFile(italic).AsUTF8Unsafe().c_str());
 +    if (!stream) {
 +      return nullptr;
 +    }
