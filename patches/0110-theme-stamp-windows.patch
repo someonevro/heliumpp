@@ -1,0 +1,11 @@
+--- a/chrome/browser/helium_theme/helium_theme.cc
++++ b/chrome/browser/helium_theme/helium_theme.cc
+@@ -534,7 +534,7 @@
+   base::File::Info info;
+   if (!source.wallpaper.empty() && base::GetFileInfo(source.wallpaper, &info)) {
+     source.stamp = base::StrCat(
+-        {source.wallpaper.value(), "|", base::NumberToString(info.size), "|",
++        {source.wallpaper.AsUTF8Unsafe(), "|", base::NumberToString(info.size), "|",
+          base::NumberToString(
+              info.last_modified.InMillisecondsSinceUnixEpoch()),
+          "|",
