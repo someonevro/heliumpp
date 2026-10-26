@@ -27,7 +27,8 @@ unzip -q "$zip" -d "$dest"
 cp "$dl/LICENSE" "$dest/LICENSE"
 # Chrome only reads _locales/xx_YY; the identical xx-YY copies (for other browsers) give duplicate grit IDs.
 for d in "$dest"/_locales/*-*; do
-  cmp -s "$d/messages.json" "${d//-/_}/messages.json" || { echo "locale ${d##*/} differs from its _ twin" >&2; exit 1; }
+  b="${d##*/}"
+  cmp -s "$d/messages.json" "${d%/*}/${b//-/_}/messages.json" || { echo "locale $b differs from its _ twin" >&2; exit 1; }
   rm -rf "$d"
 done
 python3 -I - "$dest/src/scripts/main.js" <<'PY'

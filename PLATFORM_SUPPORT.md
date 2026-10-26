@@ -13,7 +13,7 @@ Everything below is "untested" unless stated. Updated 2026-10-19 (research only)
 | Security updates | own rebase every Chromium major | same | same | same | via Apple/WebKit OS updates |
 | Packaging | tar/AppImage/deb (Helium model) | installer | dmg, signing/notarization | APK/Play | App Store rules |
 | Tests | none | none | none | none | none |
-| Limits | 15 GB RAM dev box | build on Windows needed | build on macOS needed | | App Store/engine entitlement |
+| Limits | 15 GB RAM dev box | GitHub Actions workflow written, never run | build on macOS needed | | App Store/engine entitlement |
 
 ## Linux desktop status note (2026-10-20)
 Engine: Helium / Chromium 155.0.8059.84, built in Docker (`scripts/compile.sh`) and run from `build/src/out/Default/helium`. Verified by user on Arch + Hyprland (Wayland): launches, onboarding (privacy mode + tab layout), vertical-tab sidebar UI, theme accent. Verified headless: privacy-mode prefs/flags, uBO blocking, codecs. Unverified: Widevine/DRM playback, GPU/VAAPI, packaging, other desktops (GNOME/KDE/X11), tiling-WM window controls beyond close. Windows, macOS, Android, iOS: not started.

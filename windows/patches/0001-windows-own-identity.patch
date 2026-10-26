@@ -1,0 +1,97 @@
+diff --color -ru a/chrome/install_static/chromium_install_modes.h b/chrome/install_static/chromium_install_modes.h
+--- a/chrome/install_static/chromium_install_modes.h
++++ b/chrome/install_static/chromium_install_modes.h
+@@ -17,11 +17,11 @@
+ 
+ // The brand-specific company name to be included as a component of the install
+ // and user data directory paths. May be empty if no such dir is to be used.
+-inline constexpr wchar_t kCompanyPathName[] = L"imput";
++inline constexpr wchar_t kCompanyPathName[] = L"";
+ 
+ // The brand-specific product name to be included as a component of the install
+ // and user data directory paths.
+-inline constexpr wchar_t kProductPathName[] = L"Helium";
++inline constexpr wchar_t kProductPathName[] = L"heliumpp";
+ 
+ // The brand-specific safe browsing client name.
+ inline constexpr char kSafeBrowsingName[] = "helium";
+@@ -53,35 +53,35 @@
+             L"",  // Empty install_suffix for the primary install mode.
+         .logo_suffix = L"",  // No logo suffix for the primary install mode.
+         .app_guid =
+-            L"{FB68A146-637A-48C2-A0C4-1565DE45FEBD}",
+-        .base_app_name = L"Helium",              // A distinct base_app_name.
+-        .base_app_id = L"Helium",                // A distinct base_app_id.
+-        .browser_prog_id_prefix = L"HeliumHTM",  // Browser ProgID prefix.
++            L"{6E7E7927-46CC-4A51-AB25-85337BE890E2}",
++        .base_app_name = L"Heliumpp",            // A distinct base_app_name.
++        .base_app_id = L"Heliumpp",              // A distinct base_app_id.
++        .browser_prog_id_prefix = L"HeliumppHTM",  // Browser ProgID prefix.
+         .browser_prog_id_description =
+-            L"Helium HTML Document",  // Browser ProgID description.
+-        .direct_launch_url_scheme = "helium",
+-        .pdf_prog_id_prefix = L"HeliumPDF",  // PDF ProgID prefix.
++            L"Helium++ HTML Document",  // Browser ProgID description.
++        .direct_launch_url_scheme = "heliumpp",
++        .pdf_prog_id_prefix = L"HeliumppPDF",  // PDF ProgID prefix.
+         .pdf_prog_id_description =
+-            L"Helium PDF Document",  // PDF ProgID description.
++            L"Helium++ PDF Document",  // PDF ProgID description.
+         .active_setup_guid =
+-            L"{FB68A146-637A-48C2-A0C4-1565DE45FEBD}",  // Active Setup
++            L"{8DDA5586-71B2-495B-84EB-0A1ED270BD2B}",  // Active Setup
+                                                         // GUID.
+-        .toast_activator_clsid = {0xE9852F6C,
+-                                  0x08D6,
+-                                  0x4EC9,
+-                                  {0xBD, 0x14, 0x8A, 0x0F, 0xDE, 0x97, 0x51,
+-                                   0x59}},  // Toast Activator CLSID.
+-        .elevator_clsid = {0x140DE20F,
+-                           0x6DB4,
+-                           0x4D6B,
+-                           {0x8B, 0xFE, 0x83, 0xBF, 0x8C, 0xA1, 0xB1,
+-                            0xB0}},  // Elevator CLSID.
+-        .elevator_iid = {0xC89A04FF,
++        .toast_activator_clsid = {0xE83E274E,
++                                  0x219A,
++                                  0x490A,
++                                  {0x89, 0x46, 0x10, 0xF2, 0x79, 0x70, 0xCD,
++                                   0x96}},  // Toast Activator CLSID.
++        .elevator_clsid = {0xE852105C,
++                           0x687E,
++                           0x4DA0,
++                           {0x9E, 0xFC, 0x2A, 0x4F, 0xB0, 0xD1, 0x33,
++                            0x78}},  // Elevator CLSID.
++        .elevator_iid = {0xB9A74843,
+                          0xc6,
+                          0x4966,
+                          {0x94, 0xb2, 0x5a, 0xfe, 0xc6, 0xfe, 0xd9,
+                           0x3a}},  // IElevator IID and TypeLib
+-        // {C89A04FF-00C6-4966-94B2-5AFEC6FED93A}.
++        // {B9A74843-00C6-4966-94B2-5AFEC6FED93A}.
+         .old_elevator_iids = {},
+         .tracing_service_clsid = {0x83f69367,
+                                   0x442d,
+@@ -109,9 +109,7 @@
+         .pdf_doc_icon_resource_index =
+             icon_resources::kPDFDocIndex,  // PDF doc icon resource index.
+         .sandbox_sid_prefix =
+-            L"S-1-15-2-3251537155-1984446955-2931258699-841473695-"
+-            L"1938553385-"
+-            L"924012148-",  // App container sid prefix for sandbox.
++            L"S-1-15-2-1246119627-182478914-1680967811-89173624-1543973773-329786093-",  // App container sid prefix for sandbox.
+     },
+ });
+ 
+diff --color -ru a/components/policy/tools/generate_policy_source.py b/components/policy/tools/generate_policy_source.py
+--- a/components/policy/tools/generate_policy_source.py
++++ b/components/policy/tools/generate_policy_source.py
+@@ -28,7 +28,7 @@
+ 
+ CHROME_POLICY_KEY = 'SOFTWARE\\\\Policies\\\\Google\\\\Chrome'
+ CHROME_FOR_TESTING_POLICY_KEY = CHROME_POLICY_KEY + ' for Testing'
+-CHROMIUM_POLICY_KEY = 'SOFTWARE\\\\Policies\\\\Helium'
++CHROMIUM_POLICY_KEY = 'SOFTWARE\\\\Policies\\\\Heliumpp'
+ PLATFORM_STRINGS = {
+     'chrome_frame': ['win'],
+     'chrome_os': ['chrome_os'],

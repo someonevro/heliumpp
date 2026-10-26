@@ -1,0 +1,102 @@
+# Unsigned Helium++ build for Windows x64 on GitHub's Windows runners (no local Windows needed).
+# Run by hand: Actions -> Windows build -> Run workflow. Output: artifact heliumpp-windows-x64.
+# A Chromium build takes longer than one job may run (6 h), so it is split into hops that resume
+# from the previous hop's build tree; later hops are skipped once the build finished.
+name: Windows build
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bonjourr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: scripts/fetch_bonjourr.sh build/bonjourr
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bonjourr
+          path: build/bonjourr
+          if-no-files-found: error
+
+  build-1:
+    needs: bonjourr
+    uses: ./.github/workflows/windows-stage.yml
+    with:
+      from-artifact: false
+
+  build-2:
+    needs: build-1
+    if: needs.build-1.outputs.finished != 'true'
+    uses: ./.github/workflows/windows-stage.yml
+    with:
+      from-artifact: true
+
+  build-3:
+    needs: build-2
+    if: needs.build-2.outputs.finished != 'true'
+    uses: ./.github/workflows/windows-stage.yml
+    with:
+      from-artifact: true
+
+  build-4:
+    needs: build-3
+    if: needs.build-3.outputs.finished != 'true'
+    uses: ./.github/workflows/windows-stage.yml
+    with:
+      from-artifact: true
+
+  build-5:
+    needs: build-4
+    if: needs.build-4.outputs.finished != 'true'
+    uses: ./.github/workflows/windows-stage.yml
+    with:
+      from-artifact: true
+
+  build-6:
+    needs: build-5
+    if: needs.build-5.outputs.finished != 'true'
+    uses: ./.github/workflows/windows-stage.yml
+    with:
+      from-artifact: true
+
+  build-7:
+    needs: build-6
+    if: needs.build-6.outputs.finished != 'true'
+    uses: ./.github/workflows/windows-stage.yml
+    with:
+      from-artifact: true
+
+  build-8:
+    needs: build-7
+    if: needs.build-7.outputs.finished != 'true'
+    uses: ./.github/workflows/windows-stage.yml
+    with:
+      from-artifact: true
+
+  build-9:
+    needs: build-8
+    if: needs.build-8.outputs.finished != 'true'
+    uses: ./.github/workflows/windows-stage.yml
+    with:
+      from-artifact: true
+
+  build-10:
+    needs: build-9
+    if: needs.build-9.outputs.finished != 'true'
+    uses: ./.github/workflows/windows-stage.yml
+    with:
+      from-artifact: true
+
+  # Only if the build finished too late in a hop to package there.
+  package:
+    needs: [build-1, build-2, build-3, build-4, build-5, build-6, build-7, build-8, build-9, build-10]
+    if: ${{ !cancelled() && !failure() && needs.build-1.outputs.packaged != 'true' && needs.build-2.outputs.packaged != 'true' && needs.build-3.outputs.packaged != 'true' && needs.build-4.outputs.packaged != 'true' && needs.build-5.outputs.packaged != 'true' && needs.build-6.outputs.packaged != 'true' && needs.build-7.outputs.packaged != 'true' && needs.build-8.outputs.packaged != 'true' && needs.build-9.outputs.packaged != 'true' && needs.build-10.outputs.packaged != 'true' }}
+    uses: ./.github/workflows/windows-stage.yml
+    with:
+      from-artifact: true
+      final: true

@@ -1,0 +1,70 @@
+# One <6 h hop of the Windows build. Checks out helium-windows (pinned to the Helium version our
+# patches are based on) at the workspace root so its own actions work unchanged, with this repo
+# in heliumpp/. Its stage action resumes from the previous hop's build-tree artifact.
+name: Windows stage
+on:
+  workflow_call:
+    inputs:
+      from-artifact:
+        required: true
+        type: boolean
+      final:
+        description: Last chance to package; fail if the build is not finished
+        required: false
+        type: boolean
+        default: false
+    outputs:
+      finished:
+        value: ${{ jobs.stage.outputs.finished }}
+      packaged:
+        value: ${{ jobs.stage.outputs.packaged }}
+permissions:
+  contents: read
+jobs:
+  stage:
+    runs-on: windows-2025
+    outputs:
+      finished: ${{ steps.stage.outputs.finished }}
+      packaged: ${{ steps.package.outputs.packaged }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: imputnet/helium-windows
+          ref: 11a292ea63c107e8ed7f5edb5883df10f977b845  # Helium 0.19.4.1 (helium-chromium 832faa7)
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          path: heliumpp
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: bonjourr
+          path: heliumpp/build/bonjourr
+      - name: Hook Helium++ into build.py
+        run: python heliumpp/windows/hook_build_py.py build.py
+      - uses: ./.github/actions/prepare-environment
+      - uses: ./.github/actions/stage
+        id: stage
+        with:
+          from_artifact: ${{ inputs.from-artifact }}
+          package_here: true
+          save_artifact: ${{ !inputs.final }}
+      - name: Check build completed
+        if: inputs.final && steps.stage.outputs.finished != 'true'
+        run: throw 'Build did not finish within the available stages'
+      - name: Package (unsigned)
+        id: package
+        if: steps.stage.outputs.package_here == 'true' || (inputs.final && steps.stage.outputs.finished == 'true')
+        working-directory: C:\helium-windows
+        run: |
+          python heliumpp\windows\make_packages.py . C:\heliumpp-out
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          "packaged=true" >> $env:GITHUB_OUTPUT
+      - uses: actions/upload-artifact@v4
+        if: steps.package.outputs.packaged == 'true'
+        with:
+          name: heliumpp-windows-x64
+          path: C:\heliumpp-out\*
+          if-no-files-found: error
+          compression-level: 0

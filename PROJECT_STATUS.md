@@ -19,10 +19,16 @@ Updated 2026-10-21 (end of session 2).
   (158783992 bytes), signed latest.json. Before packaging: full 19-suite regression PASS on 0107 code; after the
   version split: test_update 9/9, privacy_mode, ui_font, time_focus PASS. AppImage: --version 0.19.4.7, fonts
   inside byte-identical to the pinned official files, AppRun keeps "$@", Xvfb screenshot shows Satoshi UI.
-- NEXT: Windows cross-compile (user chose it over a native VM build: host 15 GB RAM). Needs from the VM: OpenSSH
-  server, port forward 2222->22, VS 2026 (18.x) Community + Desktop C++ + ATL/MFC, Windows SDK 10.0.28000.2270 +
-  Debugging Tools, Python; run depot_tools win_toolchain/package_from_installed.py; zip stays local (Microsoft
-  files, never publish). Then out/Win with target_os="win", port Linux-only patches.
+- NEXT: Windows build on GitHub Actions (user chose it 2026-10-26 over cross-compile/VM; repo is public).
+  `.github/workflows/windows.yml` (manual run) checks out helium-windows 11a292e (Helium 0.19.4.1, same
+  helium-chromium 832faa7 as Linux), `windows/hook_build_py.py` inserts `windows/apply_ours.py` into its build.py
+  after Helium's patches/substitutions/resources: our series + `windows/patches/` + branding/presets/previews/
+  Bonjourr. `windows/patches/0001-windows-own-identity.patch`: own data/install dir `%LOCALAPPDATA%\heliumpp`,
+  new app/Active Setup GUIDs, toast/elevator CLSIDs, elevator IID, ProgIDs, `heliumpp` URL scheme, sandbox SID,
+  `Policies\Heliumpp` (otherwise it would share Helium's profile and registry). Unsigned; Helium's NSIS
+  installer skipped (hard-codes imput\Helium); WinSparkle updater stays off (no key). NOT RUN YET: expect patch
+  failures (4 of our files have Linux-only context, 3 overlap Helium's Windows patches) and 0024 colour-sync
+  compile errors. Satoshi font not packaged on Windows. Output untested until run on a real Windows PC.
 - 0099-updater-about-follows-running-update: user saw About stuck on "Updating" (0.19.4.5). Cause: About
   opened while another update ran (5-min background check, or a second About tab) got one UPDATING report
   and nothing after. Now it subscribes to the running update (base::RepeatingCallbackList): live %, final
