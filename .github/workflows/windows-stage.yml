@@ -54,11 +54,16 @@ jobs:
           Get-PSDrive C, D | Format-Table Name, @{n='FreeGB'; e={[int]($_.Free / 1GB)}}
       - uses: ./.github/actions/prepare-environment
       # The tree (21 GB after one stage) and its hand-off zip did not both fit on C: (31 GB free);
-      # D: has ~147 GB. build.py creates build\ with exist_ok, so a junction is followed.
+      # D: has ~147 GB. A junction from C: broke siso ("The system cannot find the path
+      # specified"), so the tree lives at a real D: path and the stage action is pointed there.
       - name: Build tree on drive D
         run: |
-          New-Item -ItemType Directory D:\helium-build | Out-Null
-          New-Item -ItemType Junction -Path C:\helium-windows\build -Target D:\helium-build | Out-Null
+          Copy-Item -Path C:\helium-windows -Destination D:\helium-windows -Recurse
+          Remove-Item C:\helium-windows -Recurse -Force
+          $f = '.github\actions\stage\index.js'
+          $t = (Get-Content -Raw $f).Replace('C:\\helium-windows', 'D:\\helium-windows')
+          if ($t.Contains('C:\\helium-windows') -or -not $t.Contains('D:\\helium-windows')) { throw "${f}: path swap failed" }
+          Set-Content $f $t -NoNewline
       - uses: ./.github/actions/stage
         id: stage
         with:
@@ -68,14 +73,14 @@ jobs:
       # The stage action only logs a failed hand-off; without the zip the next stage has nothing.
       - name: Check hand-off saved
         if: ${{ !inputs.final && steps.stage.outputs.finished != 'true' && steps.stage.outputs.package_here != 'true' }}
-        run: if (-not (Test-Path C:\helium-windows\artifacts.zip)) { throw 'Build tree zip missing, see the stage log' }
+        run: if (-not (Test-Path D:\helium-windows\artifacts.zip)) { throw 'Build tree zip missing, see the stage log' }
       - name: Check build completed
         if: inputs.final && steps.stage.outputs.finished != 'true'
         run: throw 'Build did not finish within the available stages'
       - name: Package (unsigned)
         id: package
         if: steps.stage.outputs.package_here == 'true' || (inputs.final && steps.stage.outputs.finished == 'true')
-        working-directory: C:\helium-windows
+        working-directory: D:\helium-windows
         run: |
           python heliumpp\windows\make_packages.py . C:\heliumpp-out
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
