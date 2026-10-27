@@ -43,6 +43,15 @@ jobs:
           path: heliumpp/build/bonjourr
       - name: Hook Helium++ into build.py
         run: python heliumpp/windows/hook_build_py.py build.py
+      # Helium builds on 64-core Depot runners; a free runner's disk filled up at step 15k of 79k
+      # with symbol_level=1. ungoogled-chromium-windows (free runners, same staging) uses 0.
+      - name: No debug symbols (fits a free runner's disk)
+        run: |
+          $f = 'flags.windows.gn'
+          $t = (Get-Content $f) -replace '^symbol_level=1$', 'symbol_level=0'
+          if (-not ($t -contains 'symbol_level=0')) { throw "$f: symbol_level=1 not found" }
+          Set-Content $f $t
+          Get-PSDrive C, D | Format-Table Name, @{n='FreeGB'; e={[int]($_.Free / 1GB)}}
       - uses: ./.github/actions/prepare-environment
       - uses: ./.github/actions/stage
         id: stage
