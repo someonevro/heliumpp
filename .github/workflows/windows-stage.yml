@@ -49,7 +49,7 @@ jobs:
         run: |
           $f = 'flags.windows.gn'
           $t = (Get-Content $f) -replace '^symbol_level=1$', 'symbol_level=0'
-          if (-not ($t -contains 'symbol_level=0')) { throw "$f: symbol_level=1 not found" }
+          if (-not ($t -contains 'symbol_level=0')) { throw "${f}: symbol_level=1 not found" }
           Set-Content $f $t
           Get-PSDrive C, D | Format-Table Name, @{n='FreeGB'; e={[int]($_.Free / 1GB)}}
       - uses: ./.github/actions/prepare-environment
