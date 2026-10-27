@@ -55,7 +55,7 @@ jobs:
       - uses: ./.github/actions/prepare-environment
       # The tree (21 GB after one stage) and its hand-off zip did not both fit on C: (31 GB free);
       # D: has ~147 GB. build.py creates build\ with exist_ok, so a junction is followed.
-      - name: Build tree on D:
+      - name: Build tree on drive D
         run: |
           New-Item -ItemType Directory D:\helium-build | Out-Null
           New-Item -ItemType Junction -Path C:\helium-windows\build -Target D:\helium-build | Out-Null
