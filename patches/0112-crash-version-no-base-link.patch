@@ -1,0 +1,68 @@
+--- a/components/crash/core/app/crashpad_win.cc
++++ b/components/crash/core/app/crashpad_win.cc
+@@ -18,7 +18,7 @@
+ #include "base/strings/string_split.h"
+ #include "base/strings/string_util.h"
+ #include "base/strings/utf_string_conversions.h"
+-#include "base/version_info/version_info.h"
++#include "base/version_info/helium_version_values.h"
+ #include "base/win/windows_version.h"
+ #include "build/branding_buildflags.h"
+ #include "build/build_config.h"
+@@ -42,7 +42,7 @@
+   crash_reporter_client->GetProductNameAndVersion(
+       exe_file, &product_name, &version, &special_build, &channel_name);
+   (*annotations)["prod"] = base::WideToUTF8(product_name);
+-  (*annotations)["ver"] = version_info::GetHeliumVersionNumber();
++  (*annotations)["ver"] = HELIUM_PRODUCT_VERSION;
+ #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+   // Empty means stable.
+   const bool allow_empty_channel = true;
+--- a/components/crash/core/app/crashpad_mac.mm
++++ b/components/crash/core/app/crashpad_mac.mm
+@@ -21,7 +21,7 @@
+ #include "base/files/file_path.h"
+ #include "base/strings/string_number_conversions.h"
+ #include "base/strings/sys_string_conversions.h"
+-#include "base/version_info/version_info.h"
++#include "base/version_info/helium_version_values.h"
+ #include "build/branding_buildflags.h"
+ #include "components/crash/core/app/crash_reporter_client.h"
+ #include "third_party/crashpad/crashpad/client/crash_report_database.h"
+@@ -80,7 +80,7 @@
+         }
+       }
+ 
+-      process_annotations["ver"] = version_info::GetHeliumVersionNumber();
++      process_annotations["ver"] = HELIUM_PRODUCT_VERSION;
+ 
+       process_annotations["plat"] = std::string("OS X");
+     }  // @autoreleasepool
+--- a/components/crash/core/app/BUILD.gn
++++ b/components/crash/core/app/BUILD.gn
+@@ -79,6 +79,10 @@
+   public_deps = [ ":lib" ]
+   deps = [
+     "//base",
++
++    # Helium++: the version define only; //base/version_info's .cc is not in
++    # chrome_elf.dll, which links crashpad_win.cc.
++    "//base/version_info:generate_helium_version",
+     "//build:branding_buildflags",
+     "//build:chromeos_buildflags",
+     "//components/crash/core/common:crash_key",
+--- a/base/version_info/helium_version_values.h.version
++++ b/base/version_info/helium_version_values.h.version
+@@ -2,8 +2,10 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
+-// Only version_info.cc includes this, so a Helium++ version bump rebuilds one
+-// file instead of everything that includes version_info.h.
++// Only version_info.cc and the crashpad_{win,mac} annotations include this, so
++// a Helium++ version bump rebuilds a few files instead of everything that
++// includes version_info.h. (chrome_elf.dll has crashpad_win but not
++// version_info.cc, so it cannot call GetHeliumVersionNumber().)
+ 
+ #ifndef BASE_VERSION_INFO_HELIUM_VERSION_VALUES_H_
+ #define BASE_VERSION_INFO_HELIUM_VERSION_VALUES_H_
