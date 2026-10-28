@@ -13,6 +13,16 @@ on:
         required: false
         type: boolean
         default: false
+      resume-run:
+        description: Run id whose saved build tree to start from (first hop only)
+        required: false
+        type: string
+        default: ''
+      resume-patches:
+        description: Space-separated patches/ files to apply on top of that tree
+        required: false
+        type: string
+        default: ''
     outputs:
       finished:
         value: ${{ jobs.stage.outputs.finished }}
@@ -20,6 +30,7 @@ on:
         value: ${{ jobs.stage.outputs.packaged }}
 permissions:
   contents: read
+  actions: read  # resume-run: download another run's artifact
 jobs:
   stage:
     runs-on: windows-2025
@@ -64,6 +75,28 @@ jobs:
           $t = (Get-Content -Raw $f).Replace('C:\\helium-windows', 'D:\\helium-windows')
           if ($t.Contains('C:\\helium-windows') -or -not $t.Contains('D:\\helium-windows')) { throw "${f}: path swap failed" }
           Set-Content $f $t -NoNewline
+      # build.py --ci skips all setup when build\src exists and goes straight to compiling, so an
+      # earlier run's tree plus new patches only recompiles what the patches touch.
+      - uses: actions/download-artifact@v4
+        if: inputs.resume-run != ''
+        with:
+          name: build-artifact-x86_64
+          run-id: ${{ inputs.resume-run }}
+          github-token: ${{ github.token }}
+          path: D:\helium-windows\build
+      - name: Resume the earlier tree
+        if: inputs.resume-run != ''
+        working-directory: D:\helium-windows\build
+        env:
+          PATCHES: ${{ inputs.resume-patches }}
+        run: |
+          7z x artifacts.zip -y | Select-Object -Last 3
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Remove-Item artifacts.zip
+          foreach ($p in $env:PATCHES.Split(' ', [StringSplitOptions]::RemoveEmptyEntries)) {
+            src\third_party\git\usr\bin\patch.exe -p1 -d src -i "D:\helium-windows\heliumpp\patches\$p"
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          }
       - uses: ./.github/actions/stage
         id: stage
         with:

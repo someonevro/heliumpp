@@ -5,8 +5,18 @@
 name: Windows build
 on:
   workflow_dispatch:
+    inputs:
+      resume-run:
+        description: Start from this run's saved build tree (its id); empty = from scratch
+        required: false
+        default: ''
+      resume-patches:
+        description: patches/ files to apply on top of that tree, space-separated
+        required: false
+        default: ''
 permissions:
   contents: read
+  actions: read
 jobs:
   bonjourr:
     runs-on: ubuntu-latest
@@ -28,6 +38,8 @@ jobs:
     uses: ./.github/workflows/windows-stage.yml
     with:
       from-artifact: false
+      resume-run: ${{ inputs.resume-run }}
+      resume-patches: ${{ inputs.resume-patches }}
 
   build-2:
     needs: build-1

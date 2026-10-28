@@ -1,0 +1,27 @@
+--- a/chrome/browser/ui/views/tabs/tab.cc
++++ b/chrome/browser/ui/views/tabs/tab.cc
+@@ -167,10 +167,12 @@
+   const raw_ptr<TabStyleViews, AcrossTasksDanglingUntriaged> tab_style_views_;
+ };
+ 
+-class TabStyleViewDelegateImpl : public TabStyleViewDelegate {
++// Not TabStyleViewDelegateImpl: TabView befriends that name, and clang-cl
++// (MSVC mode) makes the friend visible here, so it clashed on Windows.
++class HorizontalTabStyleDelegate : public TabStyleViewDelegate {
+  public:
+-  explicit TabStyleViewDelegateImpl(const Tab* tab) : tab_(tab) { CHECK(tab_); }
+-  ~TabStyleViewDelegateImpl() override = default;
++  explicit HorizontalTabStyleDelegate(const Tab* tab) : tab_(tab) { CHECK(tab_); }
++  ~HorizontalTabStyleDelegate() override = default;
+ 
+   const views::View* GetView() const override { return tab_; }
+   bool IsActive() const override { return tab_->IsActive(); }
+@@ -1643,7 +1645,7 @@
+ 
+ // static
+ std::unique_ptr<TabStyleViewDelegate> Tab::CreateStyleDelegate(const Tab* tab) {
+-  return std::make_unique<TabStyleViewDelegateImpl>(tab);
++  return std::make_unique<HorizontalTabStyleDelegate>(tab);
+ }
+ 
+ std::optional<performance_manager::freezing::FreezingVote>&
