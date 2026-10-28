@@ -7,24 +7,33 @@
 <p align="center">
   <img alt="License: GPL-3.0" src="https://img.shields.io/badge/license-GPL--3.0-blue">
   <img alt="Chromium 155.0.8059.84" src="https://img.shields.io/badge/chromium-155.0.8059.84-4285F4">
-  <img alt="Platform: Linux" src="https://img.shields.io/badge/platform-Linux-lightgrey">
+  <img alt="Platform: Linux | Windows" src="https://img.shields.io/badge/platform-Linux%20%7C%20Windows-lightgrey">
   <img alt="Status: early development" src="https://img.shields.io/badge/status-early%20development-orange">
 </p>
 
-> **Early development.** Only Linux desktop builds exist. Many features are implemented but not yet verified in a real window; see [Status](#status) for what has actually been tested.
+> **Early development.** Linux and Windows (x64) builds exist; the Windows build has not yet been tried on a real PC. Many features are implemented but not yet verified in a real window; see [Status](#status) for what has actually been tested.
 
 ## Download
 
-Experimental Linux x86_64 AppImage: **[Helium++ 0.19.4.5 alpha](https://github.com/someonevro/heliumpp/releases/tag/v0.19.4.5-alpha)**
+Latest release: **[Helium++ 0.19.4.7 alpha](https://github.com/someonevro/heliumpp/releases/tag/v0.19.4.7-alpha)**
+
+| Platform | Download |
+| --- | --- |
+| **Windows** 10/11 x64 | [heliumpp_0.19.4.7_x64-installer.exe](https://github.com/someonevro/heliumpp/releases/download/v0.19.4.7-alpha/heliumpp_0.19.4.7_x64-installer.exe) |
+| **Linux** x86_64 | [heliumpp-0.19.4.7-x86_64.AppImage](https://github.com/someonevro/heliumpp/releases/download/v0.19.4.7-alpha/heliumpp-0.19.4.7-x86_64.AppImage) |
+
+**Windows:** run the installer. It installs for your user only, into `%LOCALAPPDATA%\heliumpp`, and keeps its data apart from Helium. The installer is not code-signed yet, so Windows SmartScreen warns you: click **More info**, then **Run anyway**. It does not update itself yet; download new versions from this page. This first Windows build was compiled on GitHub Actions and has not yet been tested on a real Windows PC.
+
+**Linux:**
 
 ```bash
-chmod +x heliumpp-0.19.4.5-x86_64.AppImage
-./heliumpp-0.19.4.5-x86_64.AppImage
+chmod +x heliumpp-0.19.4.7-x86_64.AppImage
+./heliumpp-0.19.4.7-x86_64.AppImage
 ```
 
 > **Data warning for 0.19.4.1 (withdrawn).** Version 0.19.4.1 used real Helium's profile folder (`~/.config/net.imput.helium`). If you also use Helium, it could change Helium's settings: the "High" privacy mode makes cookies and site data get deleted whenever the browser closes, and that setting stays in Helium. From 0.19.4.2 on, Helium++ uses its own folder (`~/.config/heliumpp`) and never touches Helium's data. If you ran 0.19.4.1 next to Helium: back up `~/.config/net.imput.helium`, then in Helium check Settings > Privacy and security > Site settings > Additional content settings > On-device site data, third-party cookies, site permissions and the theme.
 
-It has only been tested headless. Normal desktop launch and other distros are unverified. From 0.19.4.5 on, the browser updates itself from GitHub releases (tested with local and GitHub test servers, not yet as a real AppImage replacing itself on a desktop). If you have 0.19.4.4 or older, download 0.19.4.5 by hand once.
+On Linux it has been tested headless and on the developer's desktop; other distros are unverified. From 0.19.4.5 on, the Linux AppImage updates itself from GitHub releases (tested with local and GitHub test servers, not yet as a real AppImage replacing itself on a desktop). If you have 0.19.4.4 or older, download 0.19.4.5 by hand once.
 
 ## Vibecoded
 
@@ -60,11 +69,12 @@ Honest summary of what has been demonstrated, not just coded:
 
 | Area | State |
 | --- | --- |
-| Linux build (Chromium 155.0.8059.84) | Builds and runs; `helium --version` prints `Helium++ 0.19.4.5 (Chromium 155.0.8059.84)` |
+| Linux build (Chromium 155.0.8059.84) | Builds and runs; `helium --version` prints `Helium++ 0.19.4.7 (Chromium 155.0.8059.84)` |
+| Windows x64 build | Compiles and packages on GitHub Actions (`.github/workflows/windows.yml`); installer unsigned; **not yet run on a real Windows PC** |
 | Privacy modes, performance mode | Automated tests pass (`scripts/test_privacy_mode.sh`, `scripts/test_performance_mode.sh`) |
 | Isolated tabs | Cookie isolation, popups, permissions, disk traces and wipe-on-close tested headlessly. Downloads blocked and kept off disk (tested); password manager off (not tested); clipboard writes are **not** blocked |
 | Secure DNS onboarding | Implemented; page not yet seen and DoH use not observed |
-| Windows, macOS, Android, iOS | **Not started** |
+| macOS, Android, iOS | **Not started** |
 | DRM (Widevine) | **Not tested** |
 
 Much of the new UI has only been checked in headless or virtual-display screenshots. Details are in [`PROJECT_STATUS.md`](PROJECT_STATUS.md) and [`TODO.md`](TODO.md).
