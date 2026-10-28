@@ -11,7 +11,7 @@
   <img alt="Status: early development" src="https://img.shields.io/badge/status-early%20development-orange">
 </p>
 
-> **Early development.** Linux and Windows (x64) builds exist; the Windows build has not yet been tried on a real PC. Many features are implemented but not yet verified in a real window; see [Status](#status) for what has actually been tested.
+> **Early development.** Linux and Windows (x64) builds exist. The Windows build is brand new: please try it and [report problems](https://github.com/someonevro/heliumpp/issues). Many features are implemented but not yet verified in a real window; see [Status](#status) for what has actually been tested.
 
 ## Download
 
@@ -22,7 +22,7 @@ Latest release: **[Helium++ 0.19.4.7 alpha](https://github.com/someonevro/helium
 | **Windows** 10/11 x64 | [heliumpp_0.19.4.7_x64-installer.exe](https://github.com/someonevro/heliumpp/releases/download/v0.19.4.7-alpha/heliumpp_0.19.4.7_x64-installer.exe) |
 | **Linux** x86_64 | [heliumpp-0.19.4.7-x86_64.AppImage](https://github.com/someonevro/heliumpp/releases/download/v0.19.4.7-alpha/heliumpp-0.19.4.7-x86_64.AppImage) |
 
-**Windows:** run the installer. It installs for your user only, into `%LOCALAPPDATA%\heliumpp`, and keeps its data apart from Helium. The installer is not code-signed yet, so Windows SmartScreen warns you: click **More info**, then **Run anyway**. It does not update itself yet; download new versions from this page. This first Windows build was compiled on GitHub Actions and has not yet been tested on a real Windows PC.
+**Windows:** run the installer. It installs for your user only, into `%LOCALAPPDATA%\heliumpp`, and keeps its data apart from Helium. Windows SmartScreen shows a warning because the installer does not have a paid code-signing certificate yet (this says nothing about the file being unsafe): click **More info**, then **Run anyway**. It does not update itself yet; download new versions from this page. This is the first Windows release, so if something does not work, please [open an issue](https://github.com/someonevro/heliumpp/issues).
 
 **Linux:**
 
@@ -70,7 +70,7 @@ Honest summary of what has been demonstrated, not just coded:
 | Area | State |
 | --- | --- |
 | Linux build (Chromium 155.0.8059.84) | Builds and runs; `helium --version` prints `Helium++ 0.19.4.7 (Chromium 155.0.8059.84)` |
-| Windows x64 build | Compiles and packages on GitHub Actions (`.github/workflows/windows.yml`); installer unsigned; **not yet run on a real Windows PC** |
+| Windows x64 build | Compiles and packages on GitHub Actions (`.github/workflows/windows.yml`); installer not code-signed yet; first release, feedback welcome |
 | Privacy modes, performance mode | Automated tests pass (`scripts/test_privacy_mode.sh`, `scripts/test_performance_mode.sh`) |
 | Isolated tabs | Cookie isolation, popups, permissions, disk traces and wipe-on-close tested headlessly. Downloads blocked and kept off disk (tested); password manager off (not tested); clipboard writes are **not** blocked |
 | Secure DNS onboarding | Implemented; page not yet seen and DoH use not observed |
