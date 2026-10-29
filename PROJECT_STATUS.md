@@ -157,7 +157,11 @@ Updated 2026-10-29 (session 8 + redesign stage 0, see SESSION 8).
   Owner encrypted the release key with a passphrase (2026-10-29): release signing now needs the owner to run
   release_sign.sh. Full regression after 0136 was running (build/audit/regression-0136.txt, 17/29 done, only
   test_isolated_blank failing = known about:blank leak).
-  RESUME HERE: (3) ask owner to approve commit (patches 0113-0137 + scripts/tests/docs) and push;
+  RELEASED 2026-10-29: commit 9622759 pushed; v0.20.2.2-alpha (Linux AppImage, signed by the owner, signature
+  checked against the built-in key, feed shows 0.20.2.2). package_appimage.sh now pins the type2 runtime
+  (20251108, sha256) and packages with --network none. Windows CI run 40899399043 started from scratch.
+  RESUME HERE: (3) when run 40899399043 finishes, add the installer to v0.20.2.2-alpha with its SHA-256, update
+  README Windows link;
   (4) next task proposed: about:blank isolation leak (test_isolated_blank).
 - NEXT: (1) user tests `scripts/run.sh test14 --helium-web-sidebar`; (2) web sidebar M2: drag and drop (tab_drag_api),
   tab context menu, collapsed sidebar, arrow-key nav, then make it the default; (3) visual polish toward Zephium

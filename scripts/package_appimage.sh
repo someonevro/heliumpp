@@ -17,6 +17,12 @@ if [ ! -x "$tool" ]; then
     echo "46fdd785094c7f6e545b61afcfb0f3d98d8eab243f644b4b17698c01d06083d1  $tool" | sha256sum -c - || { rm -f "$tool"; exit 1; }
     chmod +x "$tool"
 fi
+# The AppImage startup program, pinned: appimagetool would otherwise fetch the moving "continuous" build.
+runtime="$tools/runtime-x86_64-20251108"
+if [ ! -f "$runtime" ]; then
+    curl -fL -o "$runtime" https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-x86_64
+fi
+echo "2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d  $runtime" | sha256sum -c - || { rm -f "$runtime"; exit 1; }
 docker image inspect helium-packager >/dev/null 2>&1 || docker build -t helium-packager -f "$root/scripts/docker/packager.Dockerfile" "$root/scripts/docker"
 
 rm -rf "$app"; mkdir -p "$app/opt/helium/locales" "$app/usr/share/icons/hicolor/256x256/apps"
@@ -49,7 +55,7 @@ cp "$out/product_logo_256.png" "$app/heliumpp.png"
 cp "$out/product_logo_256.png" "$app/usr/share/icons/hicolor/256x256/apps/heliumpp.png"
 
 rm -f "$rel/$name"
-docker run --rm -u "$(id -u):$(id -g)" -e APPIMAGE_EXTRACT_AND_RUN=1 -e ARCH=x86_64 \
+docker run --rm --network none -u "$(id -u):$(id -g)" -e APPIMAGE_EXTRACT_AND_RUN=1 -e ARCH=x86_64 \
     -e APPIMAGETOOL_APP_NAME="Helium++" -e VERSION="$ver" -v "$root/build:$root/build" -w "$rel" \
-    helium-packager "$tool" "$app" "$rel/$name"
+    helium-packager "$tool" --runtime-file "$runtime" "$app" "$rel/$name"
 ls -l "$rel/$name"
