@@ -1,0 +1,199 @@
+--- a/chrome/browser/resources/heliumpp_sidebar/app.css
++++ b/chrome/browser/resources/heliumpp_sidebar/app.css
+@@ -288,6 +288,20 @@
+   opacity: 1;
+ }
+ 
++/* Isolated tabs: a dashed accent outline and a mask after the title, so they
++   never look like normal tabs. */
++.tab[data-isolated],
++.tile[data-isolated] {
++  outline: 1.5px dashed color-mix(in srgb, var(--hp-accent) 70%, transparent);
++  outline-offset: -1.5px;
++}
++
++.iso {
++  color: var(--hp-accent);
++  display: flex;
++  flex: none;
++}
++
+ /* Folders (tab groups). */
+ .folder {
+   margin-top: 2px;
+@@ -576,6 +590,7 @@
+   .nav,
+   .address-slot,
+   .t,
++  .iso,
+   .x,
+   .count,
+   .chev,
+--- a/chrome/browser/resources/heliumpp_sidebar/app.html.ts
++++ b/chrome/browser/resources/heliumpp_sidebar/app.html.ts
+@@ -49,7 +49,8 @@
+   <div class="essentials" role="tablist" aria-label="Essentials">
+     ${this.essentials_.map(tab => html`
+       <button class="tile" role="tab" aria-selected="${tab.isActive}"
+-          title="${tab.title}" aria-label="${tab.title}" data-id="${tab.id}"
++          title="${this.tabTitle_(tab)}" aria-label="${this.tabTitle_(tab)}"
++          data-id="${tab.id}" ?data-isolated="${this.isIsolated_(tab)}"
+           @click="${this.onTabClick_}" @auxclick="${this.onTabAuxclick_}">
+         <img class="fav" src="${this.favicon_(tab)}" alt="">
+       </button>`)}
+@@ -69,12 +70,15 @@
+         <div class="items">
+           ${row.folder.tabs.map(tab => html`
+             <div class="tab" role="tab" tabindex="0"
+-                aria-selected="${tab.isActive}" title="${tab.title}"
+-                data-id="${tab.id}" @click="${this.onTabClick_}"
++                aria-selected="${tab.isActive}" title="${this.tabTitle_(tab)}"
++                aria-label="${this.tabTitle_(tab)}"
++                data-id="${tab.id}" ?data-isolated="${this.isIsolated_(tab)}"
++                @click="${this.onTabClick_}"
+                 @auxclick="${this.onTabAuxclick_}"
+                 @keydown="${this.onTabKeydown_}">
+               <img class="fav" src="${this.favicon_(tab)}" alt="">
+               <span class="t">${tab.title || tab.url}</span>
++              ${this.isIsolated_(tab) ? html`<span class="iso">${ICONS.mask}</span>` : nothing}
+               <button class="icon-btn x" aria-label="Close ${tab.title}"
+                   data-id="${tab.id}" @click="${this.onCloseClick_}">
+                 ${ICONS.close}
+@@ -83,11 +87,13 @@
+         </div>` : nothing}
+     </div>` : html`
+     <div class="tab" role="tab" tabindex="0" aria-selected="${row.tab!.isActive}"
+-        title="${row.tab!.title}" data-id="${row.tab!.id}"
++        title="${this.tabTitle_(row.tab!)}" aria-label="${this.tabTitle_(row.tab!)}"
++        data-id="${row.tab!.id}" ?data-isolated="${this.isIsolated_(row.tab!)}"
+         @click="${this.onTabClick_}" @auxclick="${this.onTabAuxclick_}"
+         @keydown="${this.onTabKeydown_}">
+       <img class="fav" src="${this.favicon_(row.tab!)}" alt="">
+       <span class="t">${row.tab!.title || row.tab!.url}</span>
++      ${this.isIsolated_(row.tab!) ? html`<span class="iso">${ICONS.mask}</span>` : nothing}
+       <button class="icon-btn x" aria-label="Close ${row.tab!.title}"
+           data-id="${row.tab!.id}" @click="${this.onCloseClick_}">
+         ${ICONS.close}
+--- a/chrome/browser/resources/heliumpp_sidebar/app.ts
++++ b/chrome/browser/resources/heliumpp_sidebar/app.ts
+@@ -56,6 +56,7 @@
+       rows_: {type: Array},
+       shieldOpen_: {type: Boolean},
+       activeHost_: {type: String},
++      isolated_: {type: Object},
+     };
+   }
+ 
+@@ -72,6 +73,8 @@
+     {id: 'maximum', name: 'Maximum',
+      hint: 'Strictest settings. Some sites may break.'},
+   ];
++  // Isolated tabs of this window, by the id part of their NodeId ("<id>:<type>").
++  protected accessor isolated_: Set<string> = new Set();
+   // Host of the active tab for the shield panel; '' for non-web pages.
+   protected accessor activeHost_: string = '';
+ 
+@@ -119,6 +122,7 @@
+     const snapshot = await this.proxy_.tabs.getTabs();
+     this.root_ = snapshot.tabStrip;
+     this.applyTree_(this.root_);
++    this.refreshIsolated_();
+     this.observation_.bind(snapshot.stream.handle);
+   }
+ 
+@@ -133,6 +137,7 @@
+       if (this.root_) {
+         this.applyTree_(this.root_);
+       }
++      this.refreshIsolated_();
+     });
+   }
+ 
+@@ -317,6 +322,27 @@
+         `Privacy level: ${this.levelName_()}`;
+   }
+ 
++  // Isolation is fixed when a tab is made, so asking after list changes is
++  // enough; a new Set only when it changed, to skip needless renders.
++  private refreshIsolated_() {
++    this.proxy_.handler.getIsolatedTabs().then(({tabIds}) => {
++      if (tabIds.length !== this.isolated_.size ||
++          tabIds.some(id => !this.isolated_.has(id))) {
++        this.isolated_ = new Set(tabIds);
++      }
++    });
++  }
++
++  protected isIsolated_(tab: Tab): boolean {
++    return this.isolated_.has(tab.id.split(':')[0]!);
++  }
++
++  protected tabTitle_(tab: Tab): string {
++    return this.isIsolated_(tab) ?
++        `${tab.title} (isolated tab: its own cookies and storage, nothing saved)` :
++        tab.title;
++  }
++
+   protected levelHint_(): string {
+     return this.levels_.find(l => this.isLevel_(l.id))?.hint || '';
+   }
+--- a/chrome/browser/resources/heliumpp_sidebar/icons.ts
++++ b/chrome/browser/resources/heliumpp_sidebar/icons.ts
+@@ -17,6 +17,8 @@
+   minus: html`<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>`,
+   sidebar: html`<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="3"/><path d="M9.5 5v14"/></svg>`,
+   back: html`<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>`,
++  // Isolated tab: a mask.
++  mask: html`<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 9.5c2.5-2 14.5-2 17 0 0 4.5-2.5 6.5-4.5 6.5-1.8 0-2.6-1.8-4-1.8s-2.2 1.8-4 1.8c-2 0-4.5-2-4.5-6.5z"/><path d="M7.5 11h2M14.5 11h2"/></svg>`,
+   forward: html`<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>`,
+   reload: html`<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12a7 7 0 1 1-2.05-4.95"/><path d="M19 5v4h-4"/></svg>`,
+ };
+--- a/chrome/browser/ui/webui/heliumpp_sidebar/heliumpp_sidebar.mojom
++++ b/chrome/browser/ui/webui/heliumpp_sidebar/heliumpp_sidebar.mojom
+@@ -60,6 +60,9 @@
+   // Where the page leaves room for the native address bar, in page pixels
+   // (zero height: no room, the bar is hidden).
+   SetAddressSlot(int32 x, int32 y, int32 width, int32 height);
++  // Ids (TabHandle values, the id part of a tab's NodeId) of this window's
++  // isolated tabs, which the list marks.
++  GetIsolatedTabs() => (array<string> tab_ids);
+ };
+ 
+ // Page side.
+--- a/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_page_handler.cc
++++ b/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_page_handler.cc
+@@ -8,6 +8,7 @@
+ #include <utility>
+ 
+ #include "base/functional/bind.h"
++#include "base/strings/string_number_conversions.h"
+ #include "base/strings/string_util.h"
+ #include "chrome/app/chrome_command_ids.h"
+ #include "chrome/browser/helium_privacy_mode/helium_privacy_mode.h"
+@@ -109,6 +110,16 @@
+   action_observation_.Reset();
+ }
+ 
++void SidebarPageHandler::GetIsolatedTabs(GetIsolatedTabsCallback callback) {
++  std::vector<std::string> ids;
++  for (tabs::TabInterface* tab : browser_->GetAllTabInterfaces()) {
++    if (helium_privacy_mode::IsIsolatedWebContents(tab->GetContents())) {
++      ids.push_back(base::NumberToString(tab->GetHandle().raw_value()));
++    }
++  }
++  std::move(callback).Run(std::move(ids));
++}
++
+ mojom::StatePtr SidebarPageHandler::BuildState() {
+   auto state = mojom::State::New();
+   for (const helium_workspaces::Info& info :
+--- a/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_page_handler.h
++++ b/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_page_handler.h
+@@ -46,6 +46,7 @@
+                       int32_t y,
+                       int32_t width,
+                       int32_t height) override;
++  void GetIsolatedTabs(GetIsolatedTabsCallback callback) override;
+ 
+   // extensions::ExtensionActionDispatcher::Observer:
+   void OnExtensionActionUpdated(

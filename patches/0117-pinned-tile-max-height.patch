@@ -1,0 +1,15 @@
+--- a/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc
++++ b/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc
+@@ -439,8 +439,10 @@
+         gfx::Rect(child->GetPreferredSize(views::SizeBounds(child_width, {})));
+     bounds.set_width(child_width);
+     if (!contains_split) {
+-      // Square tiles.
+-      bounds.set_height(child_width);
++      // Square tiles when several share a row; one or two pinned tabs become
++      // wide short tiles instead of one huge square.
++      constexpr int kMaxTileHeight = 48;
++      bounds.set_height(std::min(child_width, kMaxTileHeight));
+     }
+ 
+     auto drag_data = GetVisualDataForDraggedView(*child);

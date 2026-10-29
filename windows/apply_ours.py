@@ -20,6 +20,8 @@ def apply(source_tree, patch_bin_path):
     shutil.copytree(_HPP / 'branding', source_tree, dirs_exist_ok=True)
     onboarding = source_tree / 'components/helium_onboarding/src'
     shutil.copy2(_HPP / 'shared/presets.json', onboarding / 'lib/presets.json')
+    shutil.copy2(_HPP / 'shared/design/tokens.css',
+                 source_tree / 'ui/webui/resources/css/heliumpp_tokens.css')
     previews = onboarding / 'assets/ntp-previews'
     previews.mkdir(parents=True, exist_ok=True)
     for f in (_HPP / 'shared/ntp-previews').glob('*.webp'):

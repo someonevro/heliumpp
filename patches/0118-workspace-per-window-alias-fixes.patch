@@ -1,0 +1,186 @@
+--- a/chrome/browser/helium_aliases/helium_aliases.cc
++++ b/chrome/browser/helium_aliases/helium_aliases.cc
+@@ -15,6 +15,7 @@
+ #include "base/strings/utf_string_conversions.h"
+ #include "base/task/sequenced_task_runner.h"
+ #include "base/values.h"
++#include "build/build_config.h"
+ #include "chrome/browser/browser_process.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/dialogs/browser_dialogs.h"
+@@ -93,16 +94,16 @@
+  private:
+   AliasRequest(content::WebContents* contents, std::string key)
+       : contents_(contents->GetWeakPtr()),
+-        site_(net::registry_controlled_domains::GetDomainAndRegistry(
+-            contents->GetLastCommittedURL(),
+-            net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES)),
++        site_(SiteOf(contents->GetLastCommittedURL())),
+         key_(std::move(key)),
+         factory_(contents->GetBrowserContext()
+                      ->GetDefaultStoragePartition()
+-                     ->GetURLLoaderFactoryForBrowserProcess()) {
+-    if (site_.empty()) {
+-      site_ = contents->GetLastCommittedURL().host();
+-    }
++                     ->GetURLLoaderFactoryForBrowserProcess()) {}
++
++  static std::string SiteOf(const GURL& url) {
++    std::string site = net::registry_controlled_domains::GetDomainAndRegistry(
++        url, net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
++    return site.empty() ? std::string(url.host()) : site;
+   }
+ 
+   void Send(const std::string& path, std::optional<std::string> body) {
+@@ -156,7 +157,11 @@
+       Send("aliases", base::WriteJson(alias));
+       return;
+     } else if (const std::string* email = data->FindString("email")) {
+-      contents_->Replace(base::UTF8ToUTF16(*email));
++      // The tab may have moved to another site while addy.io answered; the
++      // alias names this site, so only fill it in here.
++      if (SiteOf(contents_->GetLastCommittedURL()) == site_) {
++        contents_->Replace(base::UTF8ToUTF16(*email));
++      }
+     }
+     delete this;
+   }
+@@ -215,11 +220,14 @@
+                       if (!contents) {
+                         return;
+                       }
+-                      // "v11" = keyring-backed key. Without a keyring
+-                      // Chromium falls back to "v10", a key built into the
+-                      // browser: that only scrambles, so nothing is saved.
++                      // Linux: "v11" = keyring-backed key. Without a
++                      // keyring Chromium falls back to "v10", a key built
++                      // into the browser: that only scrambles, so nothing is
++                      // saved. Windows (DPAPI) and macOS (Keychain) always
++                      // encrypt with a key the OS protects.
+                       if (encryptor->EncryptString(key, &encrypted) &&
+-                          encrypted.starts_with("v11")) {
++                          (!BUILDFLAG(IS_LINUX) ||
++                           encrypted.starts_with("v11"))) {
+                         Profile::FromBrowserContext(
+                             contents->GetBrowserContext())
+                             ->GetPrefs()
+--- a/chrome/browser/helium_workspaces/helium_workspaces.cc
++++ b/chrome/browser/helium_workspaces/helium_workspaces.cc
+@@ -1,8 +1,10 @@
+ #include "chrome/browser/helium_workspaces/helium_workspaces.h"
+ 
++#include <map>
+ #include <optional>
+ #include <utility>
+ 
++#include "base/no_destructor.h"
+ #include "base/strings/string_number_conversions.h"
+ #include "base/strings/utf_string_conversions.h"
+ #include "base/uuid.h"
+@@ -19,6 +21,7 @@
+ #include "components/prefs/pref_service.h"
+ #include "components/tab_groups/tab_group_id.h"
+ #include "components/tab_groups/tab_group_visual_data.h"
++#include "components/sessions/core/session_id.h"
+ #include "components/tabs/public/tab_interface.h"
+ #include "content/public/browser/web_contents.h"
+ #include "url/gurl.h"
+@@ -59,6 +62,13 @@
+   prefs->SetString(kActiveWorkspacePref, first ? *first : kDefaultId);
+ }
+ 
++// Workspace per window. shortcut: entries of closed windows are never removed
++// (one short string per window opened this session).
++std::map<SessionID, std::string>& WindowWorkspaces() {
++  static base::NoDestructor<std::map<SessionID, std::string>> map;
++  return *map;
++}
++
+ base::DictValue* FindRecord(base::ListValue& list, const std::string& id) {
+   for (base::Value& item : list) {
+     base::DictValue* dict = item.GetIfDict();
+@@ -193,16 +203,25 @@
+   return result;
+ }
+ 
+-std::string ActiveId(Profile* profile) {
++std::string ActiveId(BrowserWindowInterface* browser) {
++  Profile* profile = browser->GetProfile();
+   EnsureDefault(profile);
+-  return profile->GetPrefs()->GetString(kActiveWorkspacePref);
++  PrefService* prefs = profile->GetPrefs();
++  auto [it, inserted] = WindowWorkspaces().try_emplace(
++      browser->GetSessionID(), prefs->GetString(kActiveWorkspacePref));
++  // Deleted from another window: fall back to the last switched-to one.
++  base::ListValue list = prefs->GetList(kWorkspacesPref).Clone();
++  if (!FindRecord(list, it->second)) {
++    it->second = prefs->GetString(kActiveWorkspacePref);
++  }
++  return it->second;
+ }
+ 
+ void Switch(BrowserWindowInterface* browser, const std::string& id) {
+   Profile* profile = browser->GetProfile();
+   EnsureDefault(profile);
+   PrefService* prefs = profile->GetPrefs();
+-  const std::string current = prefs->GetString(kActiveWorkspacePref);
++  const std::string current = ActiveId(browser);
+   if (id == current) {
+     return;
+   }
+@@ -223,10 +242,12 @@
+   }
+   const base::DictValue target_copy = target->Clone();
+   prefs->SetList(kWorkspacesPref, std::move(list));
++  WindowWorkspaces()[browser->GetSessionID()] = id;
+   prefs->SetString(kActiveWorkspacePref, id);
+ 
++  // Tabs that could not be saved anywhere stay open rather than being lost.
+   std::vector<tabs::TabInterface*> old_tabs;
+-  for (int i = 0; i < model->count(); ++i) {
++  for (int i = 0; source && i < model->count(); ++i) {
+     old_tabs.push_back(model->GetTabAtIndex(i));
+   }
+   std::vector<tabs::TabInterface*> opened = Restore(browser, target_copy);
+@@ -255,7 +276,7 @@
+   if (all.size() <= 1) {
+     return;
+   }
+-  if (id == ActiveId(profile)) {
++  if (id == ActiveId(browser)) {
+     for (const Info& info : all) {
+       if (info.id != id) {
+         Switch(browser, info.id);
+--- a/chrome/browser/helium_workspaces/helium_workspaces.h
++++ b/chrome/browser/helium_workspaces/helium_workspaces.h
+@@ -27,7 +27,9 @@
+ 
+ // Always returns at least one workspace.
+ std::vector<Info> List(Profile* profile);
+-std::string ActiveId(Profile* profile);
++// The workspace `browser` shows. Each window keeps its own; a new window starts
++// on the one switched to last (kActiveWorkspacePref).
++std::string ActiveId(BrowserWindowInterface* browser);
+ 
+ // Saves the live tabs into the current workspace, then makes `id` live.
+ void Switch(BrowserWindowInterface* browser, const std::string& id);
+--- a/chrome/browser/ui/views/tabs/vertical/workspace_switcher.cc
++++ b/chrome/browser/ui/views/tabs/vertical/workspace_switcher.cc
+@@ -108,7 +108,7 @@
+   Profile* profile = browser_->GetProfile();
+   const std::vector<helium_workspaces::Info> all =
+       helium_workspaces::List(profile);
+-  const std::string active = helium_workspaces::ActiveId(profile);
++  const std::string active = helium_workspaces::ActiveId(browser_);
+   const int count = static_cast<int>(all.size());
+   for (int i = 0; i < count; ++i) {
+     if (all[i].id == active) {
+@@ -128,7 +128,7 @@
+   RemoveAllChildViews();
+   chips_.clear();
+   Profile* profile = browser_->GetProfile();
+-  const std::string active = helium_workspaces::ActiveId(profile);
++  const std::string active = helium_workspaces::ActiveId(browser_);
+ 
+   for (const helium_workspaces::Info& info :
+        helium_workspaces::List(profile)) {

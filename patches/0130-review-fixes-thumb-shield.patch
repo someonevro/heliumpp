@@ -1,0 +1,39 @@
+--- a/chrome/browser/helium_theme/helium_theme.cc
++++ b/chrome/browser/helium_theme/helium_theme.cc
+@@ -917,6 +917,11 @@
+     prefs->SetBoolean(kMatchWallpaperPref, true);
+     wallpaper_override = cl->GetSwitchValuePath(kSwitch);
+   }
++  // Not following the wallpaper: the new tab page stops showing it, and the
++  // copy leaves the Preferences file.
++  if (!prefs->GetBoolean(kMatchWallpaperPref)) {
++    prefs->ClearPref(kWallpaperThumbPref);
++  }
+   // The current colours stay; syncing resumes when performance mode is off.
+   if (!prefs->GetBoolean(kMatchWallpaperPref) ||
+       helium_privacy_mode::IsPerformanceMode(profile)) {
+--- a/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_page_handler.cc
++++ b/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_page_handler.cc
+@@ -75,8 +75,10 @@
+   }
+   const std::string text = action->GetDisplayBadgeText(
+       extensions::ExtensionTabUtil::GetTabId(tab->GetContents()));
++  // An empty badge also means uBlock Origin is not allowed here (incognito),
++  // the site is allowlisted or the count is switched off: show no number.
+   if (text.empty()) {
+-    return "0";
++    return std::string();
+   }
+   // uBlock Origin writes a count such as "12" or "1k"; nothing else is shown.
+   const bool is_count =
+--- a/chrome/browser/ui/webui/heliumpp_sidebar/heliumpp_sidebar.mojom
++++ b/chrome/browser/ui/webui/heliumpp_sidebar/heliumpp_sidebar.mojom
+@@ -19,7 +19,7 @@
+   string privacy_level;
+   bool performance_mode;
+   // uBlock Origin's blocked-request count for the active tab as its badge
+-  // shows it ("12", "1k"); "0" when it shows none; "" when uBlock Origin is
++  // shows it ("12", "1k"); "" when the badge is empty or uBlock Origin is
+   // not running.
+   string blocked;
+ };

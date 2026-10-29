@@ -53,6 +53,10 @@ Source tarball ~2-3 GB, extracted tree ~30 GB+, build output 50-100 GB, 8+ GB RA
 ## Licensing notes
 - Chromium BSD-3; ungoogled-chromium BSD-3; Helium GPL-3.0; uBO GPL-3.0 (bundling OK if we comply; branding/name caution); filter lists have per-list licences (EasyList CC BY-SA/GPL dual; attribute). Widevine proprietary — not redistributed.
 - Project name still undecided (avoid "Zen", "Helium").
+- UI font (2026-10-29): Figtree, SIL OFL 1.1 (bundling and redistribution allowed; keep `shared/fonts/figtree/OFL.txt`
+  with any copy, do not ship under the reserved name if modified). Satoshi rejected: ITF Free Font License v2.0 §02
+  forbids making the font file available through a repository, public server or application to others and forbids
+  format conversion (no WOFF2); a public open-source browser would do both.
 
 ## Open questions / UNVERIFIED
 1. (resolved) Helium MV2 mechanism: see above.
@@ -115,3 +119,21 @@ Checked by grep in `build/src`; nothing runtime-tested.
 - Defaults in this build: `kHeliumNoise`, `kHeliumNoiseCanvas`, `kHeliumNoiseAudio`, `kHeliumNoiseCpuCores` = ENABLED by default (third_party/blink/common/features.cc). `kNoReferrers` (chrome_features.cc) and `kRemoveClientHints`, `kSpoofWebGLInfo` = DISABLED by default. => stock Helium already gives "basic" canvas/audio/CPU-core noise. The old "fingerprinting: off" would mean actively disabling those; for usability mode prefer keeping Helium's default (basic) unless a site-breakage reason appears. "strong" = also enable bromite client-rects/measureText noise, remove-client-hints, referrer flags.
 - Design: PresetApplier writes (a) normal prefs live, (b) `browser.enabled_labs_experiments` for flag-type settings and shows "restart required" if the value changed. Cheaper alternative if that proves fiddly: our own patch changing the feature defaults per mode at startup.
 - Decision (user, 2026-10-20): usability mode keeps Helium's default fingerprinting level `basic` (presets.json updated; 9 tests OK).
+
+## Decision log: web-based sidebar (2026-10-29, user decision)
+Goal: Zephium-level look (Zen-like, no AI). Zephium's window frame is Svelte/CSS in a webview (`frame/src/styles/*.css`,
+MPL-2.0); our native Views sidebar cannot reach that finish at a reasonable cost (fonts, materials, motion, 4-min rebuilds per tweak).
+- Investigated **Webium** (Chromium 156 `features::kWebium`, `chrome/browser/ui/webui_browser/`): the whole window as WebUI. Rejected:
+  prototype; crashed at startup in our build (WebUI used before commit, then a dangling WebUI in the WebUI toolbar on extension
+  reload), and it lacks the native omnibox popup, permission prompts, dialogs and extension popups we rely on.
+- Chosen: **hybrid**. Keep the native BrowserView (omnibox, dialogs, prompts, menus, extensions). Replace the vertical sidebar's
+  contents with a trusted top-chrome WebUI page hosted in the sidebar region, talking to:
+  - `tabs_api::mojom::TabStripService` (`components/browser_apis/tab_strip/`, created for every window by `TabStripServiceFeature`;
+    already used by Tab Search): tab tree snapshot + event stream, create/close/activate/select/move/update.
+  - our own small page handler mojom for workspaces, privacy level, performance mode, blocked counts and essentials.
+- Native sidebar stays as the fallback until the web sidebar covers every feature (drag and drop, context menus, groups, splits,
+  pinned/essentials, keyboard access); then a pref switches between them.
+- Costs/risks: one more renderer (~30-60 MB), WebUI must only accept tab ids from TabStripService (no raw web input), keep it out of
+  isolated/incognito storage, accessibility must be rebuilt in HTML.
+- Zephium code reuse: allowed under MPL-2.0 if copied files keep their MPL header and stay separate files; prefer studying tokens and
+  writing our own CSS.

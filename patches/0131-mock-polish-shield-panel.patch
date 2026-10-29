@@ -1,0 +1,302 @@
+--- a/chrome/browser/resources/heliumpp_sidebar/app.css
++++ b/chrome/browser/resources/heliumpp_sidebar/app.css
+@@ -413,7 +413,7 @@
+   bottom: 52px;
+   box-shadow: var(--hp-shadow-pop), 0 0 0 1px var(--hp-edge);
+   left: var(--hp-space-2);
+-  padding: 14px;
++  padding: var(--hp-space-3);
+   position: absolute;
+   right: var(--hp-space-2);
+   z-index: 1;
+@@ -425,7 +425,48 @@
+   font-size: var(--hp-text-lg);
+   font-weight: var(--hp-weight-strong);
+   gap: var(--hp-space-2);
+-  margin: 0 0 10px;
++  margin: 0;
++}
++
++.panel .site {
++  color: var(--hp-ink-3);
++  font-size: var(--hp-text-sm);
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++}
++
++.stat {
++  background: var(--hp-accent-soft);
++  border-radius: var(--hp-radius-control);
++  margin-top: 10px;
++  padding: 10px;
++}
++
++.stat b {
++  display: block;
++  font-size: 22px;
++  font-variant-numeric: tabular-nums;
++  font-weight: 700;
++  letter-spacing: -0.02em;
++  line-height: 1.2;
++}
++
++.stat span,
++.panel .hint {
++  color: var(--hp-ink-2);
++  font-size: var(--hp-text-sm);
++}
++
++.panel .label {
++  color: var(--hp-ink-2);
++  font-size: var(--hp-text-sm);
++  font-weight: var(--hp-weight-strong);
++  margin: var(--hp-space-3) 0 6px;
++}
++
++.panel .hint {
++  margin-top: 6px;
+ }
+ 
+ .panel h2 .i {
+@@ -440,11 +481,22 @@
+   padding: 3px;
+ }
+ 
++/* Fits a 200px sidebar: labels shrink to 12px and never overlap. */
+ .seg button {
+   border-radius: var(--hp-radius-tab);
+   color: var(--hp-ink-2);
++  font-size: var(--hp-text-sm);
+   font-weight: var(--hp-weight-strong);
+-  height: 30px;
++  height: 28px;
++  min-width: 0;
++  overflow: hidden;
++  padding: 0 2px;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++}
++
++.seg button:focus-visible {
++  outline-offset: -2px;
+ }
+ 
+ .seg button[aria-pressed='true'] {
+@@ -468,6 +520,7 @@
+ 
+ .toggle-row strong {
+   display: block;
++  white-space: nowrap;
+   font-weight: var(--hp-weight-strong);
+ }
+ 
+@@ -477,7 +530,8 @@
+ }
+ 
+ .switch {
+-  background: var(--hp-hover);
++  background: var(--hp-pressed);
++  flex: none;
+   border-radius: 10px;
+   box-shadow: 0 0 0 1px var(--hp-edge) inset;
+   height: 20px;
+@@ -486,7 +540,8 @@
+ }
+ 
+ .switch::after {
+-  background: var(--hp-ink-2);
++  background: light-dark(white, var(--hp-ink-3));
++  box-shadow: 0 1px 2px var(--hp-shade-near);
+   border-radius: 50%;
+   content: '';
+   height: 16px;
+--- a/chrome/browser/resources/heliumpp_sidebar/app.html.ts
++++ b/chrome/browser/resources/heliumpp_sidebar/app.html.ts
+@@ -100,12 +100,18 @@
+ 
+ ${this.shieldOpen_ ? html`
+   <section class="panel" role="dialog" aria-label="Privacy shield">
+-    <h2>${ICONS.shield}Privacy level</h2>
+-    <div class="seg" role="group" aria-label="Privacy level">
++    <h2>${ICONS.shield}${this.state_?.blocked ? 'Protection is on' : 'Privacy shield'}</h2>
++    ${this.activeHost_ ? html`<div class="site">${this.activeHost_}</div>` : nothing}
++    ${this.state_?.blocked ? html`
++      <div class="stat"><b>${this.state_.blocked}</b>
++        <span>blocked on this site</span></div>` : nothing}
++    <div class="label" id="levelLabel">Privacy level</div>
++    <div class="seg" role="group" aria-labelledby="levelLabel">
+       ${this.levels_.map(level => html`
+         <button aria-pressed="${this.isLevel_(level.id)}" data-id="${level.id}"
+             @click="${this.onLevelClick_}">${level.name}</button>`)}
+     </div>
++    <div class="hint">${this.levelHint_()}</div>
+     <div class="toggle-row">
+       <div><strong>Performance mode</strong>
+         <small>Background tabs sleep after 5 minutes</small></div>
+--- a/chrome/browser/resources/heliumpp_sidebar/app.ts
++++ b/chrome/browser/resources/heliumpp_sidebar/app.ts
+@@ -54,6 +54,7 @@
+       essentials_: {type: Array},
+       rows_: {type: Array},
+       shieldOpen_: {type: Boolean},
++      activeHost_: {type: String},
+     };
+   }
+ 
+@@ -63,10 +64,15 @@
+   protected accessor shieldOpen_: boolean = false;
+ 
+   protected readonly levels_ = [
+-    {id: 'usability', name: 'Usability'},
+-    {id: 'medium', name: 'Medium'},
+-    {id: 'maximum', name: 'Maximum'},
++    {id: 'usability', name: 'Usability',
++     hint: 'Ad and tracker blocking, with the fewest site problems.'},
++    {id: 'medium', name: 'Medium',
++     hint: 'Strong blocking, balanced for everyday sites.'},
++    {id: 'maximum', name: 'Maximum',
++     hint: 'Strictest settings. Some sites may break.'},
+   ];
++  // Host of the active tab for the shield panel; '' for non-web pages.
++  protected accessor activeHost_: string = '';
+ 
+   private proxy_ = BrowserProxy.getInstance();
+   // Mirror of the browser's tab tree: one snapshot, then every event applied.
+@@ -260,6 +266,11 @@
+       }
+     }
+     this.essentials_ = essentials;
++    const active = tabsIn(root).find(tab => tab.isActive);
++    const url = active && URL.canParse(active.url) ?
++        new URL(active.url) : null;
++    this.activeHost_ =
++        url && url.protocol.startsWith('http') ? url.hostname : '';
+     this.rows_ = rows;
+   }
+ 
+@@ -299,6 +310,10 @@
+         `Privacy level: ${this.levelName_()}`;
+   }
+ 
++  protected levelHint_(): string {
++    return this.levels_.find(l => this.isLevel_(l.id))?.hint || '';
++  }
++
+   protected favicon_(tab: Tab): string {
+     return tab.favicon?.dataUrl || 'chrome://favicon2/';
+   }
+--- a/chrome/browser/ui/views/omnibox/omnibox_placeholder_util.cc
++++ b/chrome/browser/ui/views/omnibox/omnibox_placeholder_util.cc
+@@ -6,6 +6,7 @@
+ 
+ #include <string>
+ 
++#include "base/command_line.h"
+ #include "base/strings/strcat.h"
+ #include "base/time/time.h"
+ #include "chrome/browser/autocomplete/aim_eligibility_service_factory.h"
+@@ -89,6 +90,13 @@
+       // Otherwise, if a DSE is set, use the DSE placeholder text.
+       out_placeholder_text = l10n_util::GetStringFUTF16(
+           IDS_OMNIBOX_PLACEHOLDER_TEXT, default_provider->short_name());
++      // The web sidebar's narrow field shows a short hint; the full one,
++      // naming the search engine, stays the accessible name.
++      if (base::CommandLine::ForCurrentProcess()->HasSwitch(
++              "helium-web-sidebar")) {
++        out_a11y_placeholder = out_placeholder_text;
++        out_placeholder_text = u"Search or enter address";
++      }
+     }
+   }
+ }
+--- a/chrome/browser/ui/views/frame/opaque_browser_frame_view.cc
++++ b/chrome/browser/ui/views/frame/opaque_browser_frame_view.cc
+@@ -82,11 +82,12 @@
+ 
+ namespace {
+ 
+-// Tint alpha for a dark acrylic frame. 55% looks best, but over a light
+-// wallpaper the blurred desktop lifts the glass to mid grey and secondary text
+-// fell to 2.4:1. Solve for the alpha that keeps the glass at or below luma 86
+-// (secondary text 4.5:1) over the wallpaper's mean luma, x1.35 for brighter
+-// patches; unknown wallpaper: the 74% light frames use.
++// Tint alpha for a dark acrylic frame. The glass is evened out first (84%, as
++// Zephium washes its window), so the wallpaper is only a hint behind the
++// sidebar. Over a light wallpaper the blurred desktop still lifts the glass:
++// solve for the alpha that keeps it at or below luma 86 (secondary text 4.5:1)
++// over the wallpaper's mean luma, x1.35 for brighter patches, up to 92%;
++// unknown wallpaper: 88%, as light frames use.
+ SkAlpha DarkGlassAlpha(SkColor frame, const PrefService& prefs) {
+   // helium_theme's pref (helium.theme.wallpaper_luma), -1 when unknown.
+   int luma = -1;
+@@ -95,16 +96,16 @@
+     luma = pref->GetValue()->GetIfInt().value_or(-1);
+   }
+   if (luma < 0) {
+-    return 0xBC;
++    return 0xE0;
+   }
+   const double backdrop = std::min(255.0, luma * 1.35);
+   const double glass = color_utils::GetLuma(frame);
+   constexpr double kMaxGlassLuma = 86;
+   if (backdrop <= kMaxGlassLuma) {
+-    return 0x8C;
++    return 0xD6;
+   }
+   const double alpha = (backdrop - kMaxGlassLuma) / (backdrop - glass);
+-  return static_cast<SkAlpha>(std::clamp(alpha, 0.55, 0.8) * 255 + 0.5);
++  return static_cast<SkAlpha>(std::clamp(alpha, 0.84, 0.92) * 255 + 0.5);
+ }
+ 
+ constexpr int kRoundedCaptionButtonSize = 16;
+@@ -846,16 +847,16 @@
+   // Acrylic window: the other surfaces skip their backgrounds, so this tint is
+   // all that covers the desktop (which compositors like Hyprland blur).
+   if (helium::ShouldUseNativeFrameMaterials(GetBrowserView())) {
+-    // Light enough for the compositor's blur to read as frosted glass, dense
+-    // enough that dark tab text keeps ~4.5:1 over a dark wallpaper (a light
+-    // frame needs more: 55% measured 2.7:1 over dark mountains).
++    // Dense glass (Zephium's evened-out window): the compositor's blur shows
++    // only as a hint of the wallpaper's colour and light, and text keeps well
++    // over 4.5:1 on any wallpaper.
+     frame_color = SkColorSetA(frame_color, color_utils::IsDark(frame_color)
+                                                ? DarkGlassAlpha(
+                                                      frame_color,
+                                                      *GetBrowserView()
+                                                           ->GetProfile()
+                                                           ->GetPrefs())
+-                                               : 0xBC);
++                                               : 0xE0);
+   }
+   if (window_title_) {
+     window_title_->SetEnabledColor(
+--- a/chrome/browser/resources/new_tab_page/app.css
++++ b/chrome/browser/resources/new_tab_page/app.css
+@@ -633,9 +633,10 @@
+   text-shadow: var(--wall-ink-shadow);
+ }
+ 
++/* No backdrop-filter here or on the chips: what is behind them is the
++   already-blurred wallpaper, so a second blur only costs GPU time. */
+ #searchForm {
+   align-items: center;
+-  backdrop-filter: blur(20px);
+   background: light-dark(rgb(255 255 255 / 0.86),
+       color-mix(in oklab, var(--color-sys-surface) 78%, transparent));
+   border-radius: 16px;
+@@ -740,7 +741,6 @@
+ 
+ .chip,
+ .pop {
+-  backdrop-filter: blur(16px);
+   background: var(--wall-glass);
+   box-shadow: 0 0 0 1px var(--wall-glass-edge) inset;
+   color: var(--wall-ink);
+@@ -871,6 +871,4 @@
+ #foot[data-reduced] * {
+   animation: none !important;
+   transition: none !important;
+-  /* Blur is a per-frame GPU cost. */
+-  backdrop-filter: none !important;
+ }

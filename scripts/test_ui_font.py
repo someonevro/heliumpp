@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Satoshi UI font (0102): browser pages (chrome://settings, chrome://newtab) load it; a normal web page can
+"""Figtree UI font (0102): browser pages (chrome://settings, chrome://newtab) load it; a normal web page can
 neither render it by name (font-family / local()) nor fetch the file from chrome://resources.
 Run from the project root: python3 -I scripts/test_ui_font.py"""
 import sys, functools, http.server, json, os, shutil, subprocess, threading, time
@@ -15,13 +15,13 @@ from cdp import WS  # noqa: E402
 # Width of a test string in the asked font with monospace fallback: equal to plain monospace = font absent.
 PROBE = """(async () => {
   const w = f => { const c = document.createElement('canvas').getContext('2d');
-                   c.font = '32px ' + f; return c.measureText('Wahlfqkg Satoshi 0123').width; };
-  try { const ff = new FontFace('LocalProbe', 'local("Satoshi"), local("Satoshi Variable")');
+                   c.font = '32px ' + f; return c.measureText('Wahlfqkg Figtree 0123').width; };
+  try { const ff = new FontFace('LocalProbe', 'local("Figtree"), local("Figtree Variable")');
         document.fonts.add(ff); await ff.load(); } catch (e) {}
   let fetched = 'blocked';
-  try { await fetch('chrome://resources/fonts/Satoshi-Variable.ttf'); fetched = 'loaded'; } catch (e) {}
+  try { await fetch('chrome://resources/fonts/Figtree-Variable.ttf'); fetched = 'loaded'; } catch (e) {}
   await document.fonts.ready;
-  return JSON.stringify({byName: w('Satoshi, monospace') !== w('monospace'),
+  return JSON.stringify({byName: w('Figtree, monospace') !== w('monospace'),
                          byLocal: w('LocalProbe, monospace') !== w('monospace'), fetched,
                          body: getComputedStyle(document.body).fontFamily});
 })()"""
@@ -53,7 +53,7 @@ try:
     for url, want_used in (("http://127.0.0.1:%d/" % WEB, False), ("chrome://settings", True), ("chrome://newtab", True)):
         r = probe(url)
         if want_used:
-            ok = r["byName"] and r["body"].strip('"').startswith("Satoshi")
+            ok = r["byName"] and r["body"].strip('"').startswith("Figtree")
         else:
             ok = not r["byName"] and not r["byLocal"] and r["fetched"] == "blocked"
         fails += not ok

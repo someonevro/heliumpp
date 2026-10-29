@@ -18,15 +18,15 @@
      "vertical_tab_strip_scroll_bar.cc",
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-@@ -51,6 +51,7 @@
- #include "chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h"
+@@ -54,6 +54,7 @@
+ #include "chrome/browser/ui/views/tabs/organizer/organizer_panel_utils.h"
  #include "chrome/browser/ui/views/tabs/shared/drop_arrow.h"
  #include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h"
 +#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_footer.h"
  #include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_focus_swipe_controller.h"
  #include "chrome/browser/ui/web_applications/app_browser_controller.h"
  #include "chrome/grit/generated_resources.h"
-@@ -84,6 +85,8 @@
+@@ -88,6 +89,8 @@
  constexpr int kKeyboardResizeWidth = 50;
  constexpr int kSnapDistance = 15;
  constexpr int kBottomContainerGap = 2;
@@ -35,12 +35,13 @@
  constexpr int kDefaultWidthSnapDistance = 6;
  
  // Shadow is used in expand-on-hover mode. Shadow radius and opacity are dynamic
-@@ -140,6 +143,22 @@
+@@ -156,6 +159,24 @@
        gfx::Insets::TLBR(kBottomContainerGap, region_horizontal_padding,
                          0, region_horizontal_padding));
  
 +  // Pushes the footer to the bottom of the strip.
-+  auto* spacer = AddChildView(std::make_unique<views::View>());
++  auto* spacer =
++      content_area_view_->AddChildView(std::make_unique<views::View>());
 +  spacer->SetProperty(
 +      views::kFlexBehaviorKey,
 +      views::FlexSpecification(views::LayoutOrientation::kVertical,
@@ -48,25 +49,26 @@
 +                               views::MaximumFlexSizeRule::kUnbounded));
 +
 +  // Quick access to settings, extensions, downloads, history and bookmarks.
-+  auto* footer = AddChildView(std::make_unique<VerticalTabStripFooter>(
-+      state_controller_, browser_view->browser()));
++  auto* footer = content_area_view_->AddChildView(
++      std::make_unique<VerticalTabStripFooter>(state_controller_,
++                                               browser_view->browser()));
 +  footer->SetProperty(
 +      views::kMarginsKey,
 +      gfx::Insets::TLBR(kBottomContainerGap, region_horizontal_padding,
 +                        kBottomContainerGap, region_horizontal_padding));
 +
-   gemini_button_ = AddChildView(std::make_unique<views::View>());
+   gemini_button_ =
+       content_area_view_->AddChildView(std::make_unique<views::View>());
  
-   resize_area_ = AddChildView(std::make_unique<views::ResizeArea>(this));
-@@ -717,7 +736,7 @@
+@@ -842,7 +863,7 @@
        views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToMinimum,
                                 views::MaximumFlexSizeRule::kPreferred));
-   tab_strip_view()->SetProperty(views::kMarginsKey,
--                               gfx::Insets::TLBR(0, 0, kBottomContainerGap, 0));
-+                               gfx::Insets::TLBR(kTabListTopGap, 0, kBottomContainerGap, 0));
+   view->SetProperty(views::kMarginsKey,
+-                    gfx::Insets::TLBR(0, 0, kBottomContainerGap, 0));
++                    gfx::Insets::TLBR(kTabListTopGap, 0, kBottomContainerGap, 0));
  
-   // Pre-set the animation values to the appropriate state.
-   auto* const animation_controller =
+   views::View* const content_parent =
+       content_area_view_ ? content_area_view_.get() : this;
 --- /dev/null
 +++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_footer.h
 @@ -0,0 +1,43 @@

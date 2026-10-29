@@ -1,0 +1,462 @@
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+@@ -172,13 +172,19 @@
+                                views::MinimumFlexSizeRule::kScaleToZero,
+                                views::MaximumFlexSizeRule::kUnbounded));
+ 
+-  // Workspace chips above the footer.
+-  auto* workspaces = content_area_view_->AddChildView(
+-      std::make_unique<WorkspaceSwitcher>(browser_view->browser()));
++  // Named workspace segments at the top (the address bar is inserted above
++  // them, at index 0, when it moves into the sidebar).
++  auto* workspaces = content_area_view_->AddChildViewAt(
++      std::make_unique<WorkspaceSwitcher>(browser_view->browser()), 0);
+   workspaces->SetProperty(
+       views::kMarginsKey,
+-      gfx::Insets::TLBR(kBottomContainerGap, region_horizontal_padding, 0,
++      gfx::Insets::TLBR(6, region_horizontal_padding, 2,
+                         region_horizontal_padding));
++  // The content area hands spare height to its children; this row keeps its own.
++  workspaces->SetProperty(
++      views::kFlexBehaviorKey,
++      views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,
++                               views::MaximumFlexSizeRule::kPreferred));
+ 
+   // Quick access to settings, extensions and downloads.
+   auto* footer = content_area_view_->AddChildView(
+--- a/chrome/browser/ui/views/tabs/common/tab_group_header_view.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_group_header_view.cc
+@@ -126,9 +126,8 @@
+     SetHorizontalAlignment(gfx::ALIGN_TO_HEAD);
+     SetElideBehavior(gfx::FADE_TAIL);
+     SetAutoColorReadabilityEnabled(false);
+-    // Folder labels read as small caps: upper-cased (see OnDataChanged), a
+-    // size smaller and semibold.
+-    SetFontList(font_list().Derive(-2, gfx::Font::NORMAL,
++    // Folder names: the tabs' size, semibold, in the user's own case.
++    SetFontList(font_list().Derive(0, gfx::Font::NORMAL,
+                                    gfx::Font::Weight::SEMIBOLD));
+   }
+ };
+@@ -526,8 +525,7 @@
+   if (delegate_->IsValid() && delegate_->GetTabGroup().is_ephemeral()) {
+     OnTabCountChanged();
+   } else {
+-    group_header_label_->SetText(
+-        base::i18n::ToUpper(tab_group_visual_data_.title()));
++    group_header_label_->SetText(tab_group_visual_data_.title());
+   }
+ 
+   UpdateColors();
+@@ -619,8 +617,18 @@
+   if (!GetColorProvider()) {
+     return;
+   }
+-  const SkColor background_color = GetBackgroundColor();
+-  const SkColor foreground_color = GetForegroundColor();
++  SkColor background_color = GetBackgroundColor();
++  SkColor foreground_color = GetForegroundColor();
++  // Vertical folders: a soft wash of the folder colour (its colour also runs
++  // down the side of its tabs) under normal text, not a solid bar.
++  if (orientation_ == TabStripOrientation::kVertical &&
++      !(delegate_->IsValid() && delegate_->GetTabGroup().is_ephemeral())) {
++    const bool frame_active = GetWidget() && GetWidget()->ShouldPaintAsActive();
++    background_color = SkColorSetA(background_color, 0x33);
++    foreground_color = GetColorProvider()->GetColor(
++        frame_active ? ui::kColorSysOnSurface
++                     : ui::kColorSysOnSurfacePrimaryInactive);
++  }
+ 
+   // Update label.
+   group_header_label_->SetEnabledColor(foreground_color);
+--- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_footer.cc
++++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_footer.cc
+@@ -19,6 +19,15 @@
+ #include "ui/views/layout/flex_layout_types.h"
+ #include "ui/gfx/geometry/rect.h"
+ #include "ui/views/view_class_properties.h"
++#include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/background.h"
++#include "ui/views/border.h"
++#include "ui/views/controls/button/label_button.h"
++#include "ui/views/controls/highlight_path_generator.h"
++#include "ui/views/layout/flex_layout_types.h"
++#include "ui/base/models/image_model.h"
++#include "ui/color/color_id.h"
++#include "ui/views/style/typography.h"
+ 
+ namespace {
+ constexpr int kIconSize = 18;
+@@ -46,14 +55,27 @@
+     tabs::VerticalTabStripStateController* state_controller,
+     BrowserWindowInterface* browser)
+     : browser_(browser) {
+-  SetMainAxisAlignment(views::LayoutAlignment::kCenter);
++  SetMainAxisAlignment(views::LayoutAlignment::kStart);
+   SetCrossAxisAlignment(views::LayoutAlignment::kCenter);
+ 
++  // Shield (privacy level) on the left, the other actions on the right.
+   AddPrivacyButton();
+-  AddButton(vector_icons::kSettingsIcon, IDC_OPTIONS, u"Settings");
++  AddChildView(std::make_unique<views::View>())
++      ->SetProperty(views::kFlexBehaviorKey,
++                    views::FlexSpecification(
++                        views::MinimumFlexSizeRule::kScaleToZero,
++                        views::MaximumFlexSizeRule::kUnbounded));
++  AddButton(vector_icons::kDownloadIcon, IDC_SHOW_DOWNLOADS, u"Downloads");
+   AddButton(vector_icons::kChromeExtensionIcon, IDC_MANAGE_EXTENSIONS,
+             u"Extensions");
+-  AddButton(vector_icons::kDownloadIcon, IDC_SHOW_DOWNLOADS, u"Downloads");
++  AddButton(vector_icons::kSettingsIcon, IDC_OPTIONS, u"Settings");
++
++  privacy_registrar_.Init(browser_->GetProfile()->GetPrefs());
++  // helium_privacy_mode's level pref (kModePref there).
++  privacy_registrar_.Add(
++      "helium.privacy_mode",
++      base::BindRepeating(&VerticalTabStripFooter::UpdateShieldLabel,
++                          base::Unretained(this)));
+ 
+   OnCollapseStateChanged(state_controller->GetCollapseState());
+   collapsed_state_change_subscription_ =
+@@ -82,24 +104,47 @@
+   AddChildView(std::move(button));
+ }
+ 
++// A tonal pill: shield icon plus the current level ("Medium").
+ void VerticalTabStripFooter::AddPrivacyButton() {
+-  auto button = views::CreateVectorImageButtonWithNativeTheme(
+-      views::Button::PressedCallback(), vector_icons::kLockIcon, kIconSize);
++  auto button = std::make_unique<views::LabelButton>();
+   views::View* anchor = button.get();
+   button->SetCallback(base::BindRepeating(
+       &VerticalTabStripFooter::ShowPrivacyMenu, base::Unretained(this),
+       base::Unretained(anchor)));
+-  button->SetTooltipText(u"Privacy level");
+-  button->SetPreferredSize(gfx::Size(kButtonSize, kButtonSize));
++  button->SetImageModel(views::Button::STATE_NORMAL,
++                        ui::ImageModel::FromVectorIcon(
++                            vector_icons::kShieldIcon,
++                            ui::kColorSysOnTonalContainer, kIconSize - 2));
++  button->SetEnabledTextColors(ui::ColorVariant(ui::kColorSysOnTonalContainer));
++  button->SetLabelStyle(views::style::STYLE_BODY_4_EMPHASIS);
++  button->SetImageLabelSpacing(6);
++  button->SetBorder(views::CreateEmptyBorder(gfx::Insets::TLBR(0, 8, 0, 10)));
++  button->SetMinSize(gfx::Size(kButtonSize + 4, kButtonSize + 3));
++  button->SetBackground(
++      views::CreateRoundedRectBackground(ui::kColorSysTonalContainer, 8));
++  views::InstallRoundRectHighlightPathGenerator(button.get(), gfx::Insets(), 8);
+   button->SetProperty(views::kMarginsKey, gfx::Insets::VH(1, 0));
+-  AddChildView(std::move(button));
++  shield_ = AddChildView(std::move(button));
++  UpdateShieldLabel();
++}
++
++void VerticalTabStripFooter::UpdateShieldLabel() {
++  const std::string mode = helium_privacy_mode::GetModeName(browser_->GetProfile());
++  const std::u16string name = mode == "usability" ? u"Usability"
++                              : mode == "maximum" ? u"Maximum"
++                                                  : u"Medium";
++  shield_->SetTooltipText(u"Privacy level: " + name);
++  shield_->GetViewAccessibility().SetName(u"Privacy level: " + name);
++  // Collapsed sidebar: icon only.
++  shield_->SetText(collapsed_ ? std::u16string() : name);
+ }
+ 
+ void VerticalTabStripFooter::ShowPrivacyMenu(views::View* anchor) {
+   privacy_menu_model_ = std::make_unique<ui::SimpleMenuModel>(this);
+-  privacy_menu_model_->AddRadioItem(kPrivacyLow, u"Low", 0);
++  // Same names as setup and the new tab page.
++  privacy_menu_model_->AddRadioItem(kPrivacyLow, u"Usability", 0);
+   privacy_menu_model_->AddRadioItem(kPrivacyMedium, u"Medium (Recommended)", 0);
+-  privacy_menu_model_->AddRadioItem(kPrivacyHigh, u"High", 0);
++  privacy_menu_model_->AddRadioItem(kPrivacyHigh, u"Maximum", 0);
+   privacy_menu_runner_ = std::make_unique<views::MenuRunner>(
+       privacy_menu_model_.get(), views::MenuRunner::HAS_MNEMONICS);
+   privacy_menu_runner_->RunMenuAt(
+@@ -140,6 +185,10 @@
+ 
+ void VerticalTabStripFooter::OnCollapseStateChanged(
+     tabs::VerticalTabStripCollapseState state) {
++  collapsed_ = state != tabs::VerticalTabStripCollapseState::kExpanded;
++  if (shield_) {
++    UpdateShieldLabel();
++  }
+   SetOrientation(state == tabs::VerticalTabStripCollapseState::kExpanded
+                      ? views::LayoutOrientation::kHorizontal
+                      : views::LayoutOrientation::kVertical);
+--- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_footer.h
++++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_footer.h
+@@ -5,6 +5,7 @@
+ 
+ #include "base/callback_list.h"
+ #include "base/memory/raw_ptr.h"
++#include "components/prefs/pref_change_registrar.h"
+ #include "ui/menus/simple_menu_model.h"
+ #include "ui/base/metadata/metadata_header_macros.h"
+ #include "ui/views/context_menu_controller.h"
+@@ -13,6 +14,10 @@
+ 
+ class BrowserWindowInterface;
+ 
++namespace views {
++class LabelButton;
++}  // namespace views
++
+ namespace gfx {
+ struct VectorIcon;
+ }
+@@ -22,8 +27,9 @@
+ enum class VerticalTabStripCollapseState;
+ }  // namespace tabs
+ 
+-// A row of icon buttons at the bottom of the vertical tab strip that opens
+-// settings, extensions and downloads. Laid out horizontally when the strip is
++// The bottom row of the vertical tab strip: the privacy shield (level name,
++// opens the level menu) on the left; downloads, extensions and settings on the
++// right. Laid out horizontally when the strip is
+ // expanded and vertically when it is collapsed. New folder, history and
+ // bookmarks are in the strip's right-click menu (it is the strip's
+ // ContextMenuController, see VerticalTabStripRegionView).
+@@ -54,6 +60,7 @@
+   void OnCollapseStateChanged(tabs::VerticalTabStripCollapseState state);
+   void AddPrivacyButton();
+   void ShowPrivacyMenu(views::View* anchor);
++  void UpdateShieldLabel();
+ 
+   std::unique_ptr<ui::SimpleMenuModel> privacy_menu_model_;
+   std::unique_ptr<views::MenuRunner> privacy_menu_runner_;
+@@ -61,6 +68,9 @@
+   std::unique_ptr<views::MenuRunner> strip_menu_runner_;
+ 
+   raw_ptr<BrowserWindowInterface> browser_ = nullptr;
++  raw_ptr<views::LabelButton> shield_ = nullptr;
++  bool collapsed_ = false;
++  PrefChangeRegistrar privacy_registrar_;
+   base::CallbackListSubscription collapsed_state_change_subscription_;
+ };
+ 
+--- a/chrome/browser/ui/views/tabs/vertical/workspace_switcher.cc
++++ b/chrome/browser/ui/views/tabs/vertical/workspace_switcher.cc
+@@ -1,5 +1,6 @@
+ #include "chrome/browser/ui/views/tabs/vertical/workspace_switcher.h"
+ 
++#include <algorithm>
+ #include <utility>
+ 
+ #include "base/functional/bind.h"
+@@ -10,72 +11,85 @@
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "components/prefs/pref_service.h"
+ #include "components/vector_icons/vector_icons.h"
+-#include "cc/paint/paint_flags.h"
+-#include "third_party/skia/include/core/SkColor.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+ #include "ui/base/mojom/menu_source_type.mojom.h"
+ #include "ui/color/color_id.h"
+ #include "ui/color/color_provider.h"
+ #include "ui/events/event_constants.h"
+ #include "ui/events/keycodes/keyboard_codes.h"
+-#include "ui/gfx/canvas.h"
+ #include "ui/gfx/geometry/rect.h"
+ #include "ui/views/controls/button/button.h"
+ #include "ui/views/controls/button/image_button.h"
+ #include "ui/views/controls/button/image_button_factory.h"
++#include "ui/views/controls/button/label_button.h"
++#include "ui/views/controls/focus_ring.h"
++#include "ui/views/controls/highlight_path_generator.h"
++#include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/background.h"
++#include "ui/views/border.h"
++#include "ui/views/layout/flex_layout_types.h"
++#include "ui/gfx/font.h"
++#include "chrome/browser/ui/color/chrome_color_id.h"
+ #include "ui/views/controls/menu/menu_runner.h"
+ #include "ui/views/layout/flex_layout_types.h"
+ #include "ui/views/view_class_properties.h"
+ 
+ namespace {
+ 
+-constexpr int kDotSize = 8;
+-constexpr int kSelectedDotWidth = 20;
+-constexpr int kDotSlotHeight = 24;
+-constexpr int kDotSlotPadding = 8;
++constexpr int kSegmentHeight = 26;
++constexpr int kTrackPadding = 3;
++constexpr int kTrackRadius = 10;
++constexpr int kSegmentRadius = 8;
+ constexpr int kDeleteCommand = 1;
+ 
+-// A simple shape button: a small dot, or a longer pill when selected. Colours
+-// are theme tokens, so they follow the wallpaper theme.
+-class WorkspaceDot : public views::Button {
+-  METADATA_HEADER(WorkspaceDot, views::Button)
++// One named workspace in the segmented row. The selected one is a raised pill
++// in the active-tab colour; all colours are theme tokens (wallpaper theme).
++class WorkspaceSegment : public views::LabelButton {
++  METADATA_HEADER(WorkspaceSegment, views::LabelButton)
+ 
+  public:
+-  WorkspaceDot(PressedCallback callback, bool selected, std::u16string name)
+-      : views::Button(std::move(callback)), selected_(selected) {
+-    SetTooltipText(std::move(name));
+-    SetPreferredSize(gfx::Size(
+-        (selected ? kSelectedDotWidth : kDotSize) + kDotSlotPadding,
+-        kDotSlotHeight));
+-    SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
+-  }
+-
+-  void PaintButtonContents(gfx::Canvas* canvas) override {
+-    cc::PaintFlags flags;
+-    flags.setAntiAlias(true);
+-    SkColor color = GetColorProvider()->GetColor(
+-        selected_ ? ui::kColorSysPrimary : ui::kColorSysOnSurfaceSubtle);
+-    flags.setColor(selected_ ? color : SkColorSetA(color, 0x99));
+-    const int width = selected_ ? kSelectedDotWidth : kDotSize;
+-    gfx::Rect rect(0, 0, width, kDotSize);
+-    rect.set_origin(gfx::Point((this->width() - width) / 2,
+-                               (height() - kDotSize) / 2));
+-    canvas->DrawRoundRect(rect, kDotSize / 2, flags);
++  WorkspaceSegment(PressedCallback callback, bool selected, std::u16string name)
++      : views::LabelButton(std::move(callback), name) {
++    SetTooltipText(name);
++    SetHorizontalAlignment(gfx::ALIGN_CENTER);
++    SetMinSize(gfx::Size(0, kSegmentHeight));
++    SetMaxSize(gfx::Size(0, kSegmentHeight));
++    SetBorder(views::CreateEmptyBorder(gfx::Insets::VH(0, 6)));
++    label()->SetElideBehavior(gfx::ELIDE_TAIL);
++    label()->SetFontList(label()->font_list().DeriveWithWeight(
++        gfx::Font::Weight::SEMIBOLD));
++    SetEnabledTextColors(ui::ColorVariant(selected ? kColorTabForegroundActiveFrameActive
++                                    : kColorTabForegroundInactiveFrameActive));
++    if (selected) {
++      SetBackground(views::CreateRoundedRectBackground(
++          kColorTabBackgroundActiveFrameActive, kSegmentRadius));
++    }
++    GetViewAccessibility().SetIsSelected(selected);
++    views::FocusRing::Get(this)->SetHaloInset(0);
++    views::InstallRoundRectHighlightPathGenerator(this, gfx::Insets(),
++                                                  kSegmentRadius);
+   }
+ 
+- private:
+-  const bool selected_;
++  // Fixed height: squeezed below its label's width, a LabelButton reports a
++  // much taller preferred size, which stretched the whole row.
++  gfx::Size CalculatePreferredSize(
++      const views::SizeBounds& available_size) const override {
++    return gfx::Size(
++        views::LabelButton::CalculatePreferredSize(views::SizeBounds()).width(),
++        kSegmentHeight);
++  }
+ };
+ 
+-BEGIN_METADATA(WorkspaceDot)
++BEGIN_METADATA(WorkspaceSegment)
+ END_METADATA
+ 
+ }  // namespace
+ 
+ WorkspaceSwitcher::WorkspaceSwitcher(BrowserWindowInterface* browser)
+     : browser_(browser) {
+-  SetMainAxisAlignment(views::LayoutAlignment::kCenter);
+-  SetCrossAxisAlignment(views::LayoutAlignment::kCenter);
++  SetBorder(views::CreateEmptyBorder(gfx::Insets(kTrackPadding)));
++  SetBackground(views::CreateRoundedRectBackground(ui::kColorSysStateHoverOnSubtle,
++                                                   kTrackRadius));
+ 
+   PrefService* prefs = browser_->GetProfile()->GetPrefs();
+   pref_registrar_.Init(prefs);
+@@ -88,6 +102,32 @@
+ 
+ WorkspaceSwitcher::~WorkspaceSwitcher() = default;
+ 
++// One row of fixed height whatever the width: equal-width segments (long names
++// elide), then the square "+".
++gfx::Size WorkspaceSwitcher::CalculatePreferredSize(
++    const views::SizeBounds& available_size) const {
++  return gfx::Size(available_size.width().value_or(200),
++                   kSegmentHeight + 2 * kTrackPadding);
++}
++
++void WorkspaceSwitcher::Layout(PassKey) {
++  const gfx::Rect inner = GetContentsBounds();
++  views::View* add = children().empty() ? nullptr : children().back().get();
++  const int segments = static_cast<int>(children().size()) - (add ? 1 : 0);
++  const int add_width = add ? kSegmentHeight : 0;
++  const int segment_width =
++      segments ? std::max(0, inner.width() - add_width) / segments : 0;
++  int x = inner.x();
++  for (int i = 0; i < segments; ++i) {
++    children()[i]->SetBounds(x, inner.y(), segment_width, kSegmentHeight);
++    x += segment_width;
++  }
++  if (add) {
++    add->SetBounds(inner.right() - add_width, inner.y(), add_width,
++                   kSegmentHeight);
++  }
++}
++
+ void WorkspaceSwitcher::AddedToWidget() {
+   AddAccelerator(ui::Accelerator(ui::VKEY_RIGHT,
+                                  ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN));
+@@ -132,7 +172,7 @@
+ 
+   for (const helium_workspaces::Info& info :
+        helium_workspaces::List(profile)) {
+-    auto dot = std::make_unique<WorkspaceDot>(
++    auto dot = std::make_unique<WorkspaceSegment>(
+         base::BindRepeating(
+             [](WorkspaceSwitcher* self, std::string id) {
+               helium_workspaces::Switch(self->browser_, id);
+@@ -151,7 +191,7 @@
+           base::Unretained(this)),
+       vector_icons::kAdd2Icon, 14);
+   add->SetTooltipText(u"New workspace (Ctrl+Alt+Left/Right switches)");
+-  add->SetPreferredSize(gfx::Size(kDotSlotHeight, kDotSlotHeight));
++  add->SetPreferredSize(gfx::Size(kSegmentHeight, kSegmentHeight));
+   AddChildView(std::move(add));
+   InvalidateLayout();
+ }
+--- a/chrome/browser/ui/views/tabs/vertical/workspace_switcher.h
++++ b/chrome/browser/ui/views/tabs/vertical/workspace_switcher.h
+@@ -12,7 +12,7 @@
+ #include "ui/base/metadata/metadata_header_macros.h"
+ #include "ui/menus/simple_menu_model.h"
+ #include "ui/views/context_menu_controller.h"
+-#include "ui/views/layout/flex_layout_view.h"
++#include "ui/views/view.h"
+ 
+ class BrowserWindowInterface;
+ 
+@@ -20,15 +20,15 @@
+ class MenuRunner;
+ }  // namespace views
+ 
+-// A row of dots at the bottom of the sidebar, one per workspace (the selected
+-// one is a longer pill), plus a "+" that creates a workspace. Click a dot to
+-// switch, right-click to delete. Ctrl+Alt+Left/Right cycles workspaces. See
+-// helium_workspaces.h for what switching does.
+-class WorkspaceSwitcher : public views::FlexLayoutView,
++// A segmented row near the top of the sidebar, one named segment per workspace
++// (the selected one is a raised pill), plus a "+" that creates a workspace.
++// Click a segment to switch, right-click to delete. Ctrl+Alt+Left/Right cycles
++// workspaces. See helium_workspaces.h for what switching does.
++class WorkspaceSwitcher : public views::View,
+                           public views::ContextMenuController,
+                           public ui::AcceleratorTarget,
+                           public ui::SimpleMenuModel::Delegate {
+-  METADATA_HEADER(WorkspaceSwitcher, views::FlexLayoutView)
++  METADATA_HEADER(WorkspaceSwitcher, views::View)
+ 
+  public:
+   explicit WorkspaceSwitcher(BrowserWindowInterface* browser);
+@@ -41,6 +41,9 @@
+ 
+   // views::View:
+   void AddedToWidget() override;
++  gfx::Size CalculatePreferredSize(
++      const views::SizeBounds& available_size) const override;
++  void Layout(PassKey) override;
+ 
+   // ui::AcceleratorTarget:
+   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;

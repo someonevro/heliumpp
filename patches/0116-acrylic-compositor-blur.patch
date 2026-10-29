@@ -1,0 +1,430 @@
+--- a/chrome/browser/ui/views/frame/browser_desktop_window_tree_host_linux.cc
++++ b/chrome/browser/ui/views/frame/browser_desktop_window_tree_host_linux.cc
+@@ -15,6 +15,10 @@
+ #include "chrome/browser/ui/views/frame/browser_native_widget_aura_linux.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/frame/safe_invoke/safe_invoke.h"
++#include "chrome/browser/ui/views/helium/native_frame_materials.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/common/pref_names.h"
++#include "components/prefs/pref_service.h"
+ #include "chrome/browser/ui/views/tabs/dragging/tab_drag_controller.h"
+ #include "chrome/browser/ui/views/tabs/tab_strip.h"
+ #include "third_party/abseil-cpp/absl/container/flat_hash_set.h"
+@@ -85,6 +89,12 @@
+   if (auto* linux_ui = ui::LinuxUi::instance()) {
+     scale_observation_.Observe(linux_ui);
+   }
++
++  acrylic_pref_registrar_.Init(browser_view->GetProfile()->GetPrefs());
++  acrylic_pref_registrar_.Add(
++      prefs::kHeliumNativeFrameMaterials,
++      base::BindRepeating(&BrowserDesktopWindowTreeHostLinux::UpdateFrameHints,
++                          base::Unretained(this)));
+ }
+ 
+ BrowserDesktopWindowTreeHostLinux::~BrowserDesktopWindowTreeHostLinux() {
+@@ -194,6 +204,14 @@
+       opaque_region.push_back(
+           gfx::ScaleToEnclosingRect(opaque_region_dip, scale));
+     }
++    // Acrylic window: nothing is opaque, and the compositor blurs what is
++    // behind the visible window instead (KWin; plain see-through elsewhere).
++    if (helium::ShouldUseNativeFrameMaterials(browser_view_)) {
++      window->SetBlurRegion(opaque_region);
++      opaque_region.clear();
++    } else {
++      window->SetBlurRegion(std::nullopt);
++    }
+     window->SetOpaqueRegion(opaque_region);
+   }
+ 
+--- a/chrome/browser/ui/views/frame/browser_desktop_window_tree_host_linux.h
++++ b/chrome/browser/ui/views/frame/browser_desktop_window_tree_host_linux.h
+@@ -8,6 +8,7 @@
+ #include "base/memory/raw_ptr.h"
+ #include "build/build_config.h"
+ #include "build/config/linux/dbus/buildflags.h"
++#include "components/prefs/pref_change_registrar.h"
+ #include "chrome/browser/ui/views/frame/browser_desktop_window_tree_host.h"
+ #include "ui/base/mojom/window_show_state.mojom-forward.h"
+ #include "ui/linux/device_scale_factor_observer.h"
+@@ -109,6 +110,9 @@
+ 
+   base::ScopedObservation<ui::LinuxUi, ui::DeviceScaleFactorObserver>
+       scale_observation_{this};
++
++  // Acrylic window on/off changes the opaque and blur regions.
++  PrefChangeRegistrar acrylic_pref_registrar_;
+ };
+ 
+ #endif  // CHROME_BROWSER_UI_VIEWS_FRAME_BROWSER_DESKTOP_WINDOW_TREE_HOST_LINUX_H_
+--- a/chrome/browser/ui/views/frame/opaque_browser_frame_view.cc
++++ b/chrome/browser/ui/views/frame/opaque_browser_frame_view.cc
+@@ -818,7 +818,8 @@
+   // Acrylic window: the other surfaces skip their backgrounds, so this tint is
+   // all that covers the desktop (which compositors like Hyprland blur).
+   if (helium::ShouldUseNativeFrameMaterials(GetBrowserView())) {
+-    frame_color = SkColorSetA(frame_color, 0xB8);
++    // 55%: light enough for the compositor's blur to read as frosted glass.
++    frame_color = SkColorSetA(frame_color, 0x8C);
+   }
+   if (window_title_) {
+     window_title_->SetEnabledColor(
+--- a/third_party/wayland-protocols/BUILD.gn
++++ b/third_party/wayland-protocols/BUILD.gn
+@@ -140,6 +140,10 @@
+   sources = [ "unstable/secure-output/secure-output-unstable-v1.xml" ]
+ }
+ 
++wayland_protocol("ext_background_effect") {
++  sources = [ "src/staging/ext-background-effect/ext-background-effect-v1.xml" ]
++}
++
+ wayland_protocol("single_pixel_buffer") {
+   sources = [ "src/staging/single-pixel-buffer/single-pixel-buffer-v1.xml" ]
+ }
+--- a/ui/ozone/platform/wayland/BUILD.gn
++++ b/ui/ozone/platform/wayland/BUILD.gn
+@@ -70,6 +70,8 @@
+     "host/overlay_prioritizer.h",
+     "host/single_pixel_buffer.cc",
+     "host/single_pixel_buffer.h",
++    "host/background_effect_manager.cc",
++    "host/background_effect_manager.h",
+     "host/span_style.h",
+     "host/toplevel_icon_manager.cc",
+     "host/toplevel_icon_manager.h",
+@@ -276,6 +278,7 @@
+     "//third_party/wayland-protocols:primary_selection_protocol",
+     "//third_party/wayland-protocols:relative_pointer_protocol",
+     "//third_party/wayland-protocols:single_pixel_buffer",
++    "//third_party/wayland-protocols:ext_background_effect",
+     "//third_party/wayland-protocols:tablet_protocol",
+     "//third_party/wayland-protocols:text_input_protocol",
+     "//third_party/wayland-protocols:viewporter_protocol",
+--- a/ui/ozone/platform/wayland/common/wayland_object.cc
++++ b/ui/ozone/platform/wayland/common/wayland_object.cc
+@@ -9,6 +9,7 @@
+ #include <color-management-v1-client-protocol.h>
+ #include <content-type-v1-client-protocol.h>
+ #include <cursor-shape-v1-client-protocol.h>
++#include <ext-background-effect-v1-client-protocol.h>
+ #include <ext-idle-notify-v1-client-protocol.h>
+ #include <extended-drag-unstable-v1-client-protocol.h>
+ #include <fractional-scale-v1-client-protocol.h>
+@@ -150,6 +151,8 @@
+   IMPLEMENT_WAYLAND_OBJECT_TRAITS_WITH_DELETER(TYPE, TYPE##_destroy)
+ 
+ // For convenience, keep aphabetical order in this list.
++IMPLEMENT_WAYLAND_OBJECT_TRAITS(ext_background_effect_manager_v1)
++IMPLEMENT_WAYLAND_OBJECT_TRAITS(ext_background_effect_surface_v1)
+ IMPLEMENT_WAYLAND_OBJECT_TRAITS(ext_idle_notifier_v1)
+ IMPLEMENT_WAYLAND_OBJECT_TRAITS(ext_idle_notification_v1)
+ IMPLEMENT_WAYLAND_OBJECT_TRAITS(gtk_primary_selection_device)
+--- a/ui/ozone/platform/wayland/common/wayland_object.h
++++ b/ui/ozone/platform/wayland/common/wayland_object.h
+@@ -103,6 +103,8 @@
+   }  // namespace wl
+ 
+ // For convenience, keep aphabetical order in this list.
++DECLARE_WAYLAND_OBJECT_TRAITS(ext_background_effect_manager_v1)
++DECLARE_WAYLAND_OBJECT_TRAITS(ext_background_effect_surface_v1)
+ DECLARE_WAYLAND_OBJECT_TRAITS(ext_idle_notifier_v1)
+ DECLARE_WAYLAND_OBJECT_TRAITS(ext_idle_notification_v1)
+ DECLARE_WAYLAND_OBJECT_TRAITS(gtk_primary_selection_device)
+--- a/ui/ozone/platform/wayland/host/wayland_connection.cc
++++ b/ui/ozone/platform/wayland/host/wayland_connection.cc
+@@ -38,6 +38,7 @@
+ #include "ui/ozone/platform/wayland/host/overlay_prioritizer.h"
+ #include "ui/ozone/platform/wayland/host/proxy/wayland_proxy_impl.h"
+ #include "ui/ozone/platform/wayland/host/single_pixel_buffer.h"
++#include "ui/ozone/platform/wayland/host/background_effect_manager.h"
+ #include "ui/ozone/platform/wayland/host/toplevel_icon_manager.h"
+ #include "ui/ozone/platform/wayland/host/wayland_buffer_factory.h"
+ #include "ui/ozone/platform/wayland/host/wayland_buffer_manager_host.h"
+@@ -166,6 +167,8 @@
+                               &OverlayPrioritizer::Instantiate);
+   RegisterGlobalObjectFactory(SinglePixelBuffer::kInterfaceName,
+                               &SinglePixelBuffer::Instantiate);
++  RegisterGlobalObjectFactory(BackgroundEffectManager::kInterfaceName,
++                              &BackgroundEffectManager::Instantiate);
+   RegisterGlobalObjectFactory(ToplevelIconManager::kInterfaceName,
+                               &ToplevelIconManager::Instantiate);
+   RegisterGlobalObjectFactory(WaylandCursorShape::kInterfaceName,
+--- a/ui/ozone/platform/wayland/host/wayland_connection.h
++++ b/ui/ozone/platform/wayland/host/wayland_connection.h
+@@ -46,6 +46,7 @@
+ class OrgKdeKwinIdle;
+ class OverlayPrioritizer;
+ class SinglePixelBuffer;
++class BackgroundEffectManager;
+ class WaylandBufferFactory;
+ class WaylandBufferManagerHost;
+ class WaylandClipboard;
+@@ -247,6 +248,10 @@
+     return single_pixel_buffer_.get();
+   }
+ 
++  BackgroundEffectManager* background_effect_manager() const {
++    return background_effect_manager_.get();
++  }
++
+   XdgSessionManager* session_manager() { return session_manager_.get(); }
+ 
+   // Returns whether protocols that support setting window geometry are
+@@ -323,6 +328,7 @@
+   friend class OrgKdeKwinIdle;
+   friend class OverlayPrioritizer;
+   friend class SinglePixelBuffer;
++  friend class BackgroundEffectManager;
+   friend class ToplevelIconManager;
+   friend class WaylandCursorFactory;
+   friend class WaylandDataDeviceManager;
+@@ -464,6 +470,7 @@
+   std::unique_ptr<ExtIdleNotifier> ext_idle_notifier_;
+   std::unique_ptr<OverlayPrioritizer> overlay_prioritizer_;
+   std::unique_ptr<SinglePixelBuffer> single_pixel_buffer_;
++  std::unique_ptr<BackgroundEffectManager> background_effect_manager_;
+ 
+   // Clipboard-related objects. |clipboard_| must be declared after all
+   // DeviceManager instances it depends on, otherwise tests may crash with
+--- a/ui/ozone/platform/wayland/host/wayland_surface.h
++++ b/ui/ozone/platform/wayland/host/wayland_surface.h
+@@ -58,6 +58,11 @@
+     return overlay_priority_surface_.get();
+   }
+   wl_surface* surface() const { return surface_.get(); }
++
++  // A wl_region in this surface's coordinates from `region_px`.
++  wl::Object<wl_region> CreateRegion(const std::vector<gfx::Rect>& region_px) {
++    return CreateAndAddRegion(region_px, GetWaylandScale(state_));
++  }
+   wp_viewport* viewport() const { return viewport_.get(); }
+   zcr_blending_v1* blending() const { return blending_.get(); }
+ 
+--- a/ui/ozone/platform/wayland/host/wayland_toplevel_window.cc
++++ b/ui/ozone/platform/wayland/host/wayland_toplevel_window.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "ui/ozone/platform/wayland/host/wayland_toplevel_window.h"
+ 
++#include <ext-background-effect-v1-client-protocol.h>
++
+ #include <string>
+ 
+ #include "base/logging.h"
+@@ -24,6 +26,7 @@
+ #include "ui/ozone/platform/wayland/host/org_kde_kwin_appmenu.h"
+ #include "ui/ozone/platform/wayland/host/wayland_bubble.h"
+ #include "ui/ozone/platform/wayland/host/wayland_buffer_manager_host.h"
++#include "ui/ozone/platform/wayland/host/background_effect_manager.h"
+ #include "ui/ozone/platform/wayland/host/wayland_connection.h"
+ #include "ui/ozone/platform/wayland/host/wayland_data_drag_controller.h"
+ #include "ui/ozone/platform/wayland/host/wayland_event_source.h"
+@@ -446,6 +449,24 @@
+   root_surface()->set_opaque_region(region_px);
+ }
+ 
++void WaylandToplevelWindow::SetBlurRegion(
++    std::optional<std::vector<gfx::Rect>> region_px) {
++  auto* manager = connection()->background_effect_manager();
++  if (!manager || (!background_effect_ && !region_px)) {
++    return;
++  }
++  if (!background_effect_) {
++    background_effect_ = manager->GetEffect(root_surface()->surface());
++  }
++  // Double-buffered: applies with the surface's next commit.
++  wl::Object<wl_region> region;
++  if (region_px) {
++    region = root_surface()->CreateRegion(*region_px);
++  }
++  ext_background_effect_surface_v1_set_blur_region(background_effect_.get(),
++                                                   region.get());
++}
++
+ void WaylandToplevelWindow::SetInputRegion(
+     std::optional<std::vector<gfx::Rect>> region_px) {
+   input_region_px_ = region_px;
+--- a/ui/ozone/platform/wayland/host/wayland_toplevel_window.h
++++ b/ui/ozone/platform/wayland/host/wayland_toplevel_window.h
+@@ -118,6 +118,7 @@
+   void SetOpaqueRegion(
+       std::optional<std::vector<gfx::Rect>> region_px) override;
+   void SetInputRegion(std::optional<std::vector<gfx::Rect>> region_px) override;
++  void SetBlurRegion(std::optional<std::vector<gfx::Rect>> region_px) override;
+   bool IsClientControlledWindowMovementSupported() const override;
+ 
+   // WmMoveLoopHandler:
+@@ -251,6 +252,8 @@
+ 
+   std::optional<std::vector<gfx::Rect>> opaque_region_px_;
+   std::optional<std::vector<gfx::Rect>> input_region_px_;
++  // Compositor blur behind the window (acrylic); created on first use.
++  wl::Object<ext_background_effect_surface_v1> background_effect_;
+ 
+   // Current modal status.
+   bool system_modal_ = false;
+--- a/ui/ozone/platform/x11/x11_window.cc
++++ b/ui/ozone/platform/x11/x11_window.cc
+@@ -1177,6 +1177,23 @@
+   connection_->SetArrayProperty(xwindow_, atom, x11::Atom::CARDINAL, value);
+ }
+ 
++// KWin's blur on X11; other window managers ignore the property.
++void X11Window::SetBlurRegion(std::optional<std::vector<gfx::Rect>> region_px) {
++  auto atom = x11::GetAtom("_KDE_NET_WM_BLUR_BEHIND_REGION");
++  if (!region_px) {
++    connection_->DeleteProperty(xwindow_, atom);
++    return;
++  }
++  std::vector<uint32_t> value;
++  for (const auto& rect : *region_px) {
++    value.push_back(rect.x());
++    value.push_back(rect.y());
++    value.push_back(rect.width());
++    value.push_back(rect.height());
++  }
++  connection_->SetArrayProperty(xwindow_, atom, x11::Atom::CARDINAL, value);
++}
++
+ void X11Window::SetInputRegion(
+     std::optional<std::vector<gfx::Rect>> region_px) {
+   if (!region_px.has_value() || region_px->empty()) {
+--- a/ui/ozone/platform/x11/x11_window.h
++++ b/ui/ozone/platform/x11/x11_window.h
+@@ -136,6 +136,7 @@
+   void SetOpaqueRegion(
+       std::optional<std::vector<gfx::Rect>> region_px) override;
+   void SetInputRegion(std::optional<std::vector<gfx::Rect>> region_px) override;
++  void SetBlurRegion(std::optional<std::vector<gfx::Rect>> region_px) override;
+   void NotifyStartupComplete(const std::string& startup_id) override;
+ 
+   // WorkspaceExtension:
+--- a/ui/platform_window/platform_window.cc
++++ b/ui/platform_window/platform_window.cc
+@@ -67,6 +67,9 @@
+ void PlatformWindow::SetOpaqueRegion(
+     std::optional<std::vector<gfx::Rect>> region_px) {}
+ 
++void PlatformWindow::SetBlurRegion(
++    std::optional<std::vector<gfx::Rect>> region_px) {}
++
+ void PlatformWindow::SetInputRegion(
+     std::optional<std::vector<gfx::Rect>> region_px) {}
+ 
+--- a/ui/platform_window/platform_window.h
++++ b/ui/platform_window/platform_window.h
+@@ -188,6 +188,10 @@
+   // existing region will be reset.
+   virtual void SetOpaqueRegion(std::optional<std::vector<gfx::Rect>> region_px);
+ 
++  // Asks the compositor to blur what is behind `region_px` of a translucent
++  // window, where it can (KWin, ...); nullopt removes the blur.
++  virtual void SetBlurRegion(std::optional<std::vector<gfx::Rect>> region_px);
++
+   // Sets the clickable region of a window.  This is useful for trimming down a
+   // potentially large (24px) hit area for window resizing on the window shadow
+   // to a more reasonable (10px) area.  If |region_px| is nullopt, then any
+--- /dev/null
++++ b/ui/ozone/platform/wayland/host/background_effect_manager.h
+@@ -0,0 +1,43 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef UI_OZONE_PLATFORM_WAYLAND_HOST_BACKGROUND_EFFECT_MANAGER_H_
++#define UI_OZONE_PLATFORM_WAYLAND_HOST_BACKGROUND_EFFECT_MANAGER_H_
++
++#include <string>
++
++#include "ui/ozone/platform/wayland/common/wayland_object.h"
++
++namespace ui {
++
++class WaylandConnection;
++
++// ext-background-effect-v1: asks the compositor (KWin 6.5+ and others) to blur
++// what is behind a translucent surface, for the acrylic window.
++class BackgroundEffectManager
++    : public wl::GlobalObjectRegistrar<BackgroundEffectManager> {
++ public:
++  static constexpr char kInterfaceName[] = "ext_background_effect_manager_v1";
++
++  static void Instantiate(WaylandConnection* connection,
++                          wl_registry* registry,
++                          uint32_t name,
++                          const std::string& interface,
++                          uint32_t version);
++
++  explicit BackgroundEffectManager(ext_background_effect_manager_v1* manager);
++  BackgroundEffectManager(const BackgroundEffectManager&) = delete;
++  BackgroundEffectManager& operator=(const BackgroundEffectManager&) = delete;
++  ~BackgroundEffectManager();
++
++  // At most one per surface (a protocol error otherwise).
++  wl::Object<ext_background_effect_surface_v1> GetEffect(wl_surface* surface);
++
++ private:
++  wl::Object<ext_background_effect_manager_v1> manager_;
++};
++
++}  // namespace ui
++
++#endif  // UI_OZONE_PLATFORM_WAYLAND_HOST_BACKGROUND_EFFECT_MANAGER_H_
+--- /dev/null
++++ b/ui/ozone/platform/wayland/host/background_effect_manager.cc
+@@ -0,0 +1,52 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "ui/ozone/platform/wayland/host/background_effect_manager.h"
++
++#include <ext-background-effect-v1-client-protocol.h>
++
++#include "base/logging.h"
++#include "ui/ozone/platform/wayland/host/wayland_connection.h"
++
++namespace ui {
++
++namespace {
++constexpr uint32_t kVersion = 1;
++}
++
++// static
++void BackgroundEffectManager::Instantiate(WaylandConnection* connection,
++                                          wl_registry* registry,
++                                          uint32_t name,
++                                          const std::string& interface,
++                                          uint32_t version) {
++  CHECK_EQ(interface, kInterfaceName);
++  if (connection->background_effect_manager_ ||
++      !wl::CanBind(interface, version, kVersion, kVersion)) {
++    return;
++  }
++  auto manager =
++      wl::Bind<ext_background_effect_manager_v1>(registry, name, kVersion);
++  if (!manager) {
++    LOG(ERROR) << "Failed to bind " << kInterfaceName;
++    return;
++  }
++  connection->background_effect_manager_ =
++      std::make_unique<BackgroundEffectManager>(manager.release());
++}
++
++BackgroundEffectManager::BackgroundEffectManager(
++    ext_background_effect_manager_v1* manager)
++    : manager_(manager) {}
++
++BackgroundEffectManager::~BackgroundEffectManager() = default;
++
++wl::Object<ext_background_effect_surface_v1> BackgroundEffectManager::GetEffect(
++    wl_surface* surface) {
++  return wl::Object<ext_background_effect_surface_v1>(
++      ext_background_effect_manager_v1_get_background_effect(manager_.get(),
++                                                             surface));
++}
++
++}  // namespace ui

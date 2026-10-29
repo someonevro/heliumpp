@@ -1,0 +1,89 @@
+--- a/chrome/browser/resources/new_tab_page/app.css
++++ b/chrome/browser/resources/new_tab_page/app.css
+@@ -758,7 +758,9 @@
+ }
+ 
+ #privacyNote {
+-  color: var(--color-new-tab-page-secondary-foreground);
++  /* Tinted from the foreground: the secondary grey measured 3.3:1 on the sky, 82% still 4.1:1. */
++  color: color-mix(in srgb, var(--color-new-tab-page-primary-foreground) 94%,
++                   transparent);
+   font-size: 13px;
+   margin-top: 10px;
+   min-height: 1.4em;
+@@ -827,7 +829,8 @@
+ }
+ 
+ #performanceRow .desc {
+-  color: var(--color-new-tab-page-secondary-foreground);
++  color: color-mix(in srgb, var(--color-new-tab-page-primary-foreground) 94%,
++                   transparent);
+   font-size: 12px;
+   grid-column: 1 / -1;
+ }
+--- a/chrome/browser/ui/views/frame/opaque_browser_frame_view.cc
++++ b/chrome/browser/ui/views/frame/opaque_browser_frame_view.cc
+@@ -66,6 +66,7 @@
+ #include "ui/views/window/vector_icons/vector_icons.h"
+ #include "ui/views/window/window_shape.h"
+ #include "chrome/browser/ui/views/helium/native_frame_materials.h"
++#include "ui/gfx/color_utils.h"
+ 
+ #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+ #include "ui/views/controls/menu/menu_runner.h"
+@@ -818,8 +819,11 @@
+   // Acrylic window: the other surfaces skip their backgrounds, so this tint is
+   // all that covers the desktop (which compositors like Hyprland blur).
+   if (helium::ShouldUseNativeFrameMaterials(GetBrowserView())) {
+-    // 55%: light enough for the compositor's blur to read as frosted glass.
+-    frame_color = SkColorSetA(frame_color, 0x8C);
++    // Light enough for the compositor's blur to read as frosted glass, dense
++    // enough that dark tab text keeps ~4.5:1 over a dark wallpaper (a light
++    // frame needs more: 55% measured 2.7:1 over dark mountains).
++    frame_color = SkColorSetA(frame_color,
++                              color_utils::IsDark(frame_color) ? 0x8C : 0xBC);
+   }
+   if (window_title_) {
+     window_title_->SetEnabledColor(
+--- a/chrome/browser/ui/views/tabs/common/tab_view_vertical_layout.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_view_vertical_layout.cc
+@@ -49,9 +49,14 @@
+     const views::SizeBounds& size_bounds) const {
+   const int width = size_bounds.width().value_or(
+       VerticalTabStripRegionView::kUncollapsedMaxWidth);
+-  const int height = GetLayoutConstant(
+-      TabView().pinned_ ? LayoutConstant::kVerticalTabPinnedHeight
+-                        : LayoutConstant::kVerticalTabHeight);
++  // Helium++: essentials tiles are sized by the pinned container (up to 48 px
++  // tall); lay out in that real height so the icon is centred in the tile.
++  const int height =
++      TabView().pinned_ && size_bounds.height().is_bounded()
++          ? size_bounds.height().value()
++          : GetLayoutConstant(TabView().pinned_
++                                  ? LayoutConstant::kVerticalTabPinnedHeight
++                                  : LayoutConstant::kVerticalTabHeight);
+   views::ProposedLayout layouts;
+   layouts.host_size = gfx::Size(width, height);
+ 
+--- a/chrome/browser/ui/views/tabs/vertical/vertical_new_tab_button.cc
++++ b/chrome/browser/ui/views/tabs/vertical/vertical_new_tab_button.cc
+@@ -24,7 +24,8 @@
+           GetLayoutConstant(LayoutConstant::kVerticalTabStripNewTabButtonSize),
+           kIconSize) {
+   SetCornerRadius(GetLayoutConstant(LayoutConstant::kVerticalTabCornerRadius));
+-  SetForegroundColorId(kColorToolbarButtonIconDisabled);
++  // Helium++: the disabled colour measured 1.75:1; this is a real control.
++  SetForegroundColorId(kColorToolbarButtonIcon);
+   SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
+   SetLabelInsets(gfx::Insets::VH(kBasePadding, kBigPadding),
+                  gfx::Insets::VH(kBasePadding, kBigPadding));
+--- a/components/helium_onboarding/src/pages/Welcome.svelte
++++ b/components/helium_onboarding/src/pages/Welcome.svelte
+@@ -173,6 +173,7 @@
+ 
+     #welcome-text p {
+         font-size: 21px;
++        line-height: 1.4;
+         max-width: 500px;
+     }
+ 

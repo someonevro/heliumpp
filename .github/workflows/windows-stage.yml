@@ -38,17 +38,17 @@ jobs:
       finished: ${{ steps.stage.outputs.finished }}
       packaged: ${{ steps.package.outputs.packaged }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: imputnet/helium-windows
-          ref: 11a292ea63c107e8ed7f5edb5883df10f977b845  # Helium 0.19.4.1 (helium-chromium 832faa7)
+          ref: 40061d59271a71c562eeef8d728b766f1bed0579  # Helium 0.20.2.1 (helium-chromium 58261a2)
           submodules: recursive
           persist-credentials: false
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           path: heliumpp
           persist-credentials: false
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: bonjourr
           path: heliumpp/build/bonjourr
@@ -77,7 +77,7 @@ jobs:
           Set-Content $f $t -NoNewline
       # build.py --ci skips all setup when build\src exists and goes straight to compiling, so an
       # earlier run's tree plus new patches only recompiles what the patches touch.
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         if: inputs.resume-run != ''
         with:
           name: build-artifact-x86_64
@@ -118,7 +118,7 @@ jobs:
           python heliumpp\windows\make_packages.py . C:\heliumpp-out
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           "packaged=true" >> $env:GITHUB_OUTPUT
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: steps.package.outputs.packaged == 'true'
         with:
           name: heliumpp-windows-x64

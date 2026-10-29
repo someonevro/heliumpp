@@ -1,0 +1,15 @@
+[
+ {"id":"home","name":"Home","tabs":[],"groups":[]},
+ {"id":"work","name":"Work","groups":[{"title":"Project board","color":1,"collapsed":false},{"title":"Recipes","color":3,"collapsed":true}],
+  "tabs":[
+   {"url":"https://github.com/","pinned":true},
+   {"url":"https://www.youtube.com/","pinned":true},
+   {"url":"https://en.wikipedia.org/wiki/Main_Page","pinned":true},
+   {"url":"https://archlinux.org/","pinned":false},
+   {"url":"https://developer.mozilla.org/en-US/","pinned":false},
+   {"url":"https://news.ycombinator.com/","pinned":false,"group":0},
+   {"url":"https://www.rust-lang.org/","pinned":false,"group":0},
+   {"url":"https://www.bbcgoodfood.com/","pinned":false,"group":1},
+   {"url":"chrome://newtab/","pinned":false}]},
+ {"id":"study","name":"Study","tabs":[],"groups":[]}
+]

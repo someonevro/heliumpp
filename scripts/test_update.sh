@@ -16,10 +16,20 @@ http.server.ThreadingHTTPServer(("127.0.0.1", int(sys.argv[1])), functools.parti
 ' $port "$t/www" >/dev/null 2>"$t/server.log" & srv=$!
 trap 'kill $srv 2>/dev/null' EXIT; sleep 1
 fail=0
+# Same manifest as scripts/release_sign.sh, signed with the test-only key (scripts/test_update_signing.pem),
+# never the release key; the browser accepts this key only together with --helium-update-target.
+sign() { # <appimage> <base-url>
+  local f="$1" ver sha size
+  ver="$(basename "$f" | grep -oE '[0-9]+(\.[0-9]+){3}')"; sha="$(sha256sum "$f" | cut -d' ' -f1)"; size="$(stat -c %s "$f")"
+  printf 'heliumpp-update-v1\n%s\n%s\n%s\n' "$ver" "$sha" "$size" > "$t/msg"
+  sig="$(openssl pkeyutl -sign -rawin -inkey "$root/scripts/test_update_signing.pem" -in "$t/msg" | od -An -v -tx1 | tr -d " \n")"
+  printf '{"version":"%s","url":"%s/%s","sha256":"%s","size":%s,"signature":"%s"}\n' \
+    "$ver" "${2%/}" "$(basename "$f")" "$sha" "$size" "$sig" > "$(dirname "$f")/latest.json"
+}
 run() { # name, expect "replaced"|"unchanged"
   head -c 3000000 /dev/urandom > "$t/www/$IMG"
   echo old > "$t/target"; before="$(sha256sum "$t/target" | cut -d' ' -f1)"
-  "$root/scripts/release_sign.sh" sign "$t/www/$IMG" "http://127.0.0.1:$port" >/dev/null
+  sign "$t/www/$IMG" "http://127.0.0.1:$port" >/dev/null
   [ -z "${MUTATE:-}" ] || eval "$MUTATE"
   XDG_CONFIG_HOME="$root/build/xdg/config" XDG_CACHE_HOME="$root/build/xdg/cache" "$root/build/src/out/Default/helium" \
     --user-data-dir="$t/profile" --headless=new --no-first-run --no-sandbox --disable-gpu --remote-debugging-port=9333 \
@@ -29,7 +39,7 @@ run() { # name, expect "replaced"|"unchanged"
   kill $bpid 2>/dev/null; wait $bpid 2>/dev/null; sleep 1
   after="$(sha256sum "$t/target" | cut -d' ' -f1)"; want="$(sha256sum "$t/www/$IMG" | cut -d' ' -f1)"
   if [ "$2" = replaced ]; then [ "$after" = "$want" ] && [ -x "$t/target" ] && r=PASS || r=FAIL
-  else [ "$after" = "$before" ] && [ ! -e "$t/target.new" ] && r=PASS || r=FAIL; fi
+  else [ "$after" = "$before" ] && ! compgen -G "$t/target.new*" >/dev/null && r=PASS || r=FAIL; fi
   [ $r = PASS ] || fail=1; echo "$r $1 (expected $2)"
 }
 IMG=heliumpp-9.0.0.0-x86_64.AppImage MUTATE= run newer replaced
@@ -40,7 +50,7 @@ IMG=heliumpp-0.0.0.1-x86_64.AppImage MUTATE= run older unchanged
 # Closing About mid-download must free the updater: reopening About downloads again (it used to
 # say "already downloading" until restart).
 head -c 40000000 /dev/urandom > "$t/www/heliumpp-9.0.0.2-x86_64.AppImage"
-"$root/scripts/release_sign.sh" sign "$t/www/heliumpp-9.0.0.2-x86_64.AppImage" "http://127.0.0.1:$port" >/dev/null
+sign "$t/www/heliumpp-9.0.0.2-x86_64.AppImage" "http://127.0.0.1:$port" >/dev/null
 echo old > "$t/target"
 XDG_CONFIG_HOME="$root/build/xdg/config" XDG_CACHE_HOME="$root/build/xdg/cache" "$root/build/src/out/Default/helium" \
   --user-data-dir="$t/profile" --headless=new --no-first-run --no-sandbox --disable-gpu --remote-debugging-port=9333 \
@@ -56,7 +66,7 @@ grep -q "Updating" "$t/closed1.txt" && grep -q "Nearly up to date" "$t/closed2.t
 # A second About tab opened mid-download follows its progress, and is told when the first tab
 # closes and stops the download (it used to show "Updating" forever).
 head -c 40000000 /dev/urandom > "$t/www/heliumpp-9.0.0.3-x86_64.AppImage"
-"$root/scripts/release_sign.sh" sign "$t/www/heliumpp-9.0.0.3-x86_64.AppImage" "http://127.0.0.1:$port" >/dev/null
+sign "$t/www/heliumpp-9.0.0.3-x86_64.AppImage" "http://127.0.0.1:$port" >/dev/null
 echo old > "$t/target"
 XDG_CONFIG_HOME="$root/build/xdg/config" XDG_CACHE_HOME="$root/build/xdg/cache" "$root/build/src/out/Default/helium" \
   --user-data-dir="$t/profile" --headless=new --no-first-run --no-sandbox --disable-gpu --remote-debugging-port=9333 \

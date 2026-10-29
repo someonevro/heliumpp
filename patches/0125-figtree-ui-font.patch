@@ -1,0 +1,102 @@
+--- a/components/helium_onboarding/src/app.css
++++ b/components/helium_onboarding/src/app.css
+@@ -1,13 +1,13 @@
+ /* Helium++ UI font (served to WebUI pages only); the bundled font stays as fallback. */
+ @font-face {
+-    font-family: "Satoshi";
++    font-family: "Figtree";
+     font-style: normal;
+     font-weight: 300 900;
+-    src: url(chrome://resources/fonts/Satoshi-Variable.ttf) format("truetype");
++    src: url(chrome://resources/fonts/Figtree-Variable.ttf) format("truetype");
+ }
+ 
+ :root {
+-    --font: "Satoshi", "Instrument Sans Variable", system-ui, Helvetica, Arial, sans-serif;
++    --font: "Figtree", "Instrument Sans Variable", system-ui, Helvetica, Arial, sans-serif;
+ 
+     --page-scroll-gradient-mask: linear-gradient(
+         to bottom,
+--- a/content/browser/webui/shared_resources_data_source.cc
++++ b/content/browser/webui/shared_resources_data_source.cc
+@@ -58,11 +58,11 @@
+ 
+ namespace {
+ 
+-// Helium++ UI font (Satoshi) for WebUI pages: served from <exe dir>/fonts as
++// Helium++ UI font (Figtree, OFL) for WebUI pages: served from <exe dir>/fonts as
+ // chrome://resources/fonts/<file>. Web pages cannot load chrome:// URLs, so the
+ // font stays out of reach of websites (license, fingerprinting).
+-constexpr const char* kUiFontFiles[] = {"fonts/Satoshi-Variable.ttf",
+-                                        "fonts/Satoshi-VariableItalic.ttf"};
++constexpr const char* kUiFontFiles[] = {"fonts/Figtree-Variable.ttf",
++                                        "fonts/Figtree-VariableItalic.ttf"};
+ 
+ bool IsUiFontPath(const std::string& path) {
+   return std::ranges::find(kUiFontFiles, path) != std::end(kUiFontFiles);
+--- a/skia/ext/font_utils.cc
++++ b/skia/ext/font_utils.cc
+@@ -146,14 +146,14 @@
+   }
+   // FILE_PATH_LITERAL: FilePath is wide on Windows.
+   return exe.Append(FILE_PATH_LITERAL("fonts"))
+-      .Append(italic ? FILE_PATH_LITERAL("Satoshi-VariableItalic.ttf")
+-                     : FILE_PATH_LITERAL("Satoshi-Variable.ttf"));
++      .Append(italic ? FILE_PATH_LITERAL("Figtree-VariableItalic.ttf")
++                     : FILE_PATH_LITERAL("Figtree-Variable.ttf"));
+ }
+ 
+ // One instance of the variable font per (weight, italic), created on first use.
+ sk_sp<SkTypeface> UiTypeface(SkFontMgr* fm, SkFontStyle style) {
+   const bool italic = style.slant() != SkFontStyle::kUpright_Slant;
+-  // Satoshi's 400 is light at UI sizes (12-14 px); nudge regular text up a little.
++  // Figtree's 400 is light at UI sizes (12-14 px); nudge regular text up a little.
+   int weight = style.weight() == SkFontStyle::kNormal_Weight ? 450 : style.weight();
+   weight = std::clamp(weight, 300, 900);
+   static base::NoDestructor<base::Lock> lock;
+--- a/skia/ext/font_utils.h
++++ b/skia/ext/font_utils.h
+@@ -30,7 +30,7 @@
+ 
+ // Helium++ UI font. Loaded from <exe dir>/fonts by MakeTypefaceFromName only, never
+ // registered with fontconfig, so web pages cannot see or use it.
+-inline constexpr char kUiFontFamily[] = "Satoshi";
++inline constexpr char kUiFontFamily[] = "Figtree";
+ // True if the UI font files are present next to the executable (Linux only).
+ SK_API bool HasUiFont();
+ 
+--- a/ui/base/webui/web_ui_util.cc
++++ b/ui/base/webui/web_ui_util.cc
+@@ -46,7 +46,7 @@
+ std::string GetFontFamilyMd() {
+ #if BUILDFLAG(IS_LINUX)
+   const std::string family = GetFontFamily();
+-  return family.starts_with("\"Satoshi\"") ? family : "Roboto, " + family;
++  return family.starts_with("\"Figtree\"") ? family : "Roboto, " + family;
+ #else
+   return GetFontFamily();
+ #endif
+--- a/ui/webui/resources/css/text_defaults_md.css
++++ b/ui/webui/resources/css/text_defaults_md.css
+@@ -39,17 +39,17 @@
+ /* Helium++ UI font, served to WebUI pages only (shared_resources_data_source.cc).
+    Without the file the requests fail and the next font in the list is used. */
+ @font-face {
+-  font-family: 'Satoshi';
++  font-family: 'Figtree';
+   font-style: normal;
+   font-weight: 300 900;
+-  src: url(../fonts/Satoshi-Variable.ttf) format('truetype');
++  src: url(../fonts/Figtree-Variable.ttf) format('truetype');
+ }
+ 
+ @font-face {
+-  font-family: 'Satoshi';
++  font-family: 'Figtree';
+   font-style: italic;
+   font-weight: 300 900;
+-  src: url(../fonts/Satoshi-VariableItalic.ttf) format('truetype');
++  src: url(../fonts/Figtree-VariableItalic.ttf) format('truetype');
+ }
+ 
+ body {

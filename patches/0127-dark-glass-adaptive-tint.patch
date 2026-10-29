@@ -1,0 +1,121 @@
+--- a/chrome/browser/helium_theme/helium_theme.cc
++++ b/chrome/browser/helium_theme/helium_theme.cc
+@@ -65,6 +65,9 @@
+ constexpr char kLastAppliedPref[] = "helium.theme.last_applied_color";
+ // The wallpaper (path, size, mtime) and accent behind kLastAppliedPref.
+ constexpr char kLastSourcePref[] = "helium.theme.last_source";
++// Mean luma (0-255) of the wallpaper, -1 when unknown. The acrylic frame reads
++// it (by name) to pick a tint dense enough for readable text.
++constexpr char kWallpaperLumaPref[] = "helium.theme.wallpaper_luma";
+ constexpr char kSwitch[] = "match-wallpaper";
+ // Dark slate, deliberately not pure black. Only recognised as ours on profiles
+ // that were themed with it earlier (see CanReplaceTheme).
+@@ -567,6 +570,26 @@
+   LOG(INFO) << "Applied desktop accent color " << std::hex << color;
+ }
+ 
++// Mean luma (Rec. 601, 0-255) on a ~64x64 grid; -1 for an empty bitmap.
++int MeanLuma(const SkBitmap& bitmap) {
++  if (bitmap.isNull() || bitmap.width() <= 0 || bitmap.height() <= 0) {
++    return -1;
++  }
++  const int step_x = std::max(1, bitmap.width() / 64);
++  const int step_y = std::max(1, bitmap.height() / 64);
++  double sum = 0;
++  int samples = 0;
++  for (int y = 0; y < bitmap.height(); y += step_y) {
++    for (int x = 0; x < bitmap.width(); x += step_x) {
++      const SkColor c = bitmap.getColor(x, y);
++      sum += 0.299 * SkColorGetR(c) + 0.587 * SkColorGetG(c) +
++             0.114 * SkColorGetB(c);
++      ++samples;
++    }
++  }
++  return static_cast<int>(sum / samples + 0.5);
++}
++
+ // `fallback_accent` is the desktop's own accent, used when the wallpaper has no
+ // color of its own.
+ void OnDecoded(base::WeakPtr<Profile> profile,
+@@ -579,6 +602,7 @@
+   // Saved even when decoding failed (GNOME's default .jxl wallpapers), so the
+   // same file is not decoded again on every reload.
+   profile->GetPrefs()->SetString(kLastSourcePref, stamp);
++  profile->GetPrefs()->SetInteger(kWallpaperLumaPref, MeanLuma(bitmap));
+   std::optional<SkColor> color =
+       bitmap.isNull() ? std::nullopt : DominantColor(bitmap);
+   if (!color) {
+@@ -780,6 +804,7 @@
+   registry->RegisterBooleanPref(kInitializedPref, false);
+   registry->RegisterBooleanPref(kMatchWallpaperPref, true);
+   registry->RegisterIntegerPref(kLastAppliedPref, 0);
++  registry->RegisterIntegerPref(kWallpaperLumaPref, -1);
+   registry->RegisterStringPref(kLastSourcePref, std::string());
+ }
+ 
+--- a/chrome/browser/ui/views/frame/opaque_browser_frame_view.cc
++++ b/chrome/browser/ui/views/frame/opaque_browser_frame_view.cc
+@@ -11,6 +11,7 @@
+ #include "base/trace_event/trace_event.h"
+ #include "build/build_config.h"
+ #include "build/buildflag.h"
++#include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/color/chrome_color_id.h"
+ #include "chrome/browser/ui/helium/helium_layout_state_controller.h"
+ #include "chrome/browser/ui/layout_constants.h"
+@@ -27,6 +28,7 @@
+ #include "chrome/browser/ui/web_applications/app_browser_controller.h"
+ #include "chrome/grit/generated_resources.h"
+ #include "chrome/grit/theme_resources.h"
++#include "components/prefs/pref_service.h"
+ #include "components/strings/grit/components_strings.h"
+ #include "content/public/browser/web_contents.h"
+ #include "third_party/skia/include/core/SkPath.h"
+@@ -80,6 +82,31 @@
+ 
+ namespace {
+ 
++// Tint alpha for a dark acrylic frame. 55% looks best, but over a light
++// wallpaper the blurred desktop lifts the glass to mid grey and secondary text
++// fell to 2.4:1. Solve for the alpha that keeps the glass at or below luma 86
++// (secondary text 4.5:1) over the wallpaper's mean luma, x1.35 for brighter
++// patches; unknown wallpaper: the 74% light frames use.
++SkAlpha DarkGlassAlpha(SkColor frame, const PrefService& prefs) {
++  // helium_theme's pref (helium.theme.wallpaper_luma), -1 when unknown.
++  int luma = -1;
++  if (const PrefService::Preference* pref =
++          prefs.FindPreference("helium.theme.wallpaper_luma")) {
++    luma = pref->GetValue()->GetIfInt().value_or(-1);
++  }
++  if (luma < 0) {
++    return 0xBC;
++  }
++  const double backdrop = std::min(255.0, luma * 1.35);
++  const double glass = color_utils::GetLuma(frame);
++  constexpr double kMaxGlassLuma = 86;
++  if (backdrop <= kMaxGlassLuma) {
++    return 0x8C;
++  }
++  const double alpha = (backdrop - kMaxGlassLuma) / (backdrop - glass);
++  return static_cast<SkAlpha>(std::clamp(alpha, 0.55, 0.8) * 255 + 0.5);
++}
++
+ constexpr int kRoundedCaptionButtonSize = 16;
+ 
+ class CaptionButtonBackgroundImageSource : public gfx::CanvasImageSource {
+@@ -822,8 +849,13 @@
+     // Light enough for the compositor's blur to read as frosted glass, dense
+     // enough that dark tab text keeps ~4.5:1 over a dark wallpaper (a light
+     // frame needs more: 55% measured 2.7:1 over dark mountains).
+-    frame_color = SkColorSetA(frame_color,
+-                              color_utils::IsDark(frame_color) ? 0x8C : 0xBC);
++    frame_color = SkColorSetA(frame_color, color_utils::IsDark(frame_color)
++                                               ? DarkGlassAlpha(
++                                                     frame_color,
++                                                     *GetBrowserView()
++                                                          ->GetProfile()
++                                                          ->GetPrefs())
++                                               : 0xBC);
+   }
+   if (window_title_) {
+     window_title_->SetEnabledColor(

@@ -1,25 +1,30 @@
 --- a/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc
-@@ -411,12 +411,14 @@
+@@ -413,16 +413,19 @@
  
      // When we are in collapsed state, only one child should be shown per row.
      // During collapse animation and other cases, fit as many as possible.
 +    // Essentials are tiles: at most four per row.
 +    constexpr int kMaxTilesPerRow = 4;
-     children_on_row = std::max(
-         1,
--        std::min(children_on_row,
--                 static_cast<int>(std::floor((available_width - child_width) /
--                                             (child_width + kTabPadding)) +
--                                  1)));
-+        std::min({children_on_row, kMaxTilesPerRow,
-+                  static_cast<int>(std::floor((available_width - child_width) /
-+                                              (child_width + kTabPadding)) +
+     children_on_row =
+         tabs::IsVerticalTabsExpandOnHoverFeatureEnabled() &&
+                 collapse_state ==
+                     tabs::VerticalTabStripCollapseState::kCollapsed
+             ? 1
+-            : std::min(
+-                  children_on_row,
+-                  static_cast<int>(std::floor((available_width - child_width) /
++            : std::max(
++                  1, std::min({children_on_row, kMaxTilesPerRow,
++                               static_cast<int>(
++                                   std::floor((available_width - child_width) /
+                                               (child_width + kTabPadding)) +
+-                                   1));
 +                                   1)}));
  
      // Allocate extra space to the tabs.
      available_width -=
-@@ -429,6 +431,10 @@
+@@ -435,6 +438,10 @@
      gfx::Rect bounds =
          gfx::Rect(child->GetPreferredSize(views::SizeBounds(child_width, {})));
      bounds.set_width(child_width);

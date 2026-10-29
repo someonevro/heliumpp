@@ -1,5 +1,5 @@
 # Inserts the Helium++ step (apply_ours.py) into helium-windows' build.py.
-# Usage: python hook_build_py.py <helium-windows>/build.py   (helium-windows 0.19.4.1, 11a292e)
+# Usage: python hook_build_py.py <helium-windows>/build.py   (helium-windows 0.20.2.1, 40061d5)
 import sys
 from pathlib import Path
 

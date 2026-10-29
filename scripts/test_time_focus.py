@@ -47,7 +47,10 @@ try:
     def ev(s, js):
         return ws.call("Runtime.evaluate", {"expression": js, "returnByValue": True, "awaitPromise": True}, s)["result"].get("result", {}).get("value")
     ntp = tab("chrome://newtab/")
-    text = ev(ntp, "document.querySelector('ntp-app').shadowRoot.querySelector('#timeToday')?.innerText") or ""
+    # The "on the web today" chip opens the per-site list.
+    ev(ntp, "document.querySelector('ntp-app').shadowRoot.querySelector(\".chip[data-chip='time']\")?.click()")
+    time.sleep(0.5)
+    text = ev(ntp, "document.querySelector('ntp-app').shadowRoot.querySelector('#foot')?.innerText") or ""
     check("on the web today" in text and "127.0.0.1" in text, "new tab page lists today's time: " + repr(text))
     # Focus: the page's own handler, as its buttons use it.
     APP = "document.querySelector('ntp-app')"

@@ -1,0 +1,1222 @@
+--- a/chrome/browser/helium_theme/helium_theme.cc
++++ b/chrome/browser/helium_theme/helium_theme.cc
+@@ -40,6 +40,9 @@
+ #include "ui/base/mojom/themes.mojom.h"
+ #include "ui/native_theme/native_theme.h"
+ #include "ui/native_theme/native_theme_observer.h"
++#include "base/base64.h"
++#include "skia/ext/image_operations.h"
++#include "ui/gfx/codec/jpeg_codec.h"
+ #include "ui/gfx/color_utils.h"
+ #include "ui/gfx/geometry/size.h"
+ 
+@@ -68,6 +71,10 @@
+ // Mean luma (0-255) of the wallpaper, -1 when unknown. The acrylic frame reads
+ // it (by name) to pick a tint dense enough for readable text.
+ constexpr char kWallpaperLumaPref[] = "helium.theme.wallpaper_luma";
++// Small JPEG of the wallpaper as a data: URL ("" when unknown); the new tab
++// page shows it softened behind its content.
++constexpr char kWallpaperThumbPref[] = "helium.theme.wallpaper_thumb";
++constexpr int kThumbWidth = 192;
+ constexpr char kSwitch[] = "match-wallpaper";
+ // Dark slate, deliberately not pure black. Only recognised as ours on profiles
+ // that were themed with it earlier (see CanReplaceTheme).
+@@ -590,6 +597,21 @@
+   return static_cast<int>(sum / samples + 0.5);
+ }
+ 
++// data: URL of a kThumbWidth-wide JPEG of |bitmap|, or "" if it is empty.
++std::string WallpaperThumb(const SkBitmap& bitmap) {
++  if (bitmap.isNull() || bitmap.width() <= 0 || bitmap.height() <= 0) {
++    return std::string();
++  }
++  const int height = std::clamp(
++      kThumbWidth * bitmap.height() / bitmap.width(), 1, 4 * kThumbWidth);
++  std::optional<std::vector<uint8_t>> jpeg = gfx::JPEGCodec::Encode(
++      skia::ImageOperations::Resize(
++          bitmap, skia::ImageOperations::RESIZE_GOOD, kThumbWidth, height),
++      70);
++  return jpeg ? "data:image/jpeg;base64," + base::Base64Encode(*jpeg)
++              : std::string();
++}
++
+ // `fallback_accent` is the desktop's own accent, used when the wallpaper has no
+ // color of its own.
+ void OnDecoded(base::WeakPtr<Profile> profile,
+@@ -603,6 +625,7 @@
+   // same file is not decoded again on every reload.
+   profile->GetPrefs()->SetString(kLastSourcePref, stamp);
+   profile->GetPrefs()->SetInteger(kWallpaperLumaPref, MeanLuma(bitmap));
++  profile->GetPrefs()->SetString(kWallpaperThumbPref, WallpaperThumb(bitmap));
+   std::optional<SkColor> color =
+       bitmap.isNull() ? std::nullopt : DominantColor(bitmap);
+   if (!color) {
+@@ -678,9 +701,14 @@
+   }
+   // Same wallpaper and accent as last time and the theme still shows our
+   // color: skip the read and the decoder process (slowed the first paint).
++  // A decoded wallpaper without a thumbnail (profiles from before it existed)
++  // is decoded once more; an undecodable one (luma -1) is not.
++  PrefService* prefs = profile->GetPrefs();
+   if (!source.stamp.empty() &&
+-      profile->GetPrefs()->GetString(kLastSourcePref) == source.stamp &&
+-      ThemeShowsLastApplied(profile.get())) {
++      prefs->GetString(kLastSourcePref) == source.stamp &&
++      ThemeShowsLastApplied(profile.get()) &&
++      (!prefs->GetString(kWallpaperThumbPref).empty() ||
++       prefs->GetInteger(kWallpaperLumaPref) < 0)) {
+     return;
+   }
+   base::ThreadPool::PostTaskAndReplyWithResult(
+@@ -806,6 +834,15 @@
+   registry->RegisterIntegerPref(kLastAppliedPref, 0);
+   registry->RegisterIntegerPref(kWallpaperLumaPref, -1);
+   registry->RegisterStringPref(kLastSourcePref, std::string());
++  registry->RegisterStringPref(kWallpaperThumbPref, std::string());
++}
++
++std::string WallpaperThumbnail(Profile* profile) {
++  return profile->GetPrefs()->GetString(kWallpaperThumbPref);
++}
++
++int WallpaperLuma(Profile* profile) {
++  return profile->GetPrefs()->GetInteger(kWallpaperLumaPref);
+ }
+ 
+ std::optional<SkColor> DominantColor(const SkBitmap& bitmap) {
+--- a/chrome/browser/helium_theme/helium_theme.h
++++ b/chrome/browser/helium_theme/helium_theme.h
+@@ -6,6 +6,7 @@
+ #define CHROME_BROWSER_HELIUM_THEME_HELIUM_THEME_H_
+ 
+ #include <optional>
++#include <string>
+ #include <utility>
+ 
+ #include "third_party/skia/include/core/SkColor.h"
+@@ -31,6 +32,11 @@
+ // and never sent anywhere.
+ void Apply(Profile* profile);
+ 
++// The wallpaper as a small JPEG data: URL ("" when unknown) and its mean luma
++// (0-255, -1 when unknown), both from the last decode; for the new tab page.
++std::string WallpaperThumbnail(Profile* profile);
++int WallpaperLuma(Profile* profile);
++
+ // Saturation- and lightness-weighted average color of |bitmap|, or nullopt for
+ // images with no meaningful color (grayscale, nearly black or white).
+ std::optional<SkColor> DominantColor(const SkBitmap& bitmap);
+--- a/chrome/browser/resources/new_tab_page/app.css
++++ b/chrome/browser/resources/new_tab_page/app.css
+@@ -95,25 +95,6 @@
+   }
+ }
+ 
+-cr-most-visited {
+-  --add-shortcut-background-color: color-mix(
+-    in oklab, var(--color-new-tab-page-primary-foreground) 12%, transparent
+-  );
+-  --add-shortcut-foreground-color: var(
+-    --color-new-tab-page-primary-foreground
+-  );
+-  --tile-background-color: color-mix(
+-    in oklab, var(--color-new-tab-page-primary-foreground) 12%, transparent
+-  );
+-  --tile-hover-color: color-mix(
+-    in oklab, var(--color-new-tab-page-primary-foreground) 22%, transparent
+-  );
+-  --cr-menu-shadow: var(--ntp-menu-shadow);
+-  --most-visited-focus-shadow: var(--ntp-focus-shadow);
+-  --most-visited-text-color: var(--color-new-tab-page-most-visited-foreground);
+-  --most-visited-text-shadow: var(--ntp-theme-text-shadow);
+-}
+-
+ :host([show-background-image_]) {
+   --ntp-theme-text-shadow:
+     0.5px 0.5px 1px rgba(0, 0, 0, 0.5), 0px 0px 2px rgba(0, 0, 0, 0.2),
+@@ -299,16 +280,21 @@
+ }
+ 
+ #customizeButtons {
+-  bottom: 16px;
++  --ntp-customize-button-background: var(--wall-glass);
++  --ntp-customize-button-hover: var(--wall-glass-hover);
++  --ntp-customize-button-foreground: var(--wall-ink);
++  --ntp-customize-button-radius: var(--hp-radius-control);
++  --ntp-customize-button-size: 36px;
++  bottom: 18px;
+   position: fixed;
+ }
+ 
+ :host-context([dir='ltr']) #customizeButtons {
+-  right: 16px;
++  right: 18px;
+ }
+ 
+ :host-context([dir='rtl']) #customizeButtons {
+-  left: 16px;
++  left: 18px;
+ }
+ 
+ #contentBottomSpacer {
+@@ -567,389 +553,322 @@
+   }
+ }
+ 
+-/* Sky by time of day (Zephium-inspired). Every colour is mixed from the theme
+-   accent and the page background, so it follows the wallpaper. */
+-#sky {
+-  --accent: var(--color-new-tab-page-focus-ring);
+-  --ground: var(--color-new-tab-page-background, transparent);
+-  --warm: oklch(from var(--accent) 0.75 0.13 calc(h + 60));
+-  background: linear-gradient(
+-      var(--sky-top), var(--sky-mid) 55%, var(--sky-horizon));
+-  inset: 0;
+-  overflow: hidden;
++/* New tab page (designs/redesign/mock.html): the user's wallpaper, softened,
++   behind a clock, the search field, shortcuts and a row of chips. Tokens from
++   chrome://resources/css/heliumpp_tokens.css; the text tone follows the
++   wallpaper's brightness, every tint follows the theme. */
++#content,
++#foot {
++  color-scheme: light dark;
++  --wall-ink: white;
++  --wall-ink-shadow: 0 1px 10px rgb(0 0 0 / 0.35);
++  --wall-glass: color-mix(in oklab, var(--color-sys-primary) 14%, rgb(0 0 0 / 0.5));
++  --wall-glass-hover: color-mix(in oklab, var(--color-sys-primary) 14%, rgb(0 0 0 / 0.62));
++  --wall-glass-edge: rgb(255 255 255 / 0.14);
++  font-family: var(--hp-font);
++}
++
++#wall {
++  background: linear-gradient(160deg,
++      color-mix(in oklab, var(--color-sys-primary) 55%, black),
++      color-mix(in oklab, var(--color-sys-primary) 22%, black));
++  background-position: center;
++  background-size: cover;
++  filter: blur(18px) saturate(1.15);
++  inset: -40px;
+   pointer-events: none;
+   position: fixed;
+-  z-index: 0;
+ }
+ 
+-#sky[data-phase='night'] {
+-  --sky-top: color-mix(in oklab, var(--accent) 8%, color-mix(in oklab, var(--ground) 55%, black));
+-  --sky-mid: color-mix(in oklab, var(--accent) 14%, color-mix(in oklab, var(--ground) 70%, black));
+-  --sky-horizon: color-mix(in oklab, var(--accent) 22%, var(--ground));
+-  --orb: color-mix(in oklab, var(--accent) 15%, white);
+-  --orb-size: 18px;
+-  --stars: 1;
+-}
+-
+-#sky[data-phase='dawn'] {
+-  --sky-top: color-mix(in oklab, var(--accent) 26%, var(--ground));
+-  --sky-mid: color-mix(in oklab, var(--accent) 18%, var(--ground));
+-  --sky-horizon: color-mix(in oklab, var(--warm) 40%, var(--ground));
+-  --orb: color-mix(in oklab, var(--warm) 75%, white);
+-  --orb-size: 24px;
+-  --stars: 0.25;
+-}
+-
+-#sky[data-phase='day'] {
+-  --sky-top: color-mix(in oklab, var(--accent) 36%, var(--ground));
+-  --sky-mid: color-mix(in oklab, var(--accent) 22%, var(--ground));
+-  --sky-horizon: color-mix(in oklab, var(--accent) 12%, var(--ground));
+-  --orb: color-mix(in oklab, var(--warm) 45%, white);
+-  --orb-size: 26px;
+-  --stars: 0;
+-}
+-
+-#sky[data-phase='dusk'] {
+-  --sky-top: color-mix(in oklab, var(--accent) 16%, color-mix(in oklab, var(--ground) 80%, black));
+-  --sky-mid: color-mix(in oklab, var(--accent) 22%, var(--ground));
+-  --sky-horizon: color-mix(in oklab, var(--warm) 45%, var(--ground));
+-  --orb: color-mix(in oklab, var(--warm) 80%, white);
+-  --orb-size: 24px;
+-  --stars: 0.5;
+-}
+-
+-#sky .orb {
+-  background: radial-gradient(circle, var(--orb) 0 24%,
+-      color-mix(in oklab, var(--orb) 25%, transparent) 30%, transparent 70%);
+-  border-radius: 50%;
+-  height: calc(var(--orb-size) * 4);
+-  left: var(--orb-x);
+-  opacity: 0.8;
+-  position: absolute;
+-  top: var(--orb-y);
+-  transform: translate(-50%, -50%);
+-  width: calc(var(--orb-size) * 4);
+-}
+-
+-/* Fixed star field from a few repeating dot layers: no images, no script. */
+-#sky .stars {
+-  animation: twinkle 7s ease-in-out infinite alternate;
+-  background:
+-    radial-gradient(1.5px 1.5px at 20% 30%, white, transparent),
+-    radial-gradient(1px 1px at 70% 15%, white, transparent),
+-    radial-gradient(1.5px 1.5px at 45% 60%, white, transparent),
+-    radial-gradient(1px 1px at 85% 45%, white, transparent),
+-    radial-gradient(1px 1px at 10% 75%, white, transparent);
+-  background-size: 260px 220px;
+-  inset: 0 0 35% 0;
+-  opacity: calc(var(--stars) * 0.7);
++/* A dark wash keeps white text readable; it carries the theme hue. */
++#wall::after {
++  background: linear-gradient(180deg,
++      color-mix(in oklab, var(--color-sys-primary) 20%, rgb(0 0 0 / 0.18)),
++      color-mix(in oklab, var(--color-sys-primary) 20%, rgb(0 0 0 / 0.52)));
++  content: '';
++  inset: 0;
+   position: absolute;
+ }
+ 
+-@keyframes twinkle {
+-  to {
+-    opacity: calc(var(--stars) * 0.35);
+-  }
++#wall[data-tone='light']::after {
++  background: linear-gradient(180deg,
++      color-mix(in oklab, var(--color-sys-primary) 8%, rgb(255 255 255 / 0.22)),
++      color-mix(in oklab, var(--color-sys-primary) 8%, rgb(255 255 255 / 0.45)));
+ }
+ 
+-#clock {
+-  color: var(--color-new-tab-page-secondary-foreground);
+-  font-size: 15px;
+-  font-variant-numeric: tabular-nums;
+-  letter-spacing: 0.02em;
+-  margin-bottom: 14px;
++:host([show-background-image_]) #wall {
++  display: none;
+ }
+ 
+-/* Browser-specific look: calm centred greeting, glow tinted by the theme accent.
+-   Drawn over the sky; the dark fade keeps the text readable on any phase. */
+-#sky::after {
+-  background:
+-    radial-gradient(70% 60% at 50% 40%,
+-      color-mix(in oklab, var(--color-new-tab-page-focus-ring) 22%, transparent),
+-      transparent 70%),
+-    linear-gradient(rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.3));
+-  content: '';
+-  inset: 0;
+-  pointer-events: none;
+-  position: fixed;
+-  z-index: 0;
++#content[data-tone='light'],
++#foot[data-tone='light'] {
++  --wall-ink: color-mix(in oklab, var(--color-sys-primary) 22%, black);
++  --wall-ink-shadow: 0 1px 10px rgb(255 255 255 / 0.4);
++  --wall-glass: color-mix(in oklab, var(--color-sys-primary) 8%, rgb(255 255 255 / 0.55));
++  --wall-glass-hover: color-mix(in oklab, var(--color-sys-primary) 8%, rgb(255 255 255 / 0.7));
++  --wall-glass-edge: rgb(255 255 255 / 0.5);
+ }
+ 
+-#greeting {
+-  margin-bottom: 30px;
++#hero {
++  color: var(--wall-ink);
++  margin-top: -40px;
+   text-align: center;
++  width: min(620px, 86vw);
+ }
+ 
+-#greeting h1 {
+-  font-size: clamp(34px, 5.4vw, 64px);
+-  font-weight: 500;
+-  letter-spacing: -0.02em;
+-  color: var(--color-new-tab-page-primary-foreground);
+-  margin: 0 0 10px;
+-  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.35);
++#time {
++  font-size: var(--hp-text-display);
++  font-variant-numeric: tabular-nums;
++  font-weight: 300;
++  letter-spacing: -0.035em;
++  line-height: 1;
++  text-shadow: 0 2px 30px rgb(0 0 0 / 0.25);
+ }
+ 
+-#greeting .sub {
+-  font-size: clamp(16px, 1.8vw, 22px);
+-  color: var(--color-new-tab-page-secondary-foreground);
++#date {
++  font-size: var(--hp-text-lg);
++  font-weight: 500;
++  margin-top: 10px;
++  opacity: 0.92;
++  text-shadow: var(--wall-ink-shadow);
+ }
+ 
+ #searchForm {
+-  margin-top: 22px;
+-  width: min(520px, 86vw);
++  align-items: center;
++  backdrop-filter: blur(20px);
++  background: light-dark(rgb(255 255 255 / 0.86),
++      color-mix(in oklab, var(--color-sys-surface) 78%, transparent));
++  border-radius: 16px;
++  box-shadow: 0 0 0 1px light-dark(transparent, rgb(255 255 255 / 0.08)) inset,
++      0 10px 30px -10px rgb(0 0 0 / 0.45);
++  color: var(--color-sys-on-surface);
++  display: flex;
++  gap: 10px;
++  height: 52px;
++  margin-top: 34px;
++  padding: 0 8px 0 18px;
++  text-align: start;
++}
++
++#searchForm:focus-within {
++  box-shadow: 0 0 0 1px color-mix(in srgb, var(--hp-focus) 55%, transparent) inset,
++      0 10px 30px -10px rgb(0 0 0 / 0.45);
++}
++
++#searchForm .i {
++  flex: none;
++  opacity: 0.7;
+ }
+ 
+ #searchInput {
+-  backdrop-filter: blur(14px);
+-  background: color-mix(in oklab, var(--color-new-tab-page-primary-foreground) 10%, transparent);
++  background: none;
+   border: 0;
+-  border-radius: 999px;
+-  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-new-tab-page-primary-foreground) 22%, transparent);
+-  box-sizing: border-box;
+-  color: var(--color-new-tab-page-primary-foreground);
++  color: inherit;
++  flex: 1;
+   font: inherit;
+-  font-size: 15px;
++  font-size: var(--hp-text-lg);
++  height: 100%;
++  min-width: 0;
+   outline: none;
+-  padding: 14px 22px;
+-  transition: box-shadow 0.2s, transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+-  width: 100%;
++  padding: 0;
+ }
+ 
+ #searchInput::placeholder {
+-  color: var(--color-new-tab-page-secondary-foreground);
++  color: var(--hp-ink-2);
+ }
+ 
+-#searchInput:focus-visible {
+-  box-shadow: inset 0 0 0 1.5px var(--color-new-tab-page-focus-ring),
+-              0 0 0 4px color-mix(in oklab, var(--color-new-tab-page-focus-ring) 25%, transparent);
+-  transform: scale(1.015);
++#searchForm kbd {
++  background: color-mix(in srgb, var(--color-sys-on-surface) 8%, transparent);
++  border-radius: var(--hp-radius-sm);
++  color: var(--hp-ink-2);
++  font: var(--hp-weight-strong) var(--hp-text-xs) var(--hp-font);
++  padding: 4px 7px;
+ }
+ 
+-#privacySwitch {
+-  background: color-mix(in oklab, var(--color-new-tab-page-primary-foreground) 10%, transparent);
+-  border-radius: 999px;
+-  display: flex;
+-  gap: 2px;
+-  margin: 18px auto 0;
+-  padding: 3px;
+-  width: fit-content;
+-}
+-
+-#privacySwitch button {
+-  background: none;
+-  border: 0;
+-  border-radius: 999px;
+-  color: var(--color-new-tab-page-secondary-foreground);
+-  cursor: pointer;
+-  font: inherit;
+-  font-size: 14px;
+-  padding: 7px 22px;
+-  transition: background 0.15s, color 0.15s, transform 0.12s;
++#searchForm:focus-within kbd {
++  visibility: hidden;
+ }
+ 
+-#privacySwitch button[data-selected] {
+-  background: color-mix(in oklab, var(--color-new-tab-page-focus-ring) 38%, transparent);
+-  box-shadow: inset 0 0 0 1px var(--color-new-tab-page-focus-ring);
+-  color: var(--color-new-tab-page-primary-foreground);
++/* Line icons (the generic `svg` rule above fixes position for other svgs). */
++.i {
++  fill: none;
++  position: static;
++  height: 16px;
++  stroke: currentColor;
++  stroke-linecap: round;
++  stroke-linejoin: round;
++  stroke-width: 1.7;
++  width: 16px;
+ }
+ 
+-#privacySwitch button:not([data-selected]):hover {
+-  color: var(--color-new-tab-page-primary-foreground);
++cr-most-visited {
++  --most-visited-tile-size: 82px;
++  --most-visited-icon-size: 48px;
++  --most-visited-text-color: var(--wall-ink);
++  --most-visited-text-shadow: var(--wall-ink-shadow);
++  --tile-background-color: transparent;
++  --tile-hover-color: rgb(255 255 255 / 0.1);
++  --add-shortcut-background-color: var(--wall-glass);
++  --add-shortcut-foreground-color: var(--wall-ink);
++  margin-top: 26px;
+ }
+ 
+-#privacyNote {
+-  /* Tinted from the foreground: the secondary grey measured 3.3:1 on the sky, 82% still 4.1:1. */
+-  color: color-mix(in srgb, var(--color-new-tab-page-primary-foreground) 94%,
+-                   transparent);
+-  font-size: 13px;
+-  margin-top: 10px;
+-  min-height: 1.4em;
++#foot {
++  bottom: 0;
++  color: var(--wall-ink);
++  display: grid;
++  font-size: 12.5px;
++  font-weight: 500;
++  gap: var(--hp-space-2);
++  inset-inline: 0;
++  justify-items: center;
++  padding-bottom: 22px;
++  pointer-events: none;
++  position: fixed;
++  z-index: 2;
+ }
+ 
+-#privacySwitch .recommended {
+-  font-size: 11px;
+-  font-weight: 600;
+-  margin-inline-start: 8px;
+-  opacity: 0.85;
++#foot > * {
++  pointer-events: auto;
+ }
+ 
+-/* Switch and title centered on one line, the descriptions centered below: the
+-   switch stays put when the on/off text changes length. */
+-#performanceRow {
+-  align-items: center;
+-  column-gap: 10px;
+-  display: grid;
+-  grid-template-columns: auto auto;
+-  justify-content: center;
+-  margin: 22px auto 0;
+-  row-gap: 2px;
+-  text-align: center;
+-  width: min(440px, 86vw);
++.chips {
++  animation-delay: 160ms;
++  display: flex;
++  gap: var(--hp-space-2);
+ }
+ 
+-#performanceRow > div {
+-  display: contents;
++.chip,
++.pop {
++  backdrop-filter: blur(16px);
++  background: var(--wall-glass);
++  box-shadow: 0 0 0 1px var(--wall-glass-edge) inset;
++  color: var(--wall-ink);
+ }
+ 
+-#performanceSwitch {
+-  background: color-mix(in oklab, var(--color-new-tab-page-primary-foreground) 18%, transparent);
++.chip {
++  align-items: center;
+   border: 0;
+-  border-radius: 999px;
+-  cursor: pointer;
+-  flex: none;
+-  height: 22px;
+-  padding: 0;
+-  position: relative;
+-  transition: background 0.2s, transform 0.12s;
+-  width: 40px;
+-}
+-
+-#performanceSwitch .knob {
+-  background: var(--color-new-tab-page-primary-foreground);
+-  border-radius: 50%;
+-  height: 16px;
+-  left: 3px;
+-  position: absolute;
+-  top: 3px;
+-  transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+-  width: 16px;
++  border-radius: var(--hp-radius-control);
++  display: flex;
++  font: inherit;
++  gap: var(--hp-space-2);
++  height: 32px;
++  padding: 0 var(--hp-space-3);
++  transition: background var(--hp-fast) var(--hp-ease);
+ }
+ 
+-#performanceSwitch[data-on] {
+-  background: color-mix(in oklab, var(--color-new-tab-page-focus-ring) 55%, transparent);
++button.chip {
++  cursor: pointer;
+ }
+ 
+-#performanceSwitch[data-on] .knob {
+-  transform: translateX(18px);
++button.chip:hover,
++button.chip[aria-expanded='true'] {
++  background: var(--wall-glass-hover);
+ }
+ 
+-#performanceRow .title {
+-  color: var(--color-new-tab-page-primary-foreground);
+-  font-size: 14px;
++.chip b,
++.pop b {
++  font-variant-numeric: tabular-nums;
++  font-weight: 700;
+ }
+ 
+-#performanceRow .desc {
+-  color: color-mix(in srgb, var(--color-new-tab-page-primary-foreground) 94%,
+-                   transparent);
+-  font-size: 12px;
+-  grid-column: 1 / -1;
++.pop {
++  border-radius: var(--hp-radius-card);
++  display: grid;
++  gap: var(--hp-space-1);
++  min-width: 240px;
++  padding: var(--hp-space-2);
+ }
+ 
+-/* Foot of the page: time on the web today and focus rounds (Zephium-inspired). */
+-#foot {
+-  align-items: center;
+-  bottom: 22px;
+-  color: var(--color-new-tab-page-secondary-foreground);
++.pop .site {
+   display: flex;
+-  flex-direction: column;
+-  font-size: 13px;
+-  gap: 8px;
+-  left: 50%;
+-  position: fixed;
+-  transform: translateX(-50%);
+-  width: min(720px, 92vw);
+-  z-index: 1;
++  gap: var(--hp-space-4);
++  justify-content: space-between;
++  padding: 4px 6px;
+ }
+ 
+-#timeToday,
+-#focusRow,
+-#focusEdit {
+-  align-items: center;
++.pop .row {
+   display: flex;
+-  flex-wrap: wrap;
+-  gap: 6px 14px;
+-  justify-content: center;
++  gap: var(--hp-space-1);
+ }
+ 
+-#timeToday .total {
+-  color: var(--color-new-tab-page-primary-foreground);
+-}
+-
+-#timeToday b {
+-  font-weight: 600;
+-}
+-
+-#foot button {
+-  background: color-mix(in oklab, var(--color-new-tab-page-primary-foreground) 10%, transparent);
++.pop button {
++  background: transparent;
+   border: 0;
+-  border-radius: 999px;
+-  color: var(--color-new-tab-page-primary-foreground);
++  border-radius: var(--hp-radius-tab);
++  color: inherit;
+   cursor: pointer;
+   font: inherit;
+-  padding: 5px 14px;
+-  transition: background 0.15s, transform 0.12s;
++  height: 30px;
++  padding: 0 10px;
+ }
+ 
+-#foot button:hover {
+-  background: color-mix(in oklab, var(--color-new-tab-page-focus-ring) 35%, transparent);
++.pop button:hover {
++  background: rgb(255 255 255 / 0.12);
+ }
+ 
+-#foot button:active {
+-  transform: scale(0.94);
++.pop button.link {
++  opacity: 0.85;
++  text-decoration: underline;
++  text-underline-offset: 3px;
+ }
+ 
+-#foot button.link {
+-  background: none;
+-  color: var(--color-new-tab-page-secondary-foreground);
+-  padding: 5px 6px;
+-  text-decoration: underline;
++#focusEdit {
++  display: flex;
++  gap: var(--hp-space-1);
+ }
+ 
+ #focusSitesInput {
+-  background: color-mix(in oklab, var(--color-new-tab-page-primary-foreground) 10%, transparent);
++  background: rgb(255 255 255 / 0.12);
+   border: 0;
+-  border-radius: 999px;
+-  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-new-tab-page-primary-foreground) 22%, transparent);
+-  color: var(--color-new-tab-page-primary-foreground);
++  border-radius: var(--hp-radius-tab);
++  color: inherit;
++  flex: 1;
+   font: inherit;
+-  outline: none;
+-  padding: 6px 14px;
+-  width: min(420px, 70vw);
++  height: 30px;
++  min-width: 220px;
++  padding: 0 10px;
++}
++
++.chip:focus-visible,
++.pop :focus-visible {
++  outline: 2px solid var(--hp-focus);
++  outline-offset: 2px;
+ }
+ 
+-#focusSitesInput:focus-visible {
+-  box-shadow: inset 0 0 0 1.5px var(--color-new-tab-page-focus-ring);
++#focusSitesInput::placeholder {
++  color: inherit;
++  opacity: 0.6;
+ }
+ 
+-/* Micro motion: the page rises in item by item, controls give press feedback. Only transform
+-   and opacity (compositor-only, no relayout). Off in performance mode (below). */
+ @keyframes rise-in {
+   from {
+     opacity: 0;
+-    transform: translateY(12px) scale(0.985);
++    transform: translateY(6px);
+   }
+ }
+ 
+-#greeting > * {
+-  animation: rise-in 560ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
++#hero > *,
++cr-most-visited,
++.chips {
++  animation: rise-in var(--hp-slow) var(--hp-ease) both;
+ }
+ 
+-#greeting > :nth-child(2) { animation-delay: 50ms; }
+-
+-#greeting > :nth-child(3) { animation-delay: 100ms; }
+-
+-#greeting > :nth-child(4) { animation-delay: 150ms; }
+-
+-#greeting > :nth-child(5) { animation-delay: 190ms; }
+-
+-#greeting > :nth-child(n+6) { animation-delay: 230ms; }
++#hero > :nth-child(2) {
++  animation-delay: 40ms;
++}
+ 
+-#privacySwitch button:active,
+-#performanceSwitch:active {
+-  transform: scale(0.94);
++#hero > :nth-child(3) {
++  animation-delay: 80ms;
+ }
+ 
+-@media (prefers-reduced-motion: reduce) {
+-  #sky *,
+-  #content * {
+-    animation: none !important;
+-    transition: none !important;
+-  }
++#content cr-most-visited {
++  animation-delay: 120ms;
+ }
+ 
+-/* Performance mode: no transitions on this page. */
+-:host(:has(#content[data-reduced])) #sky *,
+-#content[data-reduced] * {
++#content[data-reduced] *,
++#foot[data-reduced] * {
+   animation: none !important;
+   transition: none !important;
+   /* Blur is a per-frame GPU cost. */
+--- a/chrome/browser/resources/new_tab_page/app.html
++++ b/chrome/browser/resources/new_tab_page/app.html
+@@ -1,42 +1,18 @@
+-<div id="sky" data-phase="${this.sky_().phase}"
+-    style="--orb-x: ${this.sky_().x}%; --orb-y: ${this.sky_().y}%">
+-  <div class="stars"></div>
+-  <div class="orb"></div>
+-</div>
+-<div id="content" ?data-reduced="${this.performanceMode_}">
+-  <div id="greeting">
+-    <div id="clock">${this.clock_()}</div>
+-    <h1>${this.greeting_()}</h1>
+-    <div class="sub">Where to today?</div>
+-    <form id="searchForm" @submit="${this.onSearchSubmit_}">
++<div id="wall" data-tone="${this.wallTone_()}" style="${this.wallStyle_()}"></div>
++<div id="content" ?data-reduced="${this.performanceMode_}"
++    data-tone="${this.wallTone_()}">
++  <div id="hero">
++    <div id="time">${this.time_()}</div>
++    <div id="date">${this.date_()}</div>
++    <form id="searchForm" role="search" @submit="${this.onSearchSubmit_}">
++      <svg class="i" viewBox="0 0 24 24" aria-hidden="true">
++        <circle cx="11" cy="11" r="6"></circle><path d="M20 20l-4.5-4.5"></path>
++      </svg>
+       <input id="searchInput" type="text" autocomplete="off" autofocus
+-          spellcheck="false"
++          spellcheck="false" aria-label="Search privately or enter address"
+           placeholder="Search privately or enter address">
++      <kbd aria-hidden="true">/</kbd>
+     </form>
+-    <div id="privacySwitch" role="radiogroup" aria-label="Privacy level">
+-      ${this.privacyModes_.map(m => html`
+-        <button role="radio" aria-checked="${this.privacyMode_ === m.id}"
+-            ?data-selected="${this.privacyMode_ === m.id}"
+-            data-mode="${m.id}" @click="${this.onPrivacyModeClick_}">
+-          ${m.label}${m.id === 'medium' ? html`<span class="recommended">Recommended</span>` : ''}
+-        </button>`)}
+-    </div>
+-    <div id="privacyNote">${this.privacyNote_()}</div>
+-    <div id="performanceRow">
+-      <button id="performanceSwitch" role="switch"
+-          aria-checked="${this.performanceMode_}"
+-          aria-label="Performance mode"
+-          ?data-on="${this.performanceMode_}"
+-          @click="${this.onPerformanceClick_}">
+-        <span class="knob"></span>
+-      </button>
+-      <div>
+-        <div class="title">Performance mode</div>
+-        <div class="desc">${this.performanceNote_()}</div>
+-        ${this.sleepingNote_() ? html`
+-          <div class="desc" id="sleepingNote">${this.sleepingNote_()}</div>` : ''}
+-      </div>
+-    </div>
+   </div>
+   ${this.lazyRender_ ? html`
+     ${this.shortcutsEnabled_ ? html`
+@@ -73,31 +49,63 @@
+   ` : ''}
+   <div id="contentBottomSpacer"></div>
+ </div>
+-<div id="foot">
+-  ${this.timeToday_.enabled && this.timeToday_.sites.length ? html`
+-    <div id="timeToday">
+-      <span class="total">${this.timeTotal_()} on the web today</span>
+-      ${this.timeToday_.sites.slice(0, 3).map(s => html`
+-        <span class="site">${s.site} <b>${this.duration_(Number(s.seconds))}</b></span>`)}
+-      <button class="link" @click="${this.onResetTimeClick_}"
+-          title="Forget today's times">Reset</button>
++<div id="foot" data-tone="${this.wallTone_()}" ?data-reduced="${this.performanceMode_}"
++    @keydown="${this.onChipKeydown_}">
++  ${this.openChip_ === 'time' ? html`
++    <div class="pop" role="dialog" aria-label="Time on the web today">
++      ${this.timeToday_.sites.slice(0, 5).map(s => html`
++        <div class="site"><span>${s.site}</span>
++          <b>${this.duration_(Number(s.seconds))}</b></div>`)}
++      <button class="link" @click="${this.onResetTimeClick_}">Forget today's times</button>
++    </div>` : ''}
++  ${this.openChip_ === 'focus' && !this.focusActive_() ? html`
++    <div class="pop" role="dialog" aria-label="Focus round">
++      <div class="row">
++        <button data-minutes="25" @click="${this.onStartFocusClick_}">25 min</button>
++        <button data-minutes="50" @click="${this.onStartFocusClick_}">50 min</button>
++        <button class="link" @click="${this.onEditFocusClick_}">
++          Sites to shut (${this.focusSites_.length})</button>
++      </div>
++      ${this.editingFocus_ ? html`
++        <form id="focusEdit" @submit="${this.onFocusSitesSubmit_}">
++          <input id="focusSitesInput" type="text" spellcheck="false"
++              aria-label="Sites to shut during focus, separated by commas"
++              .value="${this.focusSites_.join(', ')}"
++              placeholder="youtube.com, reddit.com, x.com">
++          <button type="submit">Save</button>
++        </form>` : ''}
+     </div>` : ''}
+-  <div id="focusRow">
++  <div class="chips">
++    ${this.timeToday_.enabled && this.timeToday_.sites.length ? html`
++      <button class="chip" data-chip="time" @click="${this.onChipClick_}"
++          aria-expanded="${this.openChip_ === 'time'}">
++        <svg class="i" viewBox="0 0 24 24" aria-hidden="true">
++          <circle cx="12" cy="12" r="8"></circle><path d="M12 8v4l2.5 2"></path>
++        </svg>
++        <b>${this.timeTotal_()}</b> on the web today
++      </button>` : ''}
++    ${this.sleepingNote_() ? html`
++      <span class="chip">
++        <svg class="i" viewBox="0 0 24 24" aria-hidden="true">
++          <path d="M19 14.5A7 7 0 0 1 9.5 5a7 7 0 1 0 9.5 9.5z"></path>
++        </svg>
++        <span id="sleepingNote">${this.sleepingNote_()}</span>
++      </span>` : ''}
+     ${this.focusActive_() ? html`
+-      <span>Focus until ${this.focusEnd_()} · ${this.focusSites_.length}
+-        ${this.focusSites_.length === 1 ? 'site' : 'sites'} shut</span>
+-      <button @click="${this.onStopFocusClick_}">Stop</button>` : html`
+-      <button data-minutes="25" @click="${this.onStartFocusClick_}">Focus 25 min</button>
+-      <button data-minutes="50" @click="${this.onStartFocusClick_}">50 min</button>
+-      <button class="link" @click="${this.onEditFocusClick_}">
+-        Sites to shut (${this.focusSites_.length})</button>`}
++      <span class="chip">
++        <svg class="i" viewBox="0 0 24 24" aria-hidden="true">
++          <circle cx="12" cy="12" r="8"></circle><circle cx="12" cy="12" r="3"></circle>
++        </svg>
++        Focus until <b>${this.focusEnd_()}</b> · ${this.focusSites_.length}
++        ${this.focusSites_.length === 1 ? 'site' : 'sites'} shut
++      </span>
++      <button class="chip" @click="${this.onStopFocusClick_}">Stop</button>` : html`
++      <button class="chip" data-chip="focus" @click="${this.onChipClick_}"
++          aria-expanded="${this.openChip_ === 'focus'}">
++        <svg class="i" viewBox="0 0 24 24" aria-hidden="true">
++          <circle cx="12" cy="12" r="8"></circle><circle cx="12" cy="12" r="3"></circle>
++        </svg>
++        Start a focus round
++      </button>`}
+   </div>
+-  ${this.editingFocus_ ? html`
+-    <form id="focusEdit" @submit="${this.onFocusSitesSubmit_}">
+-      <input id="focusSitesInput" type="text" spellcheck="false"
+-          aria-label="Sites to shut during focus, separated by commas"
+-          .value="${this.focusSites_.join(', ')}"
+-          placeholder="youtube.com, reddit.com, x.com">
+-      <button type="submit">Save</button>
+-    </form>` : ''}
+ </div>
+--- a/chrome/browser/resources/new_tab_page/app.ts
++++ b/chrome/browser/resources/new_tab_page/app.ts
+@@ -242,7 +242,6 @@
+       singleColoredLogo_: {type: Boolean},
+ 
+       realboxShown_: {type: Boolean},
+-      privacyMode_: {type: String},
+       performanceMode_: {type: Boolean},
+       sleepingTabs_: {type: Object},
+       now_: {type: Object},
+@@ -250,7 +249,7 @@
+       focusSites_: {type: Array},
+       focusUntil_: {type: Number},
+       editingFocus_: {type: Boolean},
+-      privacyRestart_: {type: Boolean},
++      openChip_: {type: String},
+ 
+       /**
+        * Whether the composebox has been opened at least once.
+@@ -401,9 +400,9 @@
+   protected accessor logoColor_: SkColor|null = null;
+   protected accessor singleColoredLogo_: boolean = false;
+   protected accessor realboxShown_: boolean = false;
+-  protected accessor privacyMode_: string = '';
++  // Performance mode also turns the page's motion off.
+   protected accessor performanceMode_: boolean = false;
+-  // Drives the sky and the clock; refreshed every 30 s.
++  // Drives the clock; refreshed every 30 s.
+   protected accessor now_: Date = new Date();
+   private clockTimer_: number = 0;
+   protected accessor timeToday_: {enabled: boolean, sites: Array<{site: string, seconds: bigint}>} =
+@@ -412,12 +411,8 @@
+   protected accessor focusUntil_: number = 0;
+   protected accessor editingFocus_: boolean = false;
+   protected accessor sleepingTabs_: {count: number, bytes: bigint} = {count: 0, bytes: 0n};
+-  protected accessor privacyRestart_: boolean = false;
+-  protected readonly privacyModes_ = [
+-    {id: 'usability', label: 'Usability'},
+-    {id: 'medium', label: 'Medium'},
+-    {id: 'maximum', label: 'Maximum'},
+-  ];
++  // The footer chip whose popover is open: 'time', 'focus' or ''.
++  protected accessor openChip_: string = '';
+   protected accessor wasComposeboxOpened_: boolean = false;
+   protected accessor showLensUploadDialog_: boolean = false;
+   protected accessor showComposebox_: boolean = false;
+@@ -568,13 +563,14 @@
+ 
+   override connectedCallback() {
+     super.connectedCallback();
+-    this.refreshPrivacyMode_();
++    this.refreshState_();
+     this.clockTimer_ = setInterval(() => {
+       this.now_ = new Date();
+       this.refreshTime_();
+     }, 30000);
+-    document.addEventListener('visibilitychange', this.refreshPrivacyMode_);
+-    window.addEventListener('focus', this.refreshPrivacyMode_);
++    document.addEventListener('visibilitychange', this.refreshState_);
++    window.addEventListener('focus', this.refreshState_);
++    document.addEventListener('keydown', this.onSlashKey_);
+     realboxCanShowSecondarySideMediaQueryList.addEventListener(
+         'change', this.onRealboxCanShowSecondarySideChanged_);
+ 
+@@ -677,8 +673,9 @@
+   override disconnectedCallback() {
+     super.disconnectedCallback();
+     clearInterval(this.clockTimer_);
+-    document.removeEventListener('visibilitychange', this.refreshPrivacyMode_);
+-    window.removeEventListener('focus', this.refreshPrivacyMode_);
++    document.removeEventListener('visibilitychange', this.refreshState_);
++    window.removeEventListener('focus', this.refreshState_);
++    document.removeEventListener('keydown', this.onSlashKey_);
+     realboxCanShowSecondarySideMediaQueryList.removeEventListener(
+         'change', this.onRealboxCanShowSecondarySideChanged_);
+ 
+@@ -1492,13 +1489,9 @@
+     window.location.href = target;
+   }
+ 
+-  // The level can be changed from the sidebar, Settings or the footer menu
+-  // while this tab is in the background, so re-read it when shown again.
+-  private refreshPrivacyMode_ = () => {
+-    this.pageHandler_.getPrivacyMode().then(({mode}) => {
+-      this.privacyMode_ = mode;
+-      this.privacyRestart_ = false;
+-    });
++  // Performance mode and the times can change while this tab is in the
++  // background, so re-read them when it is shown again.
++  private refreshState_ = () => {
+     this.pageHandler_.getPerformanceMode().then(({enabled}) => {
+       this.performanceMode_ = enabled;
+     });
+@@ -1508,6 +1501,53 @@
+     this.refreshTime_();
+   };
+ 
++  // "3 sleeping tabs are freeing about 1.2 GB.", or '' when none sleep.
++  protected sleepingNote_(): string {
++    const {count, bytes} = this.sleepingTabs_;
++    if (!count) {
++      return '';
++    }
++    const mb = Number(bytes) / (1024 * 1024);
++    const size = mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`;
++    const tabs = count === 1 ? '1 sleeping tab is' : `${count} sleeping tabs are`;
++    return mb >= 1 ? `${tabs} freeing about ${size}.` : `${tabs} freeing memory.`;
++  }
++
++  // "/" focuses the search field, unless the user is typing somewhere.
++  private onSlashKey_ = (e: KeyboardEvent) => {
++    const typing = e.composedPath().some(
++        n => n instanceof HTMLElement &&
++            (n.isContentEditable || ['INPUT', 'TEXTAREA'].includes(n.tagName)));
++    if (e.key !== '/' || typing || e.ctrlKey || e.altKey || e.metaKey) {
++      return;
++    }
++    e.preventDefault();
++    this.shadowRoot.querySelector<HTMLInputElement>('#searchInput')?.focus();
++  };
++
++  protected onChipClick_(e: Event) {
++    const chip = (e.currentTarget as HTMLElement).dataset['chip'] || '';
++    this.openChip_ = this.openChip_ === chip ? '' : chip;
++  }
++
++  protected onChipKeydown_(e: KeyboardEvent) {
++    if (e.key === 'Escape') {
++      this.openChip_ = '';
++    }
++  }
++
++  // The wallpaper thumbnail, softened in CSS; none: the theme gradient shows.
++  protected wallStyle_(): string {
++    const url = loadTimeData.getString('heliumWallpaper');
++    return url.startsWith('data:image/jpeg;base64,') ?
++        `background-image: url("${url}")` : '';
++  }
++
++  // Light wallpapers get dark text (mean luma above the middle).
++  protected wallTone_(): string {
++    return loadTimeData.getInteger('heliumWallpaperLuma') > 150 ? 'light' : 'dark';
++  }
++
+   private refreshTime_() {
+     this.pageHandler_.getTimeToday().then(({enabled, sites}) => {
+       this.timeToday_ = {enabled, sites};
+@@ -1556,6 +1596,7 @@
+     this.pageHandler_.startFocus(minutes);
+     this.focusUntil_ = Date.now() + minutes * 60000;
+     this.editingFocus_ = false;
++    this.openChip_ = '';
+   }
+ 
+   protected onStopFocusClick_() {
+@@ -1577,80 +1618,14 @@
+         });
+   }
+ 
+-  protected onPerformanceClick_() {
+-    this.performanceMode_ = !this.performanceMode_;
+-    this.pageHandler_.setPerformanceMode(this.performanceMode_);
+-  }
+-
+-  protected performanceNote_(): string {
+-    return this.performanceMode_ ?
+-        'On: background tabs sleep after 5 minutes and energy saver stays on.' :
+-        'Off: normal behavior.';
+-  }
+-
+-  // "3 sleeping tabs are freeing about 1.2 GB", or '' when none sleep.
+-  protected sleepingNote_(): string {
+-    const {count, bytes} = this.sleepingTabs_;
+-    if (!count) {
+-      return '';
+-    }
+-    const mb = Number(bytes) / (1024 * 1024);
+-    const size = mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`;
+-    const tabs = count === 1 ? '1 sleeping tab is' : `${count} sleeping tabs are`;
+-    return mb >= 1 ? `${tabs} freeing about ${size}.` : `${tabs} freeing memory.`;
+-  }
+-
+-  protected onPrivacyModeClick_(e: Event) {
+-    const mode = (e.currentTarget as HTMLElement).dataset['mode'] || '';
+-    this.pageHandler_.setPrivacyMode(mode).then(
+-        ({success, restartRequired}) => {
+-          if (success) {
+-            this.privacyMode_ = mode;
+-            this.privacyRestart_ = restartRequired;
+-          }
+-        });
+-  }
+-
+-  protected privacyNote_(): string {
+-    if (this.privacyRestart_) {
+-      return 'Restart the browser to apply every change.';
+-    }
+-    switch (this.privacyMode_) {
+-      case 'usability':
+-        return 'Ad and tracker blocking, with the fewest site problems.';
+-      case 'medium':
+-        return 'Recommended: strong blocking, balanced for everyday sites.';
+-      case 'maximum':
+-        return 'Strictest settings. Some sites may break.';
+-      default:
+-        return 'Choose a privacy level.';
+-    }
++  // "14:32" and "Thursday 29 October", in the user's locale.
++  protected time_(): string {
++    return this.now_.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+   }
+ 
+-  // "14:32 · Saturday 25 October" in the user's locale.
+-  protected clock_(): string {
+-    const time = this.now_.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+-    const date = this.now_.toLocaleDateString(
++  protected date_(): string {
++    return this.now_.toLocaleDateString(
+         [], {weekday: 'long', day: 'numeric', month: 'long'});
+-    return `${time} · ${date}`;
+-  }
+-
+-  // Time of day for the sky: phase name plus where the sun (day) or moon
+-  // (night) sits on its arc, as percentages of the page.
+-  protected sky_(): {phase: string, x: number, y: number} {
+-    const h = this.now_.getHours() + this.now_.getMinutes() / 60;
+-    const phase = h < 5 || h >= 21 ? 'night' : h < 8 ? 'dawn' :
+-        h < 17 ? 'day' : 'dusk';
+-    const p = h >= 6 && h < 18 ? (h - 6) / 12 : ((h + 6) % 24) / 12;
+-    // Low arc near the top edge, so the orb never sits behind the text.
+-    return {phase, x: 8 + 84 * p, y: 24 - 18 * Math.sin(Math.PI * p)};
+-  }
+-
+-  protected greeting_(): string {
+-    const hour = new Date().getHours();
+-    const part = hour < 5 ? 'Night' : hour < 12 ? 'Morning' :
+-        hour < 18 ? 'Afternoon' : 'Evening';
+-    return `Good ${part} User!`;
+   }
+ 
+   protected showThemeAttribution_(): boolean {
+--- a/chrome/browser/ui/webui/new_tab_page/new_tab_page_ui.cc
++++ b/chrome/browser/ui/webui/new_tab_page/new_tab_page_ui.cc
+@@ -40,6 +40,7 @@
+ #include "chrome/browser/new_tab_page/modules/v2/most_relevant_tab_resumption/most_relevant_tab_resumption_page_handler.h"
+ #include "chrome/browser/new_tab_page/modules/v2/tab_groups/tab_groups_page_handler.h"
+ #include "chrome/browser/new_tab_page/new_tab_page_util.h"
++#include "chrome/browser/helium_theme/helium_theme.h"
+ #include "chrome/browser/new_tab_page/prefs/ntp_pref_names.h"
+ #include "chrome/browser/page_image_service/image_service_factory.h"
+ #include "chrome/browser/profiles/profile.h"
+@@ -234,6 +235,11 @@
+         template_url_service->search_terms_data());
+   }
+   source->AddString("defaultSearchUrlTemplate", search_url_template);
++  // The user's wallpaper (local, never sent anywhere) behind the page.
++  source->AddString("heliumWallpaper",
++                    helium_theme::WallpaperThumbnail(profile));
++  source->AddInteger("heliumWallpaperLuma",
++                     helium_theme::WallpaperLuma(profile));
+ 
+   GURL threads_url = google_base_url.Resolve("/search");
+   threads_url = net::AppendQueryParameter(threads_url, "udm", kAIMDisplayMode);
+--- a/chrome/browser/resources/new_tab_page/new_tab_page.html
++++ b/chrome/browser/resources/new_tab_page/new_tab_page.html
+@@ -31,5 +31,6 @@
+     <link rel="stylesheet" href="chrome://resources/css/text_defaults_md.css">
+     <link rel="stylesheet" href="chrome://theme/colors.css?sets=ui,chrome">
+     <link rel="stylesheet" href="shared_vars.css">
++    <link rel="stylesheet" href="chrome://resources/css/heliumpp_tokens.css">
+   </body>
+ </html>
+--- a/chrome/browser/resources/new_tab_shared/customize_buttons/customize_buttons.css
++++ b/chrome/browser/resources/new_tab_shared/customize_buttons/customize_buttons.css
+@@ -25,11 +25,14 @@
+       var(--color-new-tab-page-wallpaper-search-button-background);
+ }
+ 
++/* --ntp-customize-button-*: optional overrides from the embedding page. */
+ #customizeButton {
+-  --cr-hover-background-color:
+-      var(--color-new-tab-page-button-background-hovered);
+-  --cr-button-text-color: var(--color-new-tab-page-button-foreground);
+-  --cr-button-background-color: var(--color-new-tab-page-button-background);
++  --cr-hover-background-color: var(--ntp-customize-button-hover,
++      var(--color-new-tab-page-button-background-hovered));
++  --cr-button-text-color: var(--ntp-customize-button-foreground,
++      var(--color-new-tab-page-button-foreground));
++  --cr-button-background-color: var(--ntp-customize-button-background,
++      var(--color-new-tab-page-button-background));
+ }
+ 
+ :host([show-background-image]) #customizeButton,
+@@ -46,9 +49,10 @@
+ }
+ 
+ .customize-button {
+-  --cr-button-height: 32px;
++  --cr-button-height: var(--ntp-customize-button-size, 32px);
+   border: none;
+-  border-radius: calc(.5 * var(--cr-button-height));
++  border-radius: var(--ntp-customize-button-radius,
++      calc(.5 * var(--cr-button-height)));
+   font-weight: 400;
+   min-width: 32px;
+   padding-inline-end: 0;

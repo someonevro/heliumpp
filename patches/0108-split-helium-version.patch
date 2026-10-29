@@ -35,14 +35,18 @@
 +std::string_view GetHeliumVersionNumber();
  
  // Returns the version number, e.g. "6.0.490.1".
- constexpr std::string_view GetVersionNumber() {
+ #if BUILDFLAG(IS_ANDROID)
 --- a/base/version_info/version_info.cc
 +++ b/base/version_info/version_info.cc
-@@ -10,9 +10,14 @@
+@@ -10,6 +10,7 @@
  #include "base/strings/strcat.h"
  #include "base/strings/string_number_conversions.h"
  #include "base/version.h"
 +#include "base/version_info/helium_version_values.h"
+ 
+ #if BUILDFLAG(IS_ANDROID)
+ #include "base/android/apk_info.h"
+@@ -17,6 +18,10 @@
  
  namespace version_info {
  
@@ -50,15 +54,15 @@
 +  return HELIUM_PRODUCT_VERSION;
 +}
 +
- int GetMajorVersionNumberAsInt() {
-   DCHECK(GetVersion().IsValid());
-   return GetVersion().components()[0];
+ #if BUILDFLAG(IS_ANDROID)
+ std::string_view GetVersionNumber() {
+   return base::android::apk_info::package_version_name();
 --- a/base/version_info/version_info_values.h.version
 +++ b/base/version_info/version_info_values.h.version
-@@ -7,7 +7,6 @@
- 
- #define PRODUCT_NAME "@PRODUCT_FULLNAME@"
+@@ -11,7 +11,6 @@
+ #if !BUILDFLAG(IS_ANDROID)
  #define PRODUCT_VERSION "@MAJOR@.@MINOR@.@BUILD@.@PATCH@"
+ #endif
 -#define HELIUM_PRODUCT_VERSION "@HELIUM_MAJOR@.@HELIUM_MINOR@.@HELIUM_PATCH@.@HELIUM_PLATFORM@"
  #define LAST_CHANGE "@LASTCHANGE@"
  #define IS_OFFICIAL_BUILD @OFFICIAL_BUILD@

@@ -1,0 +1,85 @@
+--- a/chrome/browser/helium_aliases/helium_aliases.cc
++++ b/chrome/browser/helium_aliases/helium_aliases.cc
+@@ -23,6 +23,8 @@
+ #include "components/os_crypt/async/common/encryptor.h"
+ #include "components/pref_registry/pref_registry_syncable.h"
+ #include "components/prefs/pref_service.h"
++#include "content/public/browser/global_routing_id.h"
++#include "content/public/browser/render_frame_host.h"
+ #include "content/public/browser/storage_partition.h"
+ #include "content/public/browser/web_contents.h"
+ #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+@@ -95,6 +97,9 @@
+   AliasRequest(content::WebContents* contents, std::string key)
+       : contents_(contents->GetWeakPtr()),
+         site_(SiteOf(contents->GetLastCommittedURL())),
++        frame_(contents->GetFocusedFrame()
++                   ? contents->GetFocusedFrame()->GetGlobalId()
++                   : content::GlobalRenderFrameHostId()),
+         key_(std::move(key)),
+         factory_(contents->GetBrowserContext()
+                      ->GetDefaultStoragePartition()
+@@ -157,9 +162,12 @@
+       Send("aliases", base::WriteJson(alias));
+       return;
+     } else if (const std::string* email = data->FindString("email")) {
+-      // The tab may have moved to another site while addy.io answered; the
+-      // alias names this site, so only fill it in here.
+-      if (SiteOf(contents_->GetLastCommittedURL()) == site_) {
++      // The tab may have moved to another site, or focus to another frame
++      // (a third-party iframe), while addy.io answered; the alias names this
++      // site, so only fill it into the field it was asked for.
++      content::RenderFrameHost* focused = contents_->GetFocusedFrame();
++      if (SiteOf(contents_->GetLastCommittedURL()) == site_ && focused &&
++          focused->GetGlobalId() == frame_) {
+         contents_->Replace(base::UTF8ToUTF16(*email));
+       }
+     }
+@@ -168,6 +176,8 @@
+ 
+   base::WeakPtr<content::WebContents> contents_;
+   std::string site_;
++  // The frame whose field asked for the alias.
++  const content::GlobalRenderFrameHostId frame_;
+   const std::string key_;
+   scoped_refptr<network::SharedURLLoaderFactory> factory_;
+   std::unique_ptr<network::SimpleURLLoader> loader_;
+@@ -220,14 +230,15 @@
+                       if (!contents) {
+                         return;
+                       }
+-                      // Linux: "v11" = keyring-backed key. Without a
+-                      // keyring Chromium falls back to "v10", a key built
+-                      // into the browser: that only scrambles, so nothing is
+-                      // saved. Windows (DPAPI) and macOS (Keychain) always
+-                      // encrypt with a key the OS protects.
++                      // Windows (DPAPI, app-bound) and macOS (Keychain)
++                      // only encrypt with a key the OS protects. Elsewhere
++                      // "v10" is a key built into the browser that only
++                      // scrambles, so require the keyring ("v11") or the
++                      // Flatpak secret portal ("v12").
+                       if (encryptor->EncryptString(key, &encrypted) &&
+-                          (!BUILDFLAG(IS_LINUX) ||
+-                           encrypted.starts_with("v11"))) {
++                          (BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) ||
++                           encrypted.starts_with("v11") ||
++                           encrypted.starts_with("v12"))) {
+                         Profile::FromBrowserContext(
+                             contents->GetBrowserContext())
+                             ->GetPrefs()
+--- a/chrome/browser/helium_theme/helium_theme.cc
++++ b/chrome/browser/helium_theme/helium_theme.cc
+@@ -500,7 +500,12 @@
+   if (!size || *size <= 0 || *size > kMaxWallpaperFileBytes) {
+     return std::nullopt;
+   }
+-  return base::ReadFileToBytes(path);
++  // Capped again: the file may grow between the size check and the read.
++  std::string data;
++  if (!base::ReadFileToStringWithMaxSize(path, &data, kMaxWallpaperFileBytes)) {
++    return std::nullopt;
++  }
++  return std::vector<uint8_t>(data.begin(), data.end());
+ }
+ 
+ // True if the profile's theme is the default or one this module applied, so it

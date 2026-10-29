@@ -1,5 +1,5 @@
 # PROJECT_STATUS.md
-Updated 2026-10-21 (end of session 2).
+Updated 2026-10-29 (session 8 + redesign stage 0, see SESSION 8).
 
 ## HANDOFF (read this first) - end of session 2, 2026-10-21
 **State:** working Linux desktop browser (Helium, Chromium 155.0.8059.84). Patch series `patches/series` = 56 patches (0001-0057; 0044 was removed on purpose). Last build OK (compile59). Not a git repo, nothing committed or published. Snapshots: `designs/session2-start/` (before this session), `designs/toggle_bar_browser/` (with the sidebar privacy toggle bar, since removed), `designs/session2-end/` (now: patches, scripts, docs).
@@ -9,6 +9,160 @@ Updated 2026-10-21 (end of session 2).
 **Biggest unverified items:** menu entry and Ctrl+Alt+N never clicked in a real window by me; DNS page never seen and DoH never observed in use; performance mode saving not measured; the user must click-test the homepage switches; horizontal layout untouched by the new features; downloads from isolated tabs hit the real disk and are not blocked; password-save prompts and clipboard writes in isolated tabs not blocked; about:blank popup case in isolated tabs untested (possible fallback to shared storage); the 56-patch series has never been replayed on a pristine tree.
 **Next (user's list):** (1) isolated mode: fix/test the about:blank popup hole, block or redirect downloads, password manager, clipboard write; (2) item 4 general speed outside performance mode (measure first); (3) restyle: horizontal layout, menus/popups, Settings and onboarding pages; (4) wallpaper image behind the new tab page and privacy chip (dropped: weather, tracker counter unless uBO stats readable); (5) red hover tint on window close; (6) DNS: visual check and a real-use test; (7) update CLAUDE.md (still says six presets; the product uses three modes) and ARCHITECTURE.md/PLATFORM_SUPPORT.md with this session's decisions; (8) run the series on a pristine tree.
 **User preferences seen this session:** wants to review changes before big edits when asked ("show me what changes"); wants honest "not verified" notes; decides between options quickly (picked option 1 even with the URL-hiding trade-off, later reverted it); likes the new tab page and drop-down window bar; wants the browser to stop looking like stock Helium.
+
+## SESSION 8 (2026-10-26..29) - Windows build released, Chromium 156 upgrade in progress
+- WINDOWS CI WORKS (free `windows-2025` runners): fixes were symbol_level=0 (C: filled at 15k/79k steps), build
+  tree at a real `D:\helium-windows` (junction broke siso), hand-off zip check, resume from an earlier run's
+  artifact (`resume-run` / `resume-patches` inputs), 0111 (tab.cc friend-name clash under clang-cl), 0112
+  (chrome_elf.dll links crashpad_win.cc but not version_info.cc: use HELIUM_PRODUCT_VERSION define).
+  Run 40696106501 (resumed from 40486777593) finished build-1 + packaging: `heliumpp_0.19.4.7_x64-installer.exe`
+  (sha256 573ada1d...cd2c7, 120567808 B) + portable zip. Checked: PE32+ x64, chrome_elf.dll has `heliumpp` path +
+  own app GUID {6E7E7927-...} (data in %LOCALAPPDATA%\heliumpp, not Helium's). UPLOADED to release
+  v0.19.4.7-alpha (user asked), notes + README (f299b50, e88f680) link it. NOT run on a real Windows PC.
+  Artifact download tip: GitHub's blob store is ~160 KB/s per connection; 16 parallel `curl -r` ranges = 1 min.
+- CHROMIUM 156 UPGRADE (user approved 2026-10-29; target Helium 0.20.2 = Chromium 156.0.8078.73; in place;
+  Linux build allowed overnight; NOT allowed without asking: commit/push): research/helium-linux at 0.20.2.1,
+  helium-chromium-pinned at 58261a2, prepare_source.sh pin 58261a2. New `scripts/rebase_patch.sh` (start/finish
+  per failing patch). Refreshed by hand: 0010, 0022, 0023, 0029, 0049, 0050, 0058 (rename now regex over its
+  files), 0086 + 0092 (context-menu UMA ids now 173/174, max 175), 0108. Six version patches (0065..0109)
+  replaced by 0113-version-0.20.2.2 -> next release is 0.20.2.2. All 106 apply (`build/prepare156*.log`).
+  Old 155 trees deleted; build/pristine + build/src = 156; args.gn kept (args-155.gn copy), gn gen OK.
+  Full compile started 2026-10-29 ~01:00 (`build/compile-156.log`, -k 0, 87395 steps).
+  Windows prep (uncommitted): windows-stage.yml pin -> helium-windows 0.20.2.1 (40061d5); its branding
+  patch unchanged, Linux-context patches only moved offsets.
+- BUILD OK 2026-10-29 05:01: full compile 3h48m+ (one error: 0016's `flex_layout_` gone, the region view is a
+  DelegatingLayoutManager + FlexLayoutView `content_area_view_` in 156) + 17m28s link. New 0114-chromium-156-
+  sidebar-children: sidebar address bar and workspace dots now live in content_area_view_ (outside it they get
+  no bounds). `helium --version` = Helium++ 0.20.2.2 (Chromium 156.0.8078.73).
+  REGRESSION (build/reg156/summary.txt): 25/26 PASS; test_isolated_blank reports the known about:blank leak
+  (same as 155, by design; the real command opens chrome://new-tab-page, which passes). Xvfb screenshot
+  build/shots/v156-main.png: address bar, tabs, workspace dots, footer, NTP all in place.
+  NOT verified: real desktop window, KDE/GNOME/Hyprland, DRM, AppImage packaging of 156, Windows build of 156.
+- 2026-10-29 later: 0115 wallpaper (KDE leftover containments picked the wrong image; live desktop/activity, slideshow -> accent, XFCE connected monitor, COSMIC etc. ignore leftover WM files, GNOME 47 accent, undecodable file -> accent, Windows reads/watches TranscodedWallpaper); run.sh links desktop config into its private XDG_CONFIG_HOME (that hid the KDE files in dev runs). 0116 acrylic blur via compositor + 55% tint (scripts/shot_kwin.sh = nested KWin screenshots). 0117 one pinned tab no longer a huge square. 0118 workspace per window, addy key saved on Windows/macOS, alias only on the same site. 0119 new folder/history/bookmarks moved from the footer to the right-click menu (title-bar menu + footer). 0120 Windows: Helium's update feed off (WinSparkle is not compiled in our CI anyway: checked 0.19.4.7 chrome.dll). 0121 security-review fixes (key prefixes, alias frame, capped wallpaper read). Project Claude setup: .claude/ (key-protect hook, parser-test hook, /make-patch, /release, security-reviewer agent); scripts/make_patch.sh.
+- A wrong "Helium updater" warning was published on README/release notes and corrected the same day (681ce21).
+- USER VERIFIED 2026-10-29 on real KDE Plasma 6.8 (Wayland) with scripts/run.sh: "its working" (wallpaper colour, acrylic blur, pinned tile, right-click menu).
+- REDESIGN (user: Zen + Zephium, no AI): 0122 contrast polish (saved build build/saved/0.20.2.2-kde-verified = up to 0122),
+  0123 native sidebar (workspace segments at top, shield footer, folder wash), 0124 WEB SIDEBAR M1 behind
+  `--helium-web-sidebar` (chrome://helium-sidebar.top-chrome; TabStripService + own mojom). Verified in nested KWin:
+  renders on glass, live tab list, workspaces, shield panel, light/dark (build/audit/websidebar-both.png). Not run by the user yet.
+  Decisions: ARCHITECTURE.md "web-based sidebar"; .claude/CLAUDE.md "Redesign".
+- GIT: 37 files staged (0113-0121 + docs + .claude) but NOT committed (commit/push blocked by the auto-mode classifier;
+  user must approve or run it). 0122-0124 written after that, unstaged. b72ed7f/681ce21 on GitHub left patches/series
+  pointing at deleted version patches until this commit lands.
+- REDESIGN PLAN APPROVED 2026-10-29 (stages 0-7, see .claude/CLAUDE.md). STAGE 0 (foundation) done, no browser
+  code changed: DESIGN.md (seed), shared/design/tokens.css (all colours from chrome://theme/colors.css) +
+  shared/tests/test_tokens.py (3/3 pass), Figtree OFL font in shared/fonts/figtree (Satoshi licence rejected),
+  scripts/shot_kwin.sh options SCHEME/MATCH/WIN/OUT/COLLAPSED (dark mode via browser.theme.color_scheme2),
+  scripts/shot_matrix.sh. Baseline matrix of the current web sidebar: build/audit/stage0-baseline/sheet.png.
+  NEXT: user reviews Stage 0, then Stage 1 (web sidebar to parity: tokens + Figtree wired into the WebUI, drag and
+  drop, context menu, essentials/folder editing, collapsed rail, keyboard nav, a11y; then default with native fallback).
+- STAGE 1 part A (2026-10-29, user: "make it look like the mock"), web sidebar only (--helium-web-sidebar):
+  0125-figtree-ui-font (Satoshi -> Figtree everywhere: native UI + WebUI; compile.sh ships shared/fonts/figtree and
+  wipes out/Default/fonts, so Satoshi no longer reaches packages; fetch_fonts.sh is now unused),
+  0126-web-sidebar-mock-layout (mock layout: row 1 window dots + sidebar toggle + back/forward/reload, named
+  workspace segments with sliding highlight, native omnibox laid over a slot the page reports via mojom
+  SetAddressSlot (clipped to the view), essentials tiles, folders, footer, collapsed rail via container query;
+  tokens via chrome://resources/css/heliumpp_tokens.css copied from shared/design/tokens.css by compile.sh and
+  windows/apply_ours.py; tab list now = one getTabs() + TabStripObservation events applied to a local tree:
+  re-fetching on every event left the list stale/"about:blank"),
+  0127-dark-glass-adaptive-tint (helium.theme.wallpaper_luma pref; dark acrylic tint 55-80% by wallpaper
+  brightness; secondary text was 2.4:1 over a light wallpaper). ink-2 token 80% -> 86%.
+  TESTED: scripts/test_web_sidebar.py 14 PASS + 1 SKIP (maximize needs a WM; verified in nested KWin:
+  maximized/normal/minimized); regression 25/26 (known isolated_blank); token tests 3/3; contrast of tab text
+  measured on all 6 theme x wallpaper shots 4.6-8.7:1. Screens: build/audit/stage1-b/sheet.png.
+  Tools: scripts/shot_matrix.sh, shot_kwin.sh SEED/PROBE, shot_probe_workspace.py, shot_probe_maximize.py,
+  amend_patch.sh (re-record the last patch).
+  NOT done in stage 1: drag and drop, tab right-click menu, essentials/folder editing, arrow-key navigation,
+  window drag from the sidebar's top row (web content takes the mouse), back/forward disabled state, address
+  field fill colour (stage 2), making the web sidebar the default. Windows: Figtree not packaged (as Satoshi).
+- STAGE 3 part A + shield count (2026-10-29, user: "do as you like, I just want it to look like the mock"):
+  0128-ntp-mock-wallpaper (new tab page rebuilt to the mock: the user's wallpaper softened behind the page (a
+  192 px JPEG data: URL saved in pref helium.theme.wallpaper_thumb at each wallpaper decode, given to the page by
+  loadTimeData; profiles decoded before 0128 decode once more), 88 px clock + date, search field with "/" shortcut,
+  shortcut row, chips at the foot (time on the web -> per-site popover; focus round -> 25/50 min + sites popover;
+  sleeping tabs note as a chip), text tone from wallpaper luma; theme-gradient fallback without a wallpaper.
+  Removed from the page: greeting, time-of-day sky, privacy level switch, performance switch (both remain in
+  Settings and in the web sidebar's shield panel). customize_buttons.css gained opt-in --ntp-customize-button-*),
+  0129-sidebar-blocked-count (web sidebar footer shows uBlock Origin's count for the active tab, read from its
+  badge via ExtensionActionDispatcher, e.g. "3 blocked"; level name when uBO is not running).
+  TESTED: new scripts/test_ntp.py 11/11 (wallpaper, blur, clock, date, no privacy controls, "/" shortcut, chip
+  popover + Escape, query -> search engine, typed URL; external hosts blocked in the test);
+  test_web_sidebar.py 16 PASS + 1 SKIP (adds: shield count >= 3 on a page loading 5 ad hosts mapped to the local
+  server); test_time_focus.py ALL PASS (now opens the time chip); test_sleeping_tabs.py PASS.
+  Full regression (build/audit/regression-stage3.txt): 27/29 first run; test_hibp failed once ("strong" lookup
+  not sent) and passed on rerun; test_isolated_blank is the known failure. After 0130: test_ntp (now decodes a
+  real test wallpaper via --match-wallpaper), test_web_sidebar, test_hibp PASS.
+  Screens: build/audit/stage3-a/sheet.png (NTP matrix), build/audit/stage3-b/sides.png (footer count).
+  NOT done: NTP "trackers blocked today" chip (needs a daily total; uBO only exposes the per-tab badge), coloured
+  dots for every workspace and the "Today" header from the mock; the very first NTP after a new wallpaper shows
+  the theme gradient until the decode finishes.
+  0130-review-fixes-thumb-shield (security review of 0128/0129): turning "match wallpaper" off clears the thumbnail
+  pref; an empty uBO badge (nothing blocked, incognito without uBO, allowlisted site, count switched off) shows
+  the level name instead of a possibly false "0 blocked".
+- MOCK POLISH (2026-10-29, user: closer to the mock, fix visual bugs, sidebar less see-through like Zephium,
+  faster): 0131-mock-polish-shield-panel: shield panel rebuilt to the mock within the sidebar's width
+  ("Protection is on", site, "N blocked on this site" card, "Privacy level" label, 12px segments that never
+  overlap, level hint, performance row on one line, light switch knob); omnibox placeholder in the web sidebar
+  "Search or enter address" (full "Search DuckDuckGo or type a URL" kept as accessible name; not yet seen on
+  screen); acrylic glass evened out as Zephium does (frame/src/styles/axes/material.css, sky.css; MPL-2.0, ideas
+  only): tint 88% light, dark 84-92% adaptive (was 74% / 55-80%), wallpaper now only a hint; NTP search and chips
+  no longer use backdrop-filter (the wallpaper behind is already blurred). Zephium source for reference:
+  build/ref/zephium (shallow clone). Screens: build/audit/stage3-c/.
+  BENCH (scripts/bench/window_bench.py, now label=binary[,--flag], N=3, software GL; build/audit/bench-stage3.txt):
+  first window paint / first page paint / PSS 10 tabs: pre-redesign 158/306 ms 1109 MB; now native sidebar
+  159/309 ms 1117 MB; web sidebar 174/322 ms 1152 MB (one more renderer). test_web_sidebar, test_ntp PASS.
+- 0132-performance-mode-plain-ui (user: "disable these heavy looking effects, only in performance mode strictly"):
+  in performance mode only: no compositor blur (window paints opaque; switches live via pref observers in
+  BrowserWidget + BrowserDesktopWindowTreeHostLinux), new tab page shows the plain theme gradient (no full-page
+  blur), web sidebar drops transitions/animations (:host([reduced])). TESTED: test_web_sidebar (+2 checks),
+  test_ntp (+1 check), test_performance_toggle PASS; nested KWin shot build/audit/stage3-d/perf.png (opaque).
+  NOT verified on screen: acrylic coming back when performance mode is switched off again (same code path).
+- 0133-frosted-acrylic (user: 88% glass "feels like normal mode"): tint 80% light / 70-86% dark adaptive (between
+  0131's 88/84-92 and 0122's 74/55-80); web sidebar adds a top sheen and a 5-7% fractal-noise grain (static,
+  off in performance mode) so the glass reads frosted, not clear. Screens: build/audit/stage3-e/sides.png.
+- SAVED build/saved/0.20.2.2-redesign-0133/ (patches 0001-0133, last state WITH acrylic; README.txt has run line).
+- 0134-acrylic-off (owner: remove the acrylic glass everywhere for now): HeliumNativeFrameAvailable() false on all
+  platforms (opaque window, no blur request, Settings switch hidden), setup page switch removed, sidebar grain/sheen
+  removed. Notes and history: designs/acrylic-notes.md. Same patch fixes the setup page's tab layout cards (window
+  drawings had shrunk to a sliver). Verified: nested KWin shot build/audit/acrylic-off/ (opaque), setup page
+  light/dark build/audit/setup/tablayout.png (new scripts/shot_setup_page.py <Page> <out> [light|dark]).
+- AUDIT (2026-10-29, /ponytail-audit): fixed build/{src,pristine}/src/.ours.applied out of sync with patches/series
+  (0130 renamed by hand; build/src list lacked 0114) -> prepare_source.sh rerun would have failed; amend_patch.sh
+  now dedupes its file list. Checked clean: series vs files, shell syntax, Python names, time-per-site day keys,
+  AppImage updater (signature, downgrade, https). Claude Security scan NOT run (needs the owner to start it).
+- 0135-web-sidebar-default (owner: "users simply run the app and have the sidebar"): the web sidebar is the
+  default; `--helium-native-sidebar` brings back the native one; `--helium-web-sidebar` is now a no-op. Parity gaps
+  remain (drag and drop, tab context menu, folder/essentials editing, arrow-key nav, window drag from row 1).
+- SECURITY REVIEW (2026-10-29, two security-reviewer runs; owner: fix what was found):
+  0136-security-review-fixes: sidebar page refuses to bind when opened as a tab (use-after-free after a tab drag);
+  HIBP lookup only with "Warn if passwords are exposed" on and never off the record; isolated tabs no longer write
+  favicons/URLs to the Favicons database; isolated downloads blocked/kept out of history also after the tab
+  closed (decided from the download's own partition); onboarding setPref limited to the 11 prefs it writes;
+  updater flushes before the swap and downloads to a random .new-<n> name (race with a second updater, planted
+  symlink); a test-only update key (scripts/test_update_signing.pem, accepted only with --helium-update-target) so
+  test_update.sh never signs with the release key (old test-signed files deleted).
+  Tooling: key-protection hook matches the key folder too and also watches Grep/Glob/NotebookEdit; CI actions
+  pinned to commit SHAs; amend/rename lessons in the audit entry.
+  OPEN (need the owner): (a) encrypt the release key with a passphrase (openssl pkey -aes256; owner runs it,
+  release_sign.sh will then ask for it); (b) package_appimage.sh: pin the AppImage type2 runtime by sha256 and pass
+  --runtime-file, docker --network none (needs a release build to test); (c) windows-stage.yml resume-run should
+  only accept runs from main (needs a Windows CI run to test); (d) Bonjourr's optional bookmarks/topSites/search
+  permissions are granted without a prompt because it is a component extension (removing them breaks those
+  Bonjourr features); (e) updater has no opt-out pref and the signed manifest has no expiry; (f) HIBP still runs
+  in isolated tabs (only a 5-hex k-anonymity prefix leaves; no clean hook at that layer).
+- 0137-sidebar-isolated-marker (owner: "nothing differentiates isolated tabs"): built; new scripts/test_sidebar_isolated.py
+  4/4 PASS, test_web_sidebar PASS; screens build/audit/isolated/marker.png. Full regression after 0136: 28/29
+  (only test_isolated_blank, the known about:blank leak; test_update.sh passes with the test key).
+  mojom GetIsolatedTabs(); page marks isolated tabs/tiles with a dashed accent outline, a mask icon and a title.
+  Owner encrypted the release key with a passphrase (2026-10-29): release signing now needs the owner to run
+  release_sign.sh. Full regression after 0136 was running (build/audit/regression-0136.txt, 17/29 done, only
+  test_isolated_blank failing = known about:blank leak).
+  RESUME HERE: (3) ask owner to approve commit (patches 0113-0137 + scripts/tests/docs) and push;
+  (4) next task proposed: about:blank isolation leak (test_isolated_blank).
+- NEXT: (1) user tests `scripts/run.sh test14 --helium-web-sidebar`; (2) web sidebar M2: drag and drop (tab_drag_api),
+  tab context menu, collapsed sidebar, arrow-key nav, then make it the default; (3) visual polish toward Zephium
+  (study frame/src/styles/*.css, MPL-2.0); (4) new tab page with softened wallpaper; (5) shield blocked counts (uBO);
+  (6) commit + push -> Windows CI full run -> release 0.20.2.2.
 
 ## SESSION 7 (2026-10-25, after v0.19.4.6) - released as v0.19.4.7-alpha
 - 0108-split-helium-version: HELIUM_PRODUCT_VERSION moved from version_info_values.h (reached ~everything via

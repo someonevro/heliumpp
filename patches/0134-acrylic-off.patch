@@ -1,0 +1,102 @@
+--- a/chrome/browser/resources/heliumpp_sidebar/app.css
++++ b/chrome/browser/resources/heliumpp_sidebar/app.css
+@@ -14,7 +14,6 @@
+ :host {
+   color: var(--hp-ink);
+   container-type: inline-size;
+-  isolation: isolate;
+   display: flex;
+   flex-direction: column;
+   font: var(--hp-weight) var(--hp-text) / var(--hp-leading) var(--hp-font);
+@@ -659,37 +658,3 @@
+   animation: none !important;
+   transition: none !important;
+ }
+-
+-/* Frosted glass: the native window gives the blur and tint; a soft sheen from
+-   the top and a fine grain make it read as frosted rather than clear. Static,
+-   painted once; off in performance mode. */
+-:host::before,
+-:host::after {
+-  content: '';
+-  inset: 0;
+-  pointer-events: none;
+-  position: absolute;
+-  z-index: -1;
+-}
+-
+-:host::before {
+-  background: linear-gradient(180deg,
+-      light-dark(rgb(255 255 255 / 0.24), rgb(255 255 255 / 0.06)) 0,
+-      transparent 45%);
+-}
+-
+-:host::after {
+-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 0 0 0 1'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+-  opacity: 0.05;
+-}
+-
+-@media (prefers-color-scheme: dark) {
+-  :host::after {
+-    opacity: 0.07;
+-  }
+-}
+-
+-:host([reduced])::before,
+-:host([reduced])::after {
+-  display: none;
+-}
+--- a/chrome/browser/ui/ui_features.cc
++++ b/chrome/browser/ui/ui_features.cc
+@@ -41,6 +41,13 @@
+ BASE_FEATURE(kHeliumHidePageActions, base::FEATURE_DISABLED_BY_DEFAULT);
+ 
+ bool HeliumNativeFrameAvailable() {
++  // Acrylic glass is off on every platform for now (2026-10-29, owner's
++  // decision): the window paints opaque and the Settings / onboarding switches
++  // are hidden. The code stays for a later redesign of the effect; notes in
++  // designs/acrylic-notes.md. Remove this return to bring it back.
++  if ((true)) {
++    return false;
++  }
+ #if BUILDFLAG(IS_MAC)
+   return base::FeatureList::IsEnabled(kHeliumNativeFrameMaterials);
+ #elif BUILDFLAG(IS_LINUX)
+--- a/components/helium_onboarding/src/pages/TabLayout.svelte
++++ b/components/helium_onboarding/src/pages/TabLayout.svelte
+@@ -8,7 +8,6 @@
+     } from "../lib/onboarding-flow";
+ 
+     import PageHeader from "../components/PageHeader.svelte";
+-    import { preferences, setPref } from "../lib/browser/prefs";
+ 
+     const visible = $derived($currentPage === "TabLayout");
+     const selected = $derived($selectedTabLayout);
+@@ -61,12 +60,7 @@
+                 checked={$selectedCompactMode}
+                 onchange={(enabled) => selectedCompactMode.set(enabled)}
+             />
+-            <Toggle
+-                name="Acrylic window"
+-                desc="The sidebar and toolbar let your wallpaper show through. Blurred where the desktop supports it (Hyprland); plain see-through elsewhere. Applies right away."
+-                checked={!!$preferences["browser.native_frame_materials"]}
+-                onchange={(enabled) => setPref("browser.native_frame_materials", enabled)}
+-            />
++            <!-- Acrylic window switch removed while the effect is off (designs/acrylic-notes.md). -->
+         </div>
+     </div>
+ </div>
+@@ -121,8 +115,12 @@
+         font-size: 0.9em;
+     }
+ 
+-    /* tiny drawing of the window */
++    /* tiny drawing of the window; fills the card (the card's button styles
++       centre its children, which shrank it to a sliver) */
+     .preview {
++        align-self: stretch;
++        box-sizing: border-box;
++        width: 100%;
+         display: flex;
+         height: 84px;
+         gap: 6px;

@@ -8,7 +8,7 @@
  #include "chrome/browser/ui/views/tabs/common/tab_group_header_view.h"
  
  #include "base/task/single_thread_task_runner.h"
-@@ -124,6 +125,10 @@
+@@ -125,6 +126,10 @@
      SetHorizontalAlignment(gfx::ALIGN_TO_HEAD);
      SetElideBehavior(gfx::FADE_TAIL);
      SetAutoColorReadabilityEnabled(false);
@@ -19,16 +19,16 @@
    }
  };
  
-@@ -524,7 +529,8 @@
-   tab_group_visual_data_ = tab_group_data.visual_data;
-   is_shared_ = tab_group_data.is_sharing_group;
+@@ -521,7 +526,8 @@
+   if (delegate_->IsValid() && delegate_->GetTabGroup().is_ephemeral()) {
+     OnTabCountChanged();
+   } else {
+-    group_header_label_->SetText(tab_group_visual_data_.title());
++    group_header_label_->SetText(
++        base::i18n::ToUpper(tab_group_visual_data_.title()));
+   }
  
--  group_header_label_->SetText(tab_group_visual_data_.title());
-+  group_header_label_->SetText(
-+      base::i18n::ToUpper(tab_group_visual_data_.title()));
-   if (GetColorProvider()) {
-     SkColor background_color = GetColorProvider()->GetColor(
-         GetTabGroupTabStripColorId(tab_group_visual_data_.color(),
+   UpdateColors();
 --- a/chrome/browser/ui/views/tabs/common/tab_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_view.cc
 @@ -420,6 +420,38 @@
@@ -70,7 +70,7 @@
  void TabView::LayoutManager::OnInstalled(views::View* host) {
    CHECK(IsViewClass<class TabView>(host));
  }
-@@ -1081,7 +1113,27 @@
+@@ -1117,7 +1149,27 @@
    int index = tab_strip_model->GetIndexOfTab(tab);
    CHECK(index != TabStripModel::kNoTab);
  

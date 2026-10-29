@@ -1,0 +1,1676 @@
+--- a/chrome/app/generated_resources.grd
++++ b/chrome/app/generated_resources.grd
+@@ -9109,6 +9109,9 @@
+       <message name="IDS_NEW_TAB_FOOTER_NAME" desc="The name of the New Tab Footer feature, a UI that may show at the bottom of the New Tab Page." translateable="false">
+         New Tab Footer
+       </message>
++      <message name="IDS_HELIUM_SIDEBAR_NAME" desc="Task manager name of the Helium++ sidebar (tabs, workspaces, shield) drawn as an internal page." translateable="false">
++        Sidebar
++      </message>
+        <message name="IDS_OPENS_MANAGEMENT_PAGE" desc="ARIA (accessibility) role description for a link in the New Tab footer which opens the chrome://management page in the current tab.">
+         Learn about how your browser is managed
+       </message>
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -2698,6 +2698,8 @@
+       "//chrome/browser/ui/webui/infobar_internals:impl",
+       "//chrome/browser/ui/webui/metrics_reporter",
+       "//chrome/browser/ui/webui/metrics_reporter:impl",
++      "//chrome/browser/ui/webui/heliumpp_sidebar",
++      "//chrome/browser/ui/webui/heliumpp_sidebar:impl",
+       "//chrome/browser/ui/webui/new_tab_footer",
+       "//chrome/browser/ui/webui/new_tab_footer:impl",
+       "//chrome/browser/ui/webui/omnibox",
+@@ -3643,6 +3645,7 @@
+       "//chrome/browser/ui/webui/drive_picker_host:mojo_bindings",
+       "//chrome/browser/ui/webui/infobar_internals:mojo_bindings",
+       "//chrome/browser/ui/webui/multistep_filter_internals:mojo_bindings",
++      "//chrome/browser/ui/webui/heliumpp_sidebar:mojo_bindings",
+       "//chrome/browser/ui/webui/new_tab_footer:mojo_bindings",
+       "//chrome/browser/ui/webui/new_tab_page_third_party:mojo_bindings",
+       "//chrome/browser/ui/webui/ntp_microsoft_auth:shared",
+--- a/chrome/browser/chrome_browser_interface_binders_webui_parts_desktop.cc
++++ b/chrome/browser/chrome_browser_interface_binders_webui_parts_desktop.cc
+@@ -55,6 +55,8 @@
+ #include "chrome/browser/ui/webui/multistep_filter_internals/multistep_filter_internals_ui.h"
+ #include "chrome/browser/ui/webui/new_tab_footer/new_tab_footer.mojom.h"
+ #include "chrome/browser/ui/webui/new_tab_footer/new_tab_footer_ui.h"
++#include "chrome/browser/ui/webui/heliumpp_sidebar/heliumpp_sidebar.mojom.h"
++#include "chrome/browser/ui/webui/heliumpp_sidebar/sidebar_ui.h"
+ #include "chrome/browser/ui/webui/new_tab_page/new_tab_page.mojom.h"
+ #include "chrome/browser/ui/webui/new_tab_page/new_tab_page_ui.h"
+ #include "chrome/browser/ui/webui/new_tab_page/ntp_promo/ntp_promo.mojom.h"
+@@ -630,6 +632,10 @@
+       .Add<settings::mojom::BrowserShortcutsHandlerFactory>()
+       .Add<help_bubble::mojom::HelpBubbleHandlerFactory>();
+ 
++  registry.ForWebUI<heliumpp_sidebar::SidebarUI>()
++      .Add<heliumpp_sidebar::mojom::PageHandlerFactory>()
++      .Add<tabs_api::mojom::TabStripService>();
++
+   if (webui_browser::IsWebUIBrowserEnabled()) {
+     registry.ForWebUI<WebUIBrowserUI>()
+         .Add<webui_browser::mojom::PageHandlerFactory>()
+--- a/chrome/browser/resources/BUILD.gn
++++ b/chrome/browser/resources/BUILD.gn
+@@ -80,6 +80,7 @@
+       "key_value_pair_viewer_shared:resources",
+       "lens/overlay:resources",
+       "lens/shared:resources",
++      "heliumpp_sidebar:resources",
+       "new_tab_footer:resources",
+       "omnibox_everywhere:resources",
+       "omnibox_popup:resources",
+--- /dev/null
++++ b/chrome/browser/resources/heliumpp_sidebar/app.css
+@@ -0,0 +1,404 @@
++/* Copyright 2026 The Helium Authors
++ * You can use, redistribute, and/or modify this source code under
++ * the terms of the GPL-3.0 license that can be found in the LICENSE file. */
++
++/* #css_wrapper_metadata_start
++ * #type=style-lit
++ * #scheme=relative
++ * #css_wrapper_metadata_end */
++
++/* Every colour is a browser theme token, so the sidebar follows the
++   wallpaper-derived theme in light and dark. The page itself is see-through:
++   the native window (acrylic glass or theme frame) shows behind it. */
++:host {
++  --ink: var(--color-tab-foreground-active-frame-active);
++  --ink-2: var(--color-tab-foreground-inactive-frame-active);
++  --hover: var(--color-sys-state-hover-on-subtle);
++  --selected: var(--color-tab-background-active-frame-active);
++  --accent: var(--color-sys-primary);
++  --tonal: var(--color-sys-tonal-container);
++  --on-tonal: var(--color-sys-on-tonal-container);
++  --panel: var(--color-sys-base-container-elevated, var(--color-sys-surface));
++  --edge: color-mix(in srgb, var(--ink) 10%, transparent);
++  color: var(--ink);
++  display: flex;
++  flex-direction: column;
++  font-size: 13px;
++  height: 100vh;
++  padding: 4px 8px 8px 10px;
++  box-sizing: border-box;
++  position: relative;
++  user-select: none;
++}
++
++button {
++  background: none;
++  border: 0;
++  color: inherit;
++  cursor: pointer;
++  font: inherit;
++  padding: 0;
++}
++
++:focus-visible {
++  outline: 2px solid var(--accent);
++  outline-offset: 1px;
++}
++
++.i {
++  fill: none;
++  flex: none;
++  height: 16px;
++  stroke: currentColor;
++  stroke-linecap: round;
++  stroke-linejoin: round;
++  stroke-width: 1.7;
++  width: 16px;
++}
++
++.icon-btn {
++  border-radius: 8px;
++  color: var(--ink-2);
++  display: grid;
++  height: 28px;
++  place-items: center;
++  width: 28px;
++}
++
++.icon-btn:hover {
++  background: var(--hover);
++  color: var(--ink);
++}
++
++/* Workspaces: named segments. */
++.spaces {
++  background: var(--hover);
++  border-radius: 10px;
++  display: flex;
++  gap: 2px;
++  margin: 4px 0 10px;
++  padding: 3px;
++}
++
++.spaces button {
++  border-radius: 8px;
++  color: var(--ink-2);
++  flex: 1;
++  font-weight: 600;
++  height: 26px;
++  min-width: 0;
++  overflow: hidden;
++  padding: 0 6px;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++}
++
++.spaces button[aria-pressed='true'] {
++  background: var(--selected);
++  box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 14%, transparent);
++  color: var(--ink);
++}
++
++.spaces .add {
++  display: grid;
++  flex: none;
++  place-items: center;
++  width: 26px;
++}
++
++/* Essentials: square tiles. */
++.essentials {
++  display: grid;
++  gap: 6px;
++  grid-template-columns: repeat(4, 1fr);
++  margin-bottom: 8px;
++}
++
++.tile {
++  aspect-ratio: 1;
++  background: var(--hover);
++  border-radius: 10px;
++  display: grid;
++  max-height: 52px;
++  place-items: center;
++}
++
++.tile:hover {
++  background: var(--selected);
++}
++
++.tile[aria-selected='true'] {
++  background: var(--selected);
++  box-shadow: 0 0 0 1.5px var(--accent) inset;
++}
++
++.tile .fav {
++  height: 20px;
++  width: 20px;
++}
++
++/* Tab list. */
++.scroll {
++  flex: 1;
++  margin-inline-end: -4px;
++  min-height: 0;
++  overflow-y: auto;
++  padding-inline-end: 4px;
++  scrollbar-width: thin;
++}
++
++.tab {
++  align-items: center;
++  border-radius: 8px;
++  color: var(--ink-2);
++  cursor: default;
++  display: flex;
++  gap: 9px;
++  height: 34px;
++  padding: 0 4px 0 9px;
++}
++
++.tab:hover {
++  background: var(--hover);
++  color: var(--ink);
++}
++
++.tab[aria-selected='true'] {
++  background: var(--selected);
++  box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 12%, transparent),
++      0 0 0 1px var(--edge) inset;
++  color: var(--ink);
++}
++
++.fav {
++  border-radius: 4px;
++  flex: none;
++  height: 16px;
++  width: 16px;
++}
++
++.t {
++  flex: 1;
++  min-width: 0;
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++}
++
++.tab .x {
++  height: 24px;
++  opacity: 0;
++  width: 24px;
++}
++
++.tab:hover .x,
++.tab[aria-selected='true'] .x {
++  opacity: 1;
++}
++
++/* Folders (tab groups): a quiet row, the colour as a swatch and a rail. */
++.folder .head {
++  align-items: center;
++  border-radius: 8px;
++  display: flex;
++  font-weight: 600;
++  gap: 8px;
++  height: 32px;
++  padding: 0 8px;
++  width: 100%;
++}
++
++.folder .head:hover {
++  background: var(--hover);
++}
++
++.folder .chev {
++  color: var(--ink-2);
++  display: grid;
++  transition: transform 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
++}
++
++.folder .head[aria-expanded='true'] .chev {
++  transform: rotate(90deg);
++}
++
++.folder .swatch {
++  background: var(--c);
++  border-radius: 3px;
++  height: 10px;
++  width: 10px;
++}
++
++.folder .t {
++  text-align: start;
++}
++
++.folder .count {
++  color: var(--ink-2);
++  font-variant-numeric: tabular-nums;
++  font-weight: 500;
++}
++
++.folder .items {
++  border-inline-start: 1.5px solid var(--c);
++  margin-inline-start: 13px;
++  padding-inline-start: 6px;
++}
++
++.newtab {
++  align-items: center;
++  border-radius: 8px;
++  color: var(--ink-2);
++  display: flex;
++  gap: 9px;
++  height: 34px;
++  margin-top: 2px;
++  padding: 0 9px;
++  width: 100%;
++}
++
++.newtab:hover {
++  background: var(--hover);
++  color: var(--ink);
++}
++
++.newtab kbd {
++  color: var(--ink-2);
++  font-family: inherit;
++  font-size: 11px;
++  font-weight: 500;
++  margin-inline-start: auto;
++}
++
++/* Footer: the shield, then quiet actions. */
++.foot {
++  align-items: center;
++  border-top: 1px solid var(--edge);
++  display: flex;
++  gap: 2px;
++  margin-top: 6px;
++  padding-top: 8px;
++}
++
++.shield {
++  align-items: center;
++  background: var(--tonal);
++  border-radius: 8px;
++  color: var(--on-tonal);
++  display: flex;
++  gap: 6px;
++  height: 30px;
++  margin-inline-end: auto;
++  padding: 0 10px 0 8px;
++}
++
++.shield b {
++  font-weight: 600;
++}
++
++/* Shield panel, above the footer. */
++.panel {
++  background: var(--panel);
++  border-radius: 14px;
++  bottom: 52px;
++  box-shadow: 0 1px 2px rgb(0 0 0 / 12%), 0 12px 32px -8px rgb(0 0 0 / 35%),
++      0 0 0 1px var(--edge);
++  left: 8px;
++  padding: 14px;
++  position: absolute;
++  right: 8px;
++  z-index: 1;
++}
++
++.panel h2 {
++  align-items: center;
++  display: flex;
++  font-size: 14px;
++  font-weight: 700;
++  gap: 8px;
++  margin: 0 0 10px;
++}
++
++.panel h2 .i {
++  color: var(--accent);
++}
++
++.seg {
++  background: var(--hover);
++  border-radius: 10px;
++  display: grid;
++  grid-template-columns: repeat(3, 1fr);
++  padding: 3px;
++}
++
++.seg button {
++  border-radius: 8px;
++  color: var(--ink-2);
++  font-weight: 600;
++  height: 30px;
++}
++
++.seg button[aria-pressed='true'] {
++  background: var(--selected);
++  box-shadow: 0 1px 2px rgb(0 0 0 / 14%), 0 0 0 1px var(--edge);
++  color: var(--ink);
++}
++
++.toggle-row {
++  align-items: center;
++  border-top: 1px solid var(--edge);
++  display: flex;
++  gap: 10px;
++  margin-top: 12px;
++  padding-top: 12px;
++}
++
++.toggle-row div {
++  flex: 1;
++}
++
++.toggle-row strong {
++  display: block;
++  font-weight: 600;
++}
++
++.toggle-row small {
++  color: var(--ink-2);
++  font-size: 12px;
++}
++
++.switch {
++  background: var(--hover);
++  border-radius: 10px;
++  box-shadow: 0 0 0 1px var(--edge) inset;
++  height: 20px;
++  position: relative;
++  width: 36px;
++}
++
++.switch::after {
++  background: var(--ink-2);
++  border-radius: 50%;
++  content: '';
++  height: 16px;
++  left: 2px;
++  position: absolute;
++  top: 2px;
++  transition: transform 150ms ease-out;
++  width: 16px;
++}
++
++.switch[aria-checked='true'] {
++  background: var(--accent);
++}
++
++.switch[aria-checked='true']::after {
++  background: var(--color-sys-on-primary);
++  transform: translateX(16px);
++}
++
++@media (prefers-reduced-motion: reduce) {
++  * {
++    transition: none !important;
++  }
++}
+--- /dev/null
++++ b/chrome/browser/resources/heliumpp_sidebar/app.html.ts
+@@ -0,0 +1,106 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++import {html, nothing} from 'chrome://resources/lit/v3_0/lit.rollup.js';
++
++import type {HeliumSidebarAppElement} from './app.js';
++import {ICONS} from './icons.js';
++
++export function getHtml(this: HeliumSidebarAppElement) {
++  // clang-format off
++  return html`
++<nav class="spaces" aria-label="Workspaces">
++  ${this.workspaces_().map(w => html`
++    <button aria-pressed="${this.isActiveWorkspace_(w.id)}" data-id="${w.id}"
++        @click="${this.onWorkspaceClick_}">${w.name}</button>`)}
++  <button class="add" aria-label="New workspace"
++      @click="${this.onAddWorkspaceClick_}">${ICONS.plus}</button>
++</nav>
++
++${this.essentials_.length ? html`
++  <div class="essentials" role="tablist" aria-label="Essentials">
++    ${this.essentials_.map(tab => html`
++      <button class="tile" role="tab" aria-selected="${tab.isActive}"
++          title="${tab.title}" aria-label="${tab.title}" data-id="${tab.id}"
++          @click="${this.onTabClick_}" @auxclick="${this.onTabAuxclick_}">
++        <img class="fav" src="${this.favicon_(tab)}" alt="">
++      </button>`)}
++  </div>` : nothing}
++
++<div class="scroll" role="tablist" aria-label="Tabs">
++  ${this.rows_.map(row => row.folder ? html`
++    <div class="folder" style="--c: ${row.color}">
++      <button class="head" aria-expanded="${!row.folder.group.data.isCollapsed}"
++          data-id="${row.folder.group.id}" @click="${this.onFolderClick_}">
++        <span class="chev">${ICONS.chevron}</span>
++        <span class="swatch"></span>
++        <span class="t">${row.folder.group.data.title || 'Folder'}</span>
++        <span class="count">${row.folder.tabs.length}</span>
++      </button>
++      ${!row.folder.group.data.isCollapsed ? html`
++        <div class="items">
++          ${row.folder.tabs.map(tab => html`
++            <div class="tab" role="tab" tabindex="0"
++                aria-selected="${tab.isActive}" title="${tab.title}"
++                data-id="${tab.id}" @click="${this.onTabClick_}"
++                @auxclick="${this.onTabAuxclick_}"
++                @keydown="${this.onTabKeydown_}">
++              <img class="fav" src="${this.favicon_(tab)}" alt="">
++              <span class="t">${tab.title || tab.url}</span>
++              <button class="icon-btn x" aria-label="Close ${tab.title}"
++                  data-id="${tab.id}" @click="${this.onCloseClick_}">
++                ${ICONS.close}
++              </button>
++            </div>`)}
++        </div>` : nothing}
++    </div>` : html`
++    <div class="tab" role="tab" tabindex="0" aria-selected="${row.tab!.isActive}"
++        title="${row.tab!.title}" data-id="${row.tab!.id}"
++        @click="${this.onTabClick_}" @auxclick="${this.onTabAuxclick_}"
++        @keydown="${this.onTabKeydown_}">
++      <img class="fav" src="${this.favicon_(row.tab!)}" alt="">
++      <span class="t">${row.tab!.title || row.tab!.url}</span>
++      <button class="icon-btn x" aria-label="Close ${row.tab!.title}"
++          data-id="${row.tab!.id}" @click="${this.onCloseClick_}">
++        ${ICONS.close}
++      </button>
++    </div>`)}
++  <button class="newtab" @click="${this.onNewTabClick_}">
++    ${ICONS.plus}<span>New tab</span><kbd>Ctrl T</kbd>
++  </button>
++</div>
++
++${this.shieldOpen_ ? html`
++  <section class="panel" role="dialog" aria-label="Privacy shield">
++    <h2>${ICONS.shield}Privacy level</h2>
++    <div class="seg" role="group" aria-label="Privacy level">
++      ${this.levels_.map(level => html`
++        <button aria-pressed="${this.isLevel_(level.id)}" data-id="${level.id}"
++            @click="${this.onLevelClick_}">${level.name}</button>`)}
++    </div>
++    <div class="toggle-row">
++      <div><strong>Performance mode</strong>
++        <small>Background tabs sleep after 5 minutes</small></div>
++      <button class="switch" role="switch"
++          aria-checked="${this.isPerformanceMode_()}"
++          aria-label="Performance mode"
++          @click="${this.onPerformanceClick_}"></button>
++    </div>
++  </section>` : nothing}
++
++<footer class="foot">
++  <button class="shield" aria-expanded="${this.shieldOpen_}"
++      aria-label="Privacy level: ${this.levelName_()}"
++      @click="${this.onShieldClick_}">
++    ${ICONS.shield}<b>${this.levelName_()}</b>
++  </button>
++  <button class="icon-btn" aria-label="Downloads" title="Downloads"
++      @click="${this.onDownloadsClick_}">${ICONS.download}</button>
++  <button class="icon-btn" aria-label="Extensions" title="Extensions"
++      @click="${this.onExtensionsClick_}">${ICONS.puzzle}</button>
++  <button class="icon-btn" aria-label="Settings" title="Settings"
++      @click="${this.onSettingsClick_}">${ICONS.gear}</button>
++</footer>`;
++  // clang-format on
++}
+--- /dev/null
++++ b/chrome/browser/resources/heliumpp_sidebar/app.ts
+@@ -0,0 +1,262 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++import {ColorChangeUpdater} from 'chrome://resources/cr_components/color_change_listener/colors_css_updater.js';
++import {CrLitElement} from 'chrome://resources/lit/v3_0/lit.rollup.js';
++import type {Container, Tab, TabGroup} from '/tab_strip_api/tab_strip_api_data_model.mojom-webui.js';
++import {TabsObserverReceiver} from '/tab_strip_api/tab_strip_api.mojom-webui.js';
++
++import {getCss} from './app.css.js';
++import {getHtml} from './app.html.js';
++import {BrowserProxy} from './browser_proxy.js';
++import {Command} from './heliumpp_sidebar.mojom-webui.js';
++import type {State, Workspace} from './heliumpp_sidebar.mojom-webui.js';
++
++export interface Folder {
++  group: TabGroup;
++  tabs: Tab[];
++}
++
++// One entry of the tab list: a tab, or a folder (tab group) with its tabs.
++export interface Row {
++  tab?: Tab;
++  folder?: Folder;
++  color?: string;
++}
++
++// Fill of each tab group colour id (tab_groups.mojom.Color order).
++const GROUP_COLORS = [
++  '#8e95a3', '#5b8def', '#e5534b', '#e2a93b', '#3fa66b',
++  '#d15fa6', '#9a6bf0', '#3db2c8', '#f08a3d',
++];
++
++export class HeliumSidebarAppElement extends CrLitElement {
++  static get is() {
++    return 'helium-sidebar-app';
++  }
++
++  static override get styles() {
++    return getCss();
++  }
++
++  override render() {
++    return getHtml.bind(this)();
++  }
++
++  static override get properties() {
++    return {
++      state_: {type: Object},
++      essentials_: {type: Array},
++      rows_: {type: Array},
++      shieldOpen_: {type: Boolean},
++    };
++  }
++
++  protected accessor state_: State|null = null;
++  protected accessor essentials_: Tab[] = [];
++  protected accessor rows_: Row[] = [];
++  protected accessor shieldOpen_: boolean = false;
++
++  protected readonly levels_ = [
++    {id: 'usability', name: 'Usability'},
++    {id: 'medium', name: 'Medium'},
++    {id: 'maximum', name: 'Maximum'},
++  ];
++
++  private proxy_ = BrowserProxy.getInstance();
++  private observer_: TabsObserverReceiver|null = null;
++  private refreshQueued_ = false;
++  // Tab groups by id, for the folder click handler.
++  private groups_ = new Map<string, TabGroup>();
++
++  override connectedCallback() {
++    super.connectedCallback();
++    ColorChangeUpdater.forDocument().start();
++    this.proxy_.callbackRouter.onStateChanged.addListener(
++        (state: State) => this.state_ = state);
++    this.proxy_.handler.getState().then(({state}) => this.state_ = state);
++    this.refresh_();
++  }
++
++  // shortcut: re-reads the whole tab tree (at most once per frame) on any tab
++  // event instead of applying each event; fine for hundreds of tabs.
++  private async refresh_() {
++    const snapshot = await this.proxy_.tabs.getTabs();
++    this.applyTree_(snapshot.tabStrip);
++    // Keep exactly one event stream: the one that follows this snapshot.
++    this.observer_?.$.close();
++    this.observer_ = new TabsObserverReceiver({
++      onTabEvents: () => this.scheduleRefresh_(),
++    });
++    this.observer_.$.bindHandle(snapshot.stream.handle);
++  }
++
++  private scheduleRefresh_() {
++    if (this.refreshQueued_) {
++      return;
++    }
++    this.refreshQueued_ = true;
++    requestAnimationFrame(() => {
++      this.refreshQueued_ = false;
++      this.refresh_();
++    });
++  }
++
++  private applyTree_(root: Container) {
++    const tabsIn = (c: Container): Tab[] => c.children.flatMap(
++        child => child.data.tab ? [child.data.tab] : tabsIn(child));
++    const essentials: Tab[] = [];
++    const rows: Row[] = [];
++    this.groups_.clear();
++    // window > tab strip > pinned / unpinned sections.
++    const sectionsIn = (c: Container): Container[] =>
++        c.data.pinnedTabs || c.data.unpinnedTabs ?
++        [c] :
++        c.children.flatMap(sectionsIn);
++    for (const section of sectionsIn(root)) {
++      if (section.data.pinnedTabs) {
++        essentials.push(...tabsIn(section));
++        continue;
++      }
++      if (!section.data.unpinnedTabs) {
++        continue;
++      }
++      for (const child of section.children) {
++        if (child.data.tab) {
++          rows.push({tab: child.data.tab});
++        } else if (child.data.tabGroup) {
++          const group = child.data.tabGroup;
++          this.groups_.set(group.id, group);
++          rows.push({
++            folder: {group, tabs: tabsIn(child)},
++            color: GROUP_COLORS[group.data.color] || GROUP_COLORS[0],
++          });
++        } else {
++          // Split views: their tabs, one row each.
++          rows.push(...tabsIn(child).map(tab => ({tab})));
++        }
++      }
++    }
++    this.essentials_ = essentials;
++    this.rows_ = rows;
++  }
++
++  // Template helpers.
++  protected workspaces_(): Workspace[] {
++    return this.state_?.workspaces || [];
++  }
++
++  protected isActiveWorkspace_(id: string): boolean {
++    return this.state_?.activeWorkspace === id;
++  }
++
++  protected isLevel_(id: string): boolean {
++    return this.state_?.privacyLevel === id;
++  }
++
++  protected isPerformanceMode_(): boolean {
++    return !!this.state_?.performanceMode;
++  }
++
++  protected levelName_(): string {
++    const level = this.levels_.find(l => this.isLevel_(l.id));
++    return level ? level.name : 'Medium';
++  }
++
++  protected favicon_(tab: Tab): string {
++    return tab.favicon?.dataUrl || 'chrome://favicon2/';
++  }
++
++  private idOf_(e: Event): string {
++    return (e.currentTarget as HTMLElement).dataset['id'] || '';
++  }
++
++  // Tabs.
++  protected onTabClick_(e: Event) {
++    this.proxy_.tabs.activateTab(this.idOf_(e));
++  }
++
++  protected onTabAuxclick_(e: MouseEvent) {
++    if (e.button === 1) {  // middle click closes, as in every browser
++      e.preventDefault();
++      this.proxy_.tabs.closeNodes([this.idOf_(e)]);
++    }
++  }
++
++  protected onTabKeydown_(e: KeyboardEvent) {
++    if (e.key === 'Enter' || e.key === ' ') {
++      e.preventDefault();
++      this.proxy_.tabs.activateTab(this.idOf_(e));
++    } else if (e.key === 'Delete') {
++      this.proxy_.tabs.closeNodes([this.idOf_(e)]);
++    }
++  }
++
++  protected onCloseClick_(e: Event) {
++    e.stopPropagation();
++    this.proxy_.tabs.closeNodes([this.idOf_(e)]);
++  }
++
++  protected onFolderClick_(e: Event) {
++    const group = this.groups_.get(this.idOf_(e));
++    if (!group) {
++      return;
++    }
++    this.proxy_.tabs.update(
++        {
++          tabGroup: {
++            ...group,
++            data: {...group.data, isCollapsed: !group.data.isCollapsed},
++          },
++        },
++        null);
++  }
++
++  // Workspaces.
++  protected onWorkspaceClick_(e: Event) {
++    this.proxy_.handler.switchWorkspace(this.idOf_(e));
++  }
++
++  protected onAddWorkspaceClick_() {
++    this.proxy_.handler.createWorkspace();
++  }
++
++  // Shield.
++  protected onShieldClick_() {
++    this.shieldOpen_ = !this.shieldOpen_;
++  }
++
++  protected onLevelClick_(e: Event) {
++    this.proxy_.handler.setPrivacyLevel(this.idOf_(e));
++  }
++
++  protected onPerformanceClick_() {
++    this.proxy_.handler.setPerformanceMode(!this.isPerformanceMode_());
++  }
++
++  // Commands.
++  protected onNewTabClick_() {
++    this.proxy_.handler.runCommand(Command.kNewTab);
++  }
++
++  protected onDownloadsClick_() {
++    this.proxy_.handler.runCommand(Command.kDownloads);
++  }
++
++  protected onExtensionsClick_() {
++    this.proxy_.handler.runCommand(Command.kExtensions);
++  }
++
++  protected onSettingsClick_() {
++    this.proxy_.handler.runCommand(Command.kSettings);
++  }
++}
++
++declare global {
++  interface HTMLElementTagNameMap {
++    'helium-sidebar-app': HeliumSidebarAppElement;
++  }
++}
++
++customElements.define(HeliumSidebarAppElement.is, HeliumSidebarAppElement);
+--- /dev/null
++++ b/chrome/browser/resources/heliumpp_sidebar/browser_proxy.ts
+@@ -0,0 +1,27 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++import {TabStripService} from '/tab_strip_api/tab_strip_api.mojom-webui.js';
++import type {TabStripServiceRemote} from '/tab_strip_api/tab_strip_api.mojom-webui.js';
++
++import {PageCallbackRouter, PageHandlerFactory, PageHandlerRemote} from './heliumpp_sidebar.mojom-webui.js';
++
++// Connections to the browser: the tab strip API and our own page handler.
++export class BrowserProxy {
++  readonly tabs: TabStripServiceRemote = TabStripService.getRemote();
++  readonly handler = new PageHandlerRemote();
++  readonly callbackRouter = new PageCallbackRouter();
++
++  constructor() {
++    PageHandlerFactory.getRemote().createPageHandler(
++        this.callbackRouter.$.bindNewPipeAndPassRemote(),
++        this.handler.$.bindNewPipeAndPassReceiver());
++  }
++
++  static getInstance(): BrowserProxy {
++    return instance || (instance = new BrowserProxy());
++  }
++}
++
++let instance: BrowserProxy|null = null;
+--- /dev/null
++++ b/chrome/browser/resources/heliumpp_sidebar/BUILD.gn
+@@ -0,0 +1,39 @@
++# Copyright 2026 The Helium Authors
++# You can use, redistribute, and/or modify this source code under
++# the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++import("//ui/webui/resources/tools/build_webui.gni")
++
++assert(!is_android)
++
++build_webui("build") {
++  grd_prefix = "heliumpp_sidebar"
++
++  static_files = [ "heliumpp_sidebar.html" ]
++
++  ts_files = [
++    "app.html.ts",
++    "app.ts",
++    "browser_proxy.ts",
++    "icons.ts",
++  ]
++  css_files = [ "app.css" ]
++
++  webui_context_type = "trusted"
++
++  mojo_files_deps =
++      [ "//chrome/browser/ui/webui/heliumpp_sidebar:mojo_bindings_ts__generator" ]
++  mojo_files = [ "$root_gen_dir/chrome/browser/ui/webui/heliumpp_sidebar/heliumpp_sidebar.mojom-webui.ts" ]
++
++  ts_deps = [
++    "//components/browser_apis/tab_strip/resources:build_ts",
++    "//third_party/lit/v3_0:build_ts",
++    "//ui/webui/resources/cr_components/color_change_listener:build_ts",
++    "//ui/webui/resources/js:build_ts",
++    "//ui/webui/resources/mojo:build_ts",
++  ]
++
++  ts_path_mappings = [ "/tab_strip_api/*|" + rebase_path(
++                           "$root_gen_dir/components/browser_apis/tab_strip/resources/tsc/*",
++                           target_gen_dir) ]
++}
+--- /dev/null
++++ b/chrome/browser/resources/heliumpp_sidebar/heliumpp_sidebar.html
+@@ -0,0 +1,16 @@
++<!doctype html>
++<html dir="$i18n{textdirection}" lang="$i18n{language}">
++<head>
++  <meta charset="utf-8">
++  <title>Sidebar</title>
++  <link rel="stylesheet" href="chrome://resources/css/text_defaults_md.css">
++  <link rel="stylesheet" href="chrome://theme/colors.css?sets=ui,chrome">
++  <style>
++    html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
++  </style>
++</head>
++<body>
++  <helium-sidebar-app></helium-sidebar-app>
++  <script type="module" src="app.js"></script>
++</body>
++</html>
+--- /dev/null
++++ b/chrome/browser/resources/heliumpp_sidebar/icons.ts
+@@ -0,0 +1,17 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++import {html} from 'chrome://resources/lit/v3_0/lit.rollup.js';
++
++// Stroke icons, one family (1.7 stroke, round joins). Whole <svg> elements:
++// Lit only creates SVG children inside the template that opens the <svg>.
++export const ICONS = {
++  plus: html`<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>`,
++  close: html`<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>`,
++  chevron: html`<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>`,
++  shield: html`<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l7 3v5.5c0 4.2-3 7.5-7 8.5-4-1-7-4.3-7-8.5V6.5z"/><path d="M9 12l2 2 4-4"/></svg>`,
++  download: html`<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>`,
++  puzzle: html`<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4.5h3.5a2 2 0 1 1 3 1.7V8.5h3v3.3a2 2 0 1 1 0 3.4v4.3H15a2 2 0 1 0-3.4 0H5.5V15a2 2 0 1 0 0-3.4V8.5H9z"/></svg>`,
++  gear: html`<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3v2.2M20.5 12h-2.2M5.7 12H3.5M18 6l-1.6 1.6M7.6 16.4 6 18M18 18l-1.6-1.6M7.6 7.6 6 6"/></svg>`,
++};
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -2516,6 +2516,8 @@
+       "//chrome/browser/ui/webui/inspect",
+       "//chrome/browser/ui/webui/metrics_reporter",
+       "//chrome/browser/ui/webui/metrics_reporter:impl",
++      "//chrome/browser/ui/webui/heliumpp_sidebar",
++      "//chrome/browser/ui/webui/heliumpp_sidebar:impl",
+       "//chrome/browser/ui/webui/new_tab_footer",
+       "//chrome/browser/ui/webui/new_tab_footer:impl",
+       "//chrome/browser/ui/webui/organizer_panel",
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+@@ -55,6 +55,7 @@
+ #include "chrome/browser/ui/views/tabs/shared/drop_arrow.h"
+ #include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h"
+ #include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_footer.h"
++#include "chrome/browser/ui/views/tabs/vertical/helium_sidebar_web_view.h"
+ #include "chrome/browser/ui/views/tabs/vertical/workspace_switcher.h"
+ #include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_focus_swipe_controller.h"
+ #include "chrome/browser/ui/web_applications/app_browser_controller.h"
+@@ -201,6 +202,25 @@
+   gemini_button_ =
+       content_area_view_->AddChildView(std::make_unique<views::View>());
+ 
++  // Helium++ web sidebar: tabs, folders, workspaces and the shield drawn by
++  // chrome://helium-sidebar.top-chrome. The native pieces stay (hidden) so
++  // everything that looks them up keeps working; the address bar stays native.
++  if (HeliumSidebarWebView::IsEnabled()) {
++    for (views::View* child : content_area_view_->children()) {
++      child->SetVisible(false);
++    }
++    web_sidebar_ = content_area_view_->AddChildView(
++        std::make_unique<HeliumSidebarWebView>(browser_view->browser()));
++    // Asks for far more height than any window has and may shrink to fit:
++    // the page takes everything below the address bar.
++    web_sidebar_->SetPreferredSize(gfx::Size(0, 100000));
++    web_sidebar_->SetProperty(
++        views::kFlexBehaviorKey,
++        views::FlexSpecification(views::LayoutOrientation::kVertical,
++                                 views::MinimumFlexSizeRule::kScaleToZero,
++                                 views::MaximumFlexSizeRule::kPreferred));
++  }
++
+   // Views that go into the content area above
+   // --------------
+ 
+@@ -888,6 +908,9 @@
+ 
+   views::View* const content_parent =
+       content_area_view_ ? content_area_view_.get() : this;
++  if (web_sidebar_) {
++    view->SetVisible(false);  // the web sidebar lists the tabs
++  }
+   std::optional<size_t> bottom_container_index =
+       content_parent->GetIndexOf(bottom_button_container_);
+   CHECK(bottom_container_index.has_value());
+@@ -958,6 +981,7 @@
+                                             horizontal_padding));
+   sidebar_location_bar_->SetVisible(state_controller_->GetCollapseState() ==
+                                     tabs::VerticalTabStripCollapseState::kExpanded);
++
+   // Margins at the edge of the layout are collapsed, so give the address bar
+   // breathing room from the window edge with an interior margin.
+   // content_area_view_ is created as a FlexLayoutView in the constructor.
+@@ -973,6 +997,7 @@
+   }
+   views::View* bar = sidebar_location_bar_.get();
+   sidebar_location_bar_ = nullptr;
++
+   bar->SetVisible(true);
+   // content_area_view_ is created as a FlexLayoutView in the constructor.
+   static_cast<views::FlexLayoutView*>(content_area_view_.get())
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
+@@ -264,6 +264,8 @@
+   double organizer_panel_show_percent_ = 0.0;
+   bool organizer_panel_was_visible_ = false;
+ 
++  // Helium++ web sidebar, when enabled (replaces the native tab list).
++  raw_ptr<views::View> web_sidebar_ = nullptr;
+   raw_ptr<views::View> content_area_view_ = nullptr;
+   // Whether a leading exclusion exists due to window controls.
+   bool has_leading_exclusion_ = false;
+--- a/chrome/browser/ui/views/tabs/vertical/BUILD.gn
++++ b/chrome/browser/ui/views/tabs/vertical/BUILD.gn
+@@ -11,6 +11,7 @@
+     "vertical_new_tab_button.h",
+     "vertical_tab_strip_bottom_container.h",
+     "vertical_tab_strip_footer.h",
++    "helium_sidebar_web_view.h",
+     "workspace_switcher.h",
+     "vertical_tab_strip_expand_on_hover_lock.h",
+     "vertical_tab_strip_focus_swipe_controller.h",
+@@ -43,6 +44,7 @@
+     "vertical_new_tab_button.cc",
+     "vertical_tab_strip_bottom_container.cc",
+     "vertical_tab_strip_footer.cc",
++    "helium_sidebar_web_view.cc",
+     "workspace_switcher.cc",
+     "vertical_tab_strip_expand_on_hover_lock.cc",
+     "vertical_tab_strip_focus_swipe_controller.cc",
+@@ -51,6 +53,8 @@
+   ]
+ 
+   deps = [
++    "//chrome/browser/ui/webui/heliumpp_sidebar",
++    "//chrome/browser/ui/webui/top_chrome",
+     "//chrome/browser:primitives",
+     "//chrome/browser/glic",
+     "//chrome/browser/glic/browser_ui:glow",
+--- /dev/null
++++ b/chrome/browser/ui/views/tabs/vertical/helium_sidebar_web_view.cc
+@@ -0,0 +1,61 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "chrome/browser/ui/views/tabs/vertical/helium_sidebar_web_view.h"
++
++#include "base/command_line.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/webui/webui_embedding_context.h"
++#include "chrome/common/webui_url_constants.h"
++#include "chrome/grit/generated_resources.h"
++#include "content/public/browser/web_contents.h"
++#include "third_party/skia/include/core/SkColor.h"
++#include "ui/base/metadata/metadata_impl_macros.h"
++
++namespace {
++constexpr char kWebSidebarSwitch[] = "helium-web-sidebar";
++}  // namespace
++
++HeliumSidebarWebView::HeliumSidebarWebView(BrowserWindowInterface* browser)
++    : views::WebView(browser->GetProfile()), browser_(browser) {
++  contents_wrapper_ =
++      std::make_unique<WebUIContentsWrapperT<heliumpp_sidebar::SidebarUI>>(
++          GURL(chrome::kChromeUIHeliumSidebarURL), browser_->GetProfile(),
++          IDS_HELIUM_SIDEBAR_NAME, /*esc_closes_ui=*/false);
++  contents_wrapper_->SetHost(weak_factory_.GetWeakPtr());
++  // Before the page binds its interfaces: they look the window up here.
++  webui::SetBrowserWindowInterface(contents_wrapper_->web_contents(), browser_);
++  // See-through, so the window's glass or frame colour shows behind the page.
++  contents_wrapper_->web_contents()->SetPageBaseBackgroundColor(
++      SK_ColorTRANSPARENT);
++  SetWebContents(contents_wrapper_->web_contents());
++  contents_wrapper_->web_contents()->WasShown();
++}
++
++HeliumSidebarWebView::~HeliumSidebarWebView() {
++  contents_wrapper_->web_contents()->WasHidden();
++  contents_wrapper_->SetHost(nullptr);
++}
++
++// static
++bool HeliumSidebarWebView::IsEnabled() {
++  return base::CommandLine::ForCurrentProcess()->HasSwitch(kWebSidebarSwitch);
++}
++
++void HeliumSidebarWebView::ShowUI() {
++  SetVisible(true);
++}
++
++void HeliumSidebarWebView::CloseUI() {}
++
++bool HeliumSidebarWebView::HandleKeyboardEvent(
++    content::WebContents* source,
++    const input::NativeWebKeyboardEvent& event) {
++  return unhandled_keyboard_event_handler_.HandleKeyboardEvent(
++      event, GetFocusManager());
++}
++
++BEGIN_METADATA(HeliumSidebarWebView)
++END_METADATA
+--- /dev/null
++++ b/chrome/browser/ui/views/tabs/vertical/helium_sidebar_web_view.h
+@@ -0,0 +1,50 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_VIEWS_TABS_VERTICAL_HELIUM_SIDEBAR_WEB_VIEW_H_
++#define CHROME_BROWSER_UI_VIEWS_TABS_VERTICAL_HELIUM_SIDEBAR_WEB_VIEW_H_
++
++#include <memory>
++
++#include "base/memory/raw_ptr.h"
++#include "base/memory/weak_ptr.h"
++#include "chrome/browser/ui/webui/heliumpp_sidebar/sidebar_ui.h"
++#include "chrome/browser/ui/webui/top_chrome/webui_contents_wrapper.h"
++#include "ui/base/metadata/metadata_header_macros.h"
++#include "ui/views/controls/webview/unhandled_keyboard_event_handler.h"
++#include "ui/views/controls/webview/webview.h"
++
++class BrowserWindowInterface;
++
++// Hosts chrome://helium-sidebar.top-chrome inside the vertical tab strip
++// region (the web sidebar; --helium-web-sidebar for now).
++class HeliumSidebarWebView : public views::WebView,
++                             public WebUIContentsWrapper::Host {
++  METADATA_HEADER(HeliumSidebarWebView, views::WebView)
++
++ public:
++  explicit HeliumSidebarWebView(BrowserWindowInterface* browser);
++  HeliumSidebarWebView(const HeliumSidebarWebView&) = delete;
++  HeliumSidebarWebView& operator=(const HeliumSidebarWebView&) = delete;
++  ~HeliumSidebarWebView() override;
++
++  // Whether the web sidebar replaces the native one.
++  static bool IsEnabled();
++
++  // WebUIContentsWrapper::Host:
++  void ShowUI() override;
++  void CloseUI() override;
++  bool HandleKeyboardEvent(content::WebContents* source,
++                           const input::NativeWebKeyboardEvent& event) override;
++
++ private:
++  raw_ptr<BrowserWindowInterface> browser_;
++  std::unique_ptr<WebUIContentsWrapperT<heliumpp_sidebar::SidebarUI>>
++      contents_wrapper_;
++  // Browser shortcuts (Ctrl+T, ...) typed while the sidebar has focus.
++  views::UnhandledKeyboardEventHandler unhandled_keyboard_event_handler_;
++  base::WeakPtrFactory<HeliumSidebarWebView> weak_factory_{this};
++};
++
++#endif  // CHROME_BROWSER_UI_VIEWS_TABS_VERTICAL_HELIUM_SIDEBAR_WEB_VIEW_H_
+--- a/chrome/browser/ui/webui/chrome_web_ui_configs.cc
++++ b/chrome/browser/ui/webui/chrome_web_ui_configs.cc
+@@ -87,6 +87,7 @@
+ #include "chrome/browser/ui/tabs/tab_group_home/tab_group_home_ui.h"
+ #include "chrome/browser/ui/webui/webui_toolbar/webui_toolbar_ui.h"
+ #include "chrome/browser/ui/webui_browser/webui_browser_ui.h"
++#include "chrome/browser/ui/webui/heliumpp_sidebar/sidebar_ui.h"
+ #if !BUILDFLAG(IS_CHROMEOS)
+ #include "chrome/browser/ui/webui/app_home/app_home_ui.h"
+ #endif  // !BUILDFLAG(IS_CHROMEOS)
+@@ -379,6 +380,7 @@
+           multistep_filter_internals::MultistepFilterInternalsUIConfig>());
+ #if BUILDFLAG(ENABLE_WEBUI_NTP)
+   map.AddWebUIConfig(std::make_unique<NewTabFooterUIConfig>());
++  map.AddWebUIConfig(std::make_unique<heliumpp_sidebar::SidebarUIConfig>());
+   map.AddWebUIConfig(std::make_unique<NewTabPageThirdPartyUIConfig>());
+ #endif  // BUILDFLAG(ENABLE_WEBUI_NTP)
+   map.AddWebUIConfig(std::make_unique<NewTabUIConfig>());
+--- /dev/null
++++ b/chrome/browser/ui/webui/heliumpp_sidebar/BUILD.gn
+@@ -0,0 +1,46 @@
++# Copyright 2026 The Helium Authors
++# You can use, redistribute, and/or modify this source code under
++# the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++import("//mojo/public/tools/bindings/mojom.gni")
++
++assert(!is_android)
++
++mojom("mojo_bindings") {
++  sources = [ "heliumpp_sidebar.mojom" ]
++  webui_module_path = "/"
++}
++
++source_set("heliumpp_sidebar") {
++  sources = [
++    "sidebar_page_handler.h",
++    "sidebar_ui.h",
++  ]
++  public_deps = [
++    ":mojo_bindings",
++    "//chrome/browser/ui/webui/top_chrome",
++    "//components/browser_apis/tab_strip:mojom",
++    "//components/prefs",
++    "//mojo/public/cpp/bindings",
++  ]
++}
++
++source_set("impl") {
++  sources = [
++    "sidebar_page_handler.cc",
++    "sidebar_ui.cc",
++  ]
++  public_deps = [ "//chrome/browser:browser_public_dependencies" ]
++  deps = [
++    ":heliumpp_sidebar",
++    "//chrome/app:command_ids",
++    "//chrome/browser/profiles",
++    "//chrome/browser/resources/heliumpp_sidebar:resources_grit",
++    "//chrome/browser/ui/browser_window",
++    "//chrome/browser/ui/webui:webui_util",
++    "//chrome/common",
++    "//components/browser_apis/tab_strip/resources",
++    "//content/public/browser",
++    "//ui/webui",
++  ]
++}
+--- /dev/null
++++ b/chrome/browser/ui/webui/heliumpp_sidebar/heliumpp_sidebar.mojom
+@@ -0,0 +1,52 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++// The web sidebar's own page handler. Tabs come from tabs_api.mojom
++// (TabStripService); this covers what the tab strip API does not: workspaces,
++// the privacy level and performance mode, and browser commands.
++module heliumpp_sidebar.mojom;
++
++struct Workspace {
++  string id;
++  string name;
++};
++
++struct State {
++  array<Workspace> workspaces;
++  string active_workspace;
++  // "usability", "medium" or "maximum".
++  string privacy_level;
++  bool performance_mode;
++};
++
++enum Command {
++  kNewTab,
++  kNewFolder,
++  kHistory,
++  kBookmarks,
++  kDownloads,
++  kExtensions,
++  kSettings,
++  kFocusLocationBar,
++};
++
++interface PageHandlerFactory {
++  CreatePageHandler(pending_remote<Page> page,
++                    pending_receiver<PageHandler> handler);
++};
++
++// Browser side. Only fixed values cross: ids from GetState and enum commands.
++interface PageHandler {
++  GetState() => (State state);
++  SwitchWorkspace(string id);
++  CreateWorkspace();
++  SetPrivacyLevel(string level);
++  SetPerformanceMode(bool enabled);
++  RunCommand(Command command);
++};
++
++// Page side.
++interface Page {
++  OnStateChanged(State state);
++};
+--- /dev/null
++++ b/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_page_handler.cc
+@@ -0,0 +1,114 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "chrome/browser/ui/webui/heliumpp_sidebar/sidebar_page_handler.h"
++
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/helium_privacy_mode/helium_privacy_mode.h"
++#include "chrome/browser/helium_workspaces/helium_workspaces.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "components/prefs/pref_service.h"
++
++namespace heliumpp_sidebar {
++
++namespace {
++// helium_privacy_mode keeps its level pref private; same string.
++constexpr char kPrivacyModePref[] = "helium.privacy_mode";
++}  // namespace
++
++SidebarPageHandler::SidebarPageHandler(
++    mojo::PendingRemote<mojom::Page> page,
++    mojo::PendingReceiver<mojom::PageHandler> receiver,
++    BrowserWindowInterface* browser)
++    : page_(std::move(page)),
++      receiver_(this, std::move(receiver)),
++      browser_(browser) {
++  registrar_.Init(browser_->GetProfile()->GetPrefs());
++  const auto send = base::BindRepeating(&SidebarPageHandler::SendState,
++                                        base::Unretained(this));
++  registrar_.Add(helium_workspaces::kWorkspacesPref, send);
++  registrar_.Add(helium_workspaces::kActiveWorkspacePref, send);
++  registrar_.Add(kPrivacyModePref, send);
++  registrar_.Add(helium_privacy_mode::kPerformanceModePref, send);
++}
++
++SidebarPageHandler::~SidebarPageHandler() = default;
++
++mojom::StatePtr SidebarPageHandler::BuildState() const {
++  auto state = mojom::State::New();
++  for (const helium_workspaces::Info& info :
++       helium_workspaces::List(browser_->GetProfile())) {
++    state->workspaces.push_back(mojom::Workspace::New(info.id, info.name));
++  }
++  state->active_workspace = helium_workspaces::ActiveId(browser_);
++  state->privacy_level =
++      helium_privacy_mode::GetModeName(browser_->GetProfile());
++  state->performance_mode =
++      helium_privacy_mode::IsPerformanceMode(browser_->GetProfile());
++  return state;
++}
++
++void SidebarPageHandler::SendState() {
++  page_->OnStateChanged(BuildState());
++}
++
++void SidebarPageHandler::GetState(GetStateCallback callback) {
++  std::move(callback).Run(BuildState());
++}
++
++void SidebarPageHandler::SwitchWorkspace(const std::string& id) {
++  // Switch() ignores ids that do not exist.
++  helium_workspaces::Switch(browser_, id);
++}
++
++void SidebarPageHandler::CreateWorkspace() {
++  helium_workspaces::Create(browser_);
++}
++
++void SidebarPageHandler::SetPrivacyLevel(const std::string& level) {
++  // SetMode() rejects anything but the three level names.
++  helium_privacy_mode::SetMode(browser_->GetProfile(), level);
++}
++
++void SidebarPageHandler::SetPerformanceMode(bool enabled) {
++  helium_privacy_mode::SetPerformanceMode(browser_->GetProfile(), enabled);
++}
++
++void SidebarPageHandler::RunCommand(mojom::Command command) {
++  int id = 0;
++  switch (command) {
++    case mojom::Command::kNewTab:
++      id = IDC_NEW_TAB;
++      break;
++    case mojom::Command::kNewFolder:
++      id = IDC_CREATE_NEW_TAB_GROUP;
++      break;
++    case mojom::Command::kHistory:
++      id = IDC_SHOW_HISTORY;
++      break;
++    case mojom::Command::kBookmarks:
++      id = IDC_SHOW_BOOKMARK_MANAGER;
++      break;
++    case mojom::Command::kDownloads:
++      id = IDC_SHOW_DOWNLOADS;
++      break;
++    case mojom::Command::kExtensions:
++      id = IDC_MANAGE_EXTENSIONS;
++      break;
++    case mojom::Command::kSettings:
++      id = IDC_OPTIONS;
++      break;
++    case mojom::Command::kFocusLocationBar:
++      id = IDC_FOCUS_LOCATION;
++      break;
++  }
++  chrome::ExecuteCommand(browser_, id);
++}
++
++}  // namespace heliumpp_sidebar
+--- /dev/null
++++ b/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_page_handler.h
+@@ -0,0 +1,47 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_WEBUI_HELIUMPP_SIDEBAR_SIDEBAR_PAGE_HANDLER_H_
++#define CHROME_BROWSER_UI_WEBUI_HELIUMPP_SIDEBAR_SIDEBAR_PAGE_HANDLER_H_
++
++#include "base/memory/raw_ptr.h"
++#include "chrome/browser/ui/webui/heliumpp_sidebar/heliumpp_sidebar.mojom.h"
++#include "components/prefs/pref_change_registrar.h"
++#include "mojo/public/cpp/bindings/receiver.h"
++#include "mojo/public/cpp/bindings/remote.h"
++
++class BrowserWindowInterface;
++
++namespace heliumpp_sidebar {
++
++class SidebarPageHandler : public mojom::PageHandler {
++ public:
++  SidebarPageHandler(mojo::PendingRemote<mojom::Page> page,
++                     mojo::PendingReceiver<mojom::PageHandler> receiver,
++                     BrowserWindowInterface* browser);
++  SidebarPageHandler(const SidebarPageHandler&) = delete;
++  SidebarPageHandler& operator=(const SidebarPageHandler&) = delete;
++  ~SidebarPageHandler() override;
++
++  // mojom::PageHandler:
++  void GetState(GetStateCallback callback) override;
++  void SwitchWorkspace(const std::string& id) override;
++  void CreateWorkspace() override;
++  void SetPrivacyLevel(const std::string& level) override;
++  void SetPerformanceMode(bool enabled) override;
++  void RunCommand(mojom::Command command) override;
++
++ private:
++  mojom::StatePtr BuildState() const;
++  void SendState();
++
++  mojo::Remote<mojom::Page> page_;
++  mojo::Receiver<mojom::PageHandler> receiver_;
++  raw_ptr<BrowserWindowInterface> browser_;
++  PrefChangeRegistrar registrar_;
++};
++
++}  // namespace heliumpp_sidebar
++
++#endif  // CHROME_BROWSER_UI_WEBUI_HELIUMPP_SIDEBAR_SIDEBAR_PAGE_HANDLER_H_
+--- /dev/null
++++ b/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_ui.cc
+@@ -0,0 +1,74 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "chrome/browser/ui/webui/heliumpp_sidebar/sidebar_ui.h"
++
++#include <utility>
++
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/tabs/tab_strip_api/tab_strip_service_feature.h"
++#include "chrome/browser/ui/webui/heliumpp_sidebar/sidebar_page_handler.h"
++#include "chrome/browser/ui/webui/webui_embedding_context.h"
++#include "chrome/common/webui_url_constants.h"
++#include "chrome/grit/heliumpp_sidebar_resources.h"
++#include "chrome/grit/heliumpp_sidebar_resources_map.h"
++#include "chrome/grit/tab_strip_api_resources_map.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/browser/web_ui.h"
++#include "content/public/browser/web_ui_data_source.h"
++#include "ui/webui/webui_util.h"
++
++namespace heliumpp_sidebar {
++
++SidebarUIConfig::SidebarUIConfig()
++    : DefaultTopChromeWebUIConfig(content::kChromeUIScheme,
++                                  chrome::kChromeUIHeliumSidebarHost) {}
++
++SidebarUI::SidebarUI(content::WebUI* web_ui)
++    : TopChromeWebUIController(web_ui, /*enable_chrome_send=*/false) {
++  content::WebUIDataSource* source = content::WebUIDataSource::CreateAndAdd(
++      web_ui->GetWebContents()->GetBrowserContext(),
++      chrome::kChromeUIHeliumSidebarHost);
++  webui::SetupWebUIDataSource(source, kHeliumppSidebarResources,
++                              IDR_HELIUMPP_SIDEBAR_HELIUMPP_SIDEBAR_HTML);
++  // The tab strip API bindings and helpers, served under /tab_strip_api/.
++  source->AddResourcePaths(kTabStripApiResources);
++}
++
++SidebarUI::~SidebarUI() = default;
++
++void SidebarUI::BindInterface(
++    mojo::PendingReceiver<mojom::PageHandlerFactory> receiver) {
++  factory_receiver_.reset();
++  factory_receiver_.Bind(std::move(receiver));
++}
++
++void SidebarUI::BindInterface(
++    mojo::PendingReceiver<tabs_api::mojom::TabStripService> receiver) {
++  // The embedding view sets the window before loading the page.
++  BrowserWindowInterface* browser =
++      webui::GetBrowserWindowInterface(web_ui()->GetWebContents());
++  TabStripServiceFeature* feature =
++      browser ? TabStripServiceFeature::From(browser) : nullptr;
++  if (feature) {
++    feature->Accept(std::move(receiver));
++  }
++}
++
++void SidebarUI::CreatePageHandler(
++    mojo::PendingRemote<mojom::Page> page,
++    mojo::PendingReceiver<mojom::PageHandler> handler) {
++  BrowserWindowInterface* browser =
++      webui::GetBrowserWindowInterface(web_ui()->GetWebContents());
++  if (!browser) {
++    return;
++  }
++  page_handler_ = std::make_unique<SidebarPageHandler>(
++      std::move(page), std::move(handler), browser);
++}
++
++WEB_UI_CONTROLLER_TYPE_IMPL(SidebarUI)
++
++}  // namespace heliumpp_sidebar
+--- /dev/null
++++ b/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_ui.h
+@@ -0,0 +1,59 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_WEBUI_HELIUMPP_SIDEBAR_SIDEBAR_UI_H_
++#define CHROME_BROWSER_UI_WEBUI_HELIUMPP_SIDEBAR_SIDEBAR_UI_H_
++
++#include <memory>
++#include <string_view>
++
++#include "chrome/browser/ui/webui/heliumpp_sidebar/heliumpp_sidebar.mojom.h"
++#include "chrome/browser/ui/webui/top_chrome/top_chrome_web_ui_controller.h"
++#include "chrome/browser/ui/webui/top_chrome/top_chrome_webui_config.h"
++#include "components/browser_apis/tab_strip/tab_strip_api.mojom.h"
++#include "mojo/public/cpp/bindings/pending_receiver.h"
++#include "mojo/public/cpp/bindings/receiver.h"
++
++namespace heliumpp_sidebar {
++
++class SidebarPageHandler;
++class SidebarUI;
++
++class SidebarUIConfig : public DefaultTopChromeWebUIConfig<SidebarUI> {
++ public:
++  SidebarUIConfig();
++};
++
++// chrome://helium-sidebar.top-chrome: the vertical sidebar drawn as a web page
++// (tabs, folders, workspaces, shield). Hosted by HeliumSidebarWebView.
++class SidebarUI : public TopChromeWebUIController,
++                  public mojom::PageHandlerFactory {
++ public:
++  explicit SidebarUI(content::WebUI* web_ui);
++  SidebarUI(const SidebarUI&) = delete;
++  SidebarUI& operator=(const SidebarUI&) = delete;
++  ~SidebarUI() override;
++
++  static constexpr std::string_view GetWebUIName() { return "HeliumSidebar"; }
++
++  void BindInterface(
++      mojo::PendingReceiver<mojom::PageHandlerFactory> receiver);
++  void BindInterface(
++      mojo::PendingReceiver<tabs_api::mojom::TabStripService> receiver);
++
++ private:
++  // mojom::PageHandlerFactory:
++  void CreatePageHandler(
++      mojo::PendingRemote<mojom::Page> page,
++      mojo::PendingReceiver<mojom::PageHandler> handler) override;
++
++  std::unique_ptr<SidebarPageHandler> page_handler_;
++  mojo::Receiver<mojom::PageHandlerFactory> factory_receiver_{this};
++
++  WEB_UI_CONTROLLER_TYPE_DECL();
++};
++
++}  // namespace heliumpp_sidebar
++
++#endif  // CHROME_BROWSER_UI_WEBUI_HELIUMPP_SIDEBAR_SIDEBAR_UI_H_
+--- a/chrome/chrome_paks.gni
++++ b/chrome/chrome_paks.gni
+@@ -231,6 +231,7 @@
+         "$root_gen_dir/chrome/inspect_resources.pak",
+         "$root_gen_dir/chrome/iwa_dev_resources.pak",
+         "$root_gen_dir/chrome/key_value_pair_viewer_shared_resources.pak",
++        "$root_gen_dir/chrome/heliumpp_sidebar_resources.pak",
+         "$root_gen_dir/chrome/new_tab_footer_resources.pak",
+         "$root_gen_dir/chrome/organizer_panel_resources.pak",
+         "$root_gen_dir/chrome/password_manager_resources.pak",
+--- a/chrome/common/webui_url_constants.h
++++ b/chrome/common/webui_url_constants.h
+@@ -223,6 +223,9 @@
+ inline constexpr char kChromeUINetInternalsURL[] = "chrome://net-internals/";
+ inline constexpr char kChromeUINewTabHost[] = "newtab";
+ inline constexpr char kChromeUINewTabFooterHost[] = "newtab-footer";
++// Helium++ web sidebar (top chrome).
++inline constexpr char kChromeUIHeliumSidebarHost[] = "helium-sidebar.top-chrome";
++inline constexpr char kChromeUIHeliumSidebarURL[] = "chrome://helium-sidebar.top-chrome/";
+ inline constexpr char kChromeUINewTabPageHost[] = "new-tab-page";
+ inline constexpr char kChromeUINewTabPageThirdPartyHost[] =
+     "new-tab-page-third-party";
+--- a/third_party/lit/v3_0/BUILD.gn
++++ b/third_party/lit/v3_0/BUILD.gn
+@@ -76,6 +76,7 @@
+     "//chrome/browser/resources/management:build_ts",
+     "//chrome/browser/resources/media_router/cast_feedback:build_ts",
+     "//chrome/browser/resources/multistep_filter_internals:build_ts",
++    "//chrome/browser/resources/heliumpp_sidebar:build_ts",
+     "//chrome/browser/resources/new_tab_footer:build_ts",
+     "//chrome/browser/resources/new_tab_page:build_ts",
+     "//chrome/browser/resources/new_tab_shared:build_ts",
+--- a/tools/gritsettings/resource_ids.spec
++++ b/tools/gritsettings/resource_ids.spec
+@@ -1421,6 +1421,10 @@
+    "META": {"sizes": {"includes": [48],}},
+     "includes": [7510],
+   },
++  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/heliumpp_sidebar/resources.grd": {
++   "META": {"sizes": {"includes": [20],}},
++    "includes": [7570],
++  },
+   # END components/ section.
+ 
+   # START ios/ section.
+--- a/tools/metrics/histograms/metadata/page/histograms.xml
++++ b/tools/metrics/histograms/metadata/page/histograms.xml
+@@ -1084,6 +1084,7 @@
+   <variant name=".ExtensionsWebStoreZeroStatePromo"/>
+   <variant name=".Feed"/>
+   <variant name=".Feedback"/>
++  <variant name=".HeliumSidebar"/>
+   <variant name=".HistoryClustersSidePanel"/>
+   <variant name=".HistorySidePanel"/>
+   <variant name=".LensOverlayUntrusted"/>
+--- a/tools/metrics/histograms/metadata/ui/histograms.xml
++++ b/tools/metrics/histograms/metadata/ui/histograms.xml
+@@ -154,6 +154,7 @@
+   <variant name=".ExtensionsWebStoreZeroStatePromo"/>
+   <variant name=".Feed"/>
+   <variant name=".Feedback"/>
++  <variant name=".HeliumSidebar"/>
+   <variant name=".HistoryClustersSidePanel"/>
+   <variant name=".HistorySidePanel"/>
+   <variant name=".LensOverlayUntrusted"/>

@@ -1,0 +1,84 @@
+/* Helium++ design tokens: the one source for every WebUI surface (web sidebar, new tab page, onboarding,
+ * settings). Spec and native mapping: DESIGN.md.
+ *
+ * Colours are never fixed values: they are derived from the browser theme in chrome://theme/colors.css
+ * (`--color-sys-*`), which is seeded from the desktop wallpaper, so light/dark and every wallpaper follow
+ * automatically. A page must load colors.css (sets=ui,chrome) before this file and declare
+ * `color-scheme: light dark` (light-dark() below depends on it).
+ * The font face (Figtree, OFL 1.1, shared/fonts/figtree) is declared by the page that serves it. */
+
+:root,
+:host {
+  /* Ink: theme foreground, secondary steps mixed toward the surface so they stay tinted, never grey. */
+  --hp-ink: var(--color-sys-on-surface);
+  --hp-ink-2: color-mix(in oklab, var(--hp-ink) 86%, var(--color-sys-surface));
+  --hp-ink-3: color-mix(in oklab, var(--hp-ink) 66%, var(--color-sys-surface));
+
+  /* One accent, from the wallpaper: selection, active workspace, focus, primary action. */
+  --hp-accent: var(--color-sys-primary);
+  --hp-on-accent: var(--color-sys-on-primary);
+  --hp-accent-soft: color-mix(in srgb, var(--hp-accent) 16%, transparent);
+  --hp-focus: var(--color-sys-state-focus-ring);
+  --hp-danger: var(--color-sys-error);
+
+  /* Surfaces. Glass is see-through (the native acrylic window shows behind); card is the page plane;
+     raised is for popovers and menus. */
+  --hp-card: var(--color-sys-base);
+  --hp-raised: var(--color-sys-base-container-elevated);
+  --hp-field: light-dark(rgb(255 255 255 / 0.62), rgb(255 255 255 / 0.07));
+  --hp-hover: color-mix(in srgb, var(--hp-ink) 7%, transparent);
+  --hp-pressed: color-mix(in srgb, var(--hp-ink) 11%, transparent);
+  --hp-selected: light-dark(rgb(255 255 255 / 0.82), rgb(255 255 255 / 0.11));
+  --hp-edge: light-dark(rgb(255 255 255 / 0.55), rgb(255 255 255 / 0.10));
+  --hp-divider: color-mix(in srgb, var(--hp-ink) 10%, transparent);
+  /* Only the page card and popovers cast shadows. light-dark() takes colours only, hence the split. */
+  --hp-shade: light-dark(rgb(0 0 0 / 0.22), rgb(0 0 0 / 0.55));
+  --hp-shade-near: light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.30));
+  --hp-shadow-card: 0 1px 2px var(--hp-shade-near), 0 12px 32px -8px var(--hp-shade);
+  --hp-shadow-pop: 0 2px 6px var(--hp-shade-near), 0 16px 40px -12px var(--hp-shade);
+
+  /* Type. 13px is the UI size; 11px only for counts and shortcut hints. */
+  --hp-font: Figtree, system-ui, sans-serif;
+  --hp-text-xs: 11px;
+  --hp-text-sm: 12px;
+  --hp-text: 13px;
+  --hp-text-lg: 15px;
+  --hp-text-xl: 20px;
+  --hp-text-display: 88px;
+  --hp-leading: 1.4;
+  --hp-weight: 450;
+  --hp-weight-strong: 600;
+
+  /* Shape and space: 4px grid. */
+  --hp-radius-card: 12px;
+  --hp-radius-control: 10px;
+  --hp-radius-tab: 8px;
+  --hp-radius-sm: 6px;
+  --hp-space-1: 4px;
+  --hp-space-2: 8px;
+  --hp-space-3: 12px;
+  --hp-space-4: 16px;
+  --hp-space-6: 24px;
+  --hp-space-8: 32px;
+  --hp-row: 32px;          /* tab and list rows */
+  --hp-control: 34px;      /* address field, search */
+  --hp-segment: 28px;      /* workspace segments, icon buttons (>= 24px target) */
+  --hp-sidebar: 232px;
+  --hp-rail: 48px;
+  --hp-inset: 8px;         /* gap between page card and window edge */
+
+  /* Motion: short, ease-out, nothing bounces. */
+  --hp-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --hp-fast: 120ms;
+  --hp-base: 150ms;
+  --hp-slow: 220ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root,
+  :host {
+    --hp-fast: 0ms;
+    --hp-base: 0ms;
+    --hp-slow: 0ms;
+  }
+}

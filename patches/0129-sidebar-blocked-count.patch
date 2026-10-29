@@ -1,0 +1,250 @@
+--- a/chrome/browser/resources/heliumpp_sidebar/app.css
++++ b/chrome/browser/resources/heliumpp_sidebar/app.css
+@@ -392,6 +392,16 @@
+   color: var(--hp-accent);
+ }
+ 
++.shield b {
++  font-variant-numeric: tabular-nums;
++}
++
++.shield .unit {
++  color: var(--hp-ink-2);
++  font-size: var(--hp-text-sm);
++  font-weight: var(--hp-weight);
++}
++
+ .shield:hover {
+   background: color-mix(in srgb, var(--hp-accent) 24%, transparent);
+ }
+@@ -517,6 +527,7 @@
+   .newtab span,
+   .newtab kbd,
+   .shield b,
++  .shield .unit,
+   .foot .icon-btn,
+   .spaces .add,
+   .spaces .hl {
+--- a/chrome/browser/resources/heliumpp_sidebar/app.html.ts
++++ b/chrome/browser/resources/heliumpp_sidebar/app.html.ts
+@@ -118,9 +118,11 @@
+ 
+ <footer class="foot">
+   <button class="shield" aria-expanded="${this.shieldOpen_}"
+-      aria-label="Privacy level: ${this.levelName_()}"
++      aria-label="${this.shieldLabel_()}" title="${this.shieldLabel_()}"
+       @click="${this.onShieldClick_}">
+-    ${ICONS.shield}<b>${this.levelName_()}</b>
++    ${ICONS.shield}${this.state_?.blocked ? html`
++      <b>${this.state_.blocked}</b><span class="unit">blocked</span>` : html`
++      <b>${this.levelName_()}</b>`}
+   </button>
+   <button class="icon-btn" aria-label="Downloads" title="Downloads"
+       @click="${this.onDownloadsClick_}">${ICONS.download}</button>
+--- a/chrome/browser/resources/heliumpp_sidebar/app.ts
++++ b/chrome/browser/resources/heliumpp_sidebar/app.ts
+@@ -290,6 +290,15 @@
+     return level ? level.name : 'Medium';
+   }
+ 
++  // Footer shield: uBlock Origin's count for this tab when it runs, and the
++  // privacy level (always spoken, also shown when there is no count).
++  protected shieldLabel_(): string {
++    const blocked = this.state_?.blocked;
++    return blocked ?
++        `${blocked} blocked on this page. Privacy level: ${this.levelName_()}` :
++        `Privacy level: ${this.levelName_()}`;
++  }
++
+   protected favicon_(tab: Tab): string {
+     return tab.favicon?.dataUrl || 'chrome://favicon2/';
+   }
+--- a/chrome/browser/ui/webui/heliumpp_sidebar/BUILD.gn
++++ b/chrome/browser/ui/webui/heliumpp_sidebar/BUILD.gn
+@@ -38,6 +38,8 @@
+     "//chrome/browser/profiles",
+     "//chrome/browser/resources/heliumpp_sidebar:resources_grit",
+     "//chrome/browser/ui/browser_window",
++    "//components/helium_services",
++    "//extensions/browser",
+     "//chrome/browser/ui/webui:webui_util",
+     "//chrome/common",
+     "//components/browser_apis/tab_strip/resources",
+--- a/chrome/browser/ui/webui/heliumpp_sidebar/heliumpp_sidebar.mojom
++++ b/chrome/browser/ui/webui/heliumpp_sidebar/heliumpp_sidebar.mojom
+@@ -18,6 +18,10 @@
+   // "usability", "medium" or "maximum".
+   string privacy_level;
+   bool performance_mode;
++  // uBlock Origin's blocked-request count for the active tab as its badge
++  // shows it ("12", "1k"); "0" when it shows none; "" when uBlock Origin is
++  // not running.
++  string blocked;
+ };
+ 
+ enum Command {
+--- a/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_page_handler.cc
++++ b/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_page_handler.cc
+@@ -4,16 +4,24 @@
+ 
+ #include "chrome/browser/ui/webui/heliumpp_sidebar/sidebar_page_handler.h"
+ 
++#include <algorithm>
+ #include <utility>
+ 
+ #include "base/functional/bind.h"
++#include "base/strings/string_util.h"
+ #include "chrome/app/chrome_command_ids.h"
+ #include "chrome/browser/helium_privacy_mode/helium_privacy_mode.h"
+ #include "chrome/browser/helium_workspaces/helium_workspaces.h"
++#include "chrome/browser/extensions/extension_tab_util.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/browser_commands.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "components/tabs/public/tab_interface.h"
++#include "components/helium_services/extension_ids.h"
+ #include "components/prefs/pref_service.h"
++#include "extensions/browser/extension_action.h"
++#include "extensions/browser/extension_action_manager.h"
++#include "extensions/browser/extension_registry.h"
+ #include "ui/base/base_window.h"
+ 
+ namespace heliumpp_sidebar {
+@@ -39,11 +47,67 @@
+   registrar_.Add(helium_workspaces::kActiveWorkspacePref, send);
+   registrar_.Add(kPrivacyModePref, send);
+   registrar_.Add(helium_privacy_mode::kPerformanceModePref, send);
++  active_tab_subscription_ = browser_->RegisterActiveTabDidChange(
++      base::BindRepeating(&SidebarPageHandler::OnActiveTabChanged,
++                          base::Unretained(this)));
++  if (auto* dispatcher =
++          extensions::ExtensionActionDispatcher::Get(browser_->GetProfile())) {
++    action_observation_.Observe(dispatcher);
++  }
+ }
+ 
+ SidebarPageHandler::~SidebarPageHandler() = default;
+ 
+-mojom::StatePtr SidebarPageHandler::BuildState() const {
++std::string SidebarPageHandler::BlockedBadge() {
++  Profile* profile = browser_->GetProfile();
++  const extensions::Extension* ublock =
++      extensions::ExtensionRegistry::Get(profile)->enabled_extensions().GetByID(
++          helium::kUBlockOriginComponentId);
++  tabs::TabInterface* tab = browser_->GetActiveTabInterface();
++  if (!ublock || !tab) {
++    return std::string();
++  }
++  extensions::ExtensionAction* action =
++      extensions::ExtensionActionManager::Get(profile)->GetExtensionAction(
++          *ublock);
++  if (!action) {
++    return std::string();
++  }
++  const std::string text = action->GetDisplayBadgeText(
++      extensions::ExtensionTabUtil::GetTabId(tab->GetContents()));
++  if (text.empty()) {
++    return "0";
++  }
++  // uBlock Origin writes a count such as "12" or "1k"; nothing else is shown.
++  const bool is_count =
++      text.size() <= 6 && std::ranges::all_of(text, [](char c) {
++        return base::IsAsciiDigit(c) || c == 'k' || c == 'M' || c == '+';
++      });
++  return is_count ? text : std::string();
++}
++
++void SidebarPageHandler::OnActiveTabChanged(BrowserWindowInterface* browser) {
++  SendState();
++}
++
++void SidebarPageHandler::OnExtensionActionUpdated(
++    extensions::ExtensionAction* extension_action,
++    content::WebContents* web_contents,
++    content::BrowserContext* browser_context) {
++  tabs::TabInterface* tab = browser_->GetActiveTabInterface();
++  if (extension_action->extension_id() != helium::kUBlockOriginComponentId ||
++      !tab || tab->GetContents() != web_contents ||
++      BlockedBadge() == last_blocked_) {
++    return;
++  }
++  SendState();
++}
++
++void SidebarPageHandler::OnShuttingDown() {
++  action_observation_.Reset();
++}
++
++mojom::StatePtr SidebarPageHandler::BuildState() {
+   auto state = mojom::State::New();
+   for (const helium_workspaces::Info& info :
+        helium_workspaces::List(browser_->GetProfile())) {
+@@ -54,6 +118,7 @@
+       helium_privacy_mode::GetModeName(browser_->GetProfile());
+   state->performance_mode =
+       helium_privacy_mode::IsPerformanceMode(browser_->GetProfile());
++  state->blocked = last_blocked_ = BlockedBadge();
+   return state;
+ }
+ 
+--- a/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_page_handler.h
++++ b/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_page_handler.h
+@@ -5,8 +5,13 @@
+ #ifndef CHROME_BROWSER_UI_WEBUI_HELIUMPP_SIDEBAR_SIDEBAR_PAGE_HANDLER_H_
+ #define CHROME_BROWSER_UI_WEBUI_HELIUMPP_SIDEBAR_SIDEBAR_PAGE_HANDLER_H_
+ 
++#include <string>
++
++#include "base/callback_list.h"
+ #include "base/functional/callback.h"
+ #include "base/memory/raw_ptr.h"
++#include "base/scoped_observation.h"
++#include "chrome/browser/extensions/extension_action_dispatcher.h"
+ #include "chrome/browser/ui/webui/heliumpp_sidebar/heliumpp_sidebar.mojom.h"
+ #include "components/prefs/pref_change_registrar.h"
+ #include "mojo/public/cpp/bindings/receiver.h"
+@@ -17,7 +22,9 @@
+ 
+ namespace heliumpp_sidebar {
+ 
+-class SidebarPageHandler : public mojom::PageHandler {
++class SidebarPageHandler
++    : public mojom::PageHandler,
++      public extensions::ExtensionActionDispatcher::Observer {
+  public:
+   SidebarPageHandler(mojo::PendingRemote<mojom::Page> page,
+                      mojo::PendingReceiver<mojom::PageHandler> receiver,
+@@ -40,15 +47,32 @@
+                       int32_t width,
+                       int32_t height) override;
+ 
++  // extensions::ExtensionActionDispatcher::Observer:
++  void OnExtensionActionUpdated(
++      extensions::ExtensionAction* extension_action,
++      content::WebContents* web_contents,
++      content::BrowserContext* browser_context) override;
++  void OnShuttingDown() override;
++
+  private:
+-  mojom::StatePtr BuildState() const;
++  mojom::StatePtr BuildState();
+   void SendState();
++  // State::blocked for the active tab.
++  std::string BlockedBadge();
++  void OnActiveTabChanged(BrowserWindowInterface* browser);
+ 
+   mojo::Remote<mojom::Page> page_;
+   mojo::Receiver<mojom::PageHandler> receiver_;
+   raw_ptr<BrowserWindowInterface> browser_;
+   PrefChangeRegistrar registrar_;
+   base::RepeatingCallback<void(const gfx::Rect&)> on_address_slot_;
++  // The badge last sent, so uBlock Origin's frequent updates only reach the
++  // page when the number changes.
++  std::string last_blocked_;
++  base::CallbackListSubscription active_tab_subscription_;
++  base::ScopedObservation<extensions::ExtensionActionDispatcher,
++                          extensions::ExtensionActionDispatcher::Observer>
++      action_observation_{this};
+ };
+ 
+ }  // namespace heliumpp_sidebar

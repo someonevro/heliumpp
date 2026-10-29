@@ -56,7 +56,7 @@ This repository does **not** contain the Chromium source tree. It holds the Heli
 - **Three privacy modes** chosen at first launch, changeable later: Low, Medium (recommended) and High.
 - **Zen-inspired interface:** vertical tab sidebar, essentials tiles, folders, workspaces, floating page card.
 - **Wallpaper-driven theme:** the UI color follows your desktop wallpaper or accent color.
-- **New tab page:** greeting, search field, glass tiles, and Usability/Medium/Maximum privacy and Performance mode switches.
+- **New tab page:** your own wallpaper, softened, behind a clock, a search field, shortcuts, and small chips for time on the web, focus rounds and sleeping tabs. Privacy level and Performance mode live in Settings and the sidebar shield.
 - **Performance mode:** aggressive tab discarding, energy saver, reduced animations, wallpaper colour sync paused. Also in Settings > Appearance.
 - **Isolated tabs** (`Ctrl+Alt+N`): per-tab throwaway in-memory storage, no history or session traces, permissions denied by default. This is **not** a VM and does not hide your IP, DNS or fingerprint.
 - **Secure DNS choice** at first run: Cloudflare, Google, system, or custom DoH.

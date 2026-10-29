@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Helium++ window redesign</title>
+<!-- Design mock only (static HTML). Assets live in build/ (not in git): wallpaper copy; the font is shared/fonts/figtree. -->
+<style>
+@font-face { font-family: Figtree; src: url(../../shared/fonts/figtree/Figtree-Variable.ttf) format("truetype"); font-weight: 300 900; }
+
+:root {
+  /* Seed colours are replaced at load from the wallpaper (dominant hue), like the browser does. */
+  --seed-h: 214; --seed-s: 38%;
+  --glass-alpha: 0.74;
+  --ground: hsl(var(--seed-h) 30% 92% / var(--glass-alpha));
+  --ink: hsl(var(--seed-h) 30% 14%);
+  --ink-2: hsl(var(--seed-h) 30% 18%);
+  --ink-3: hsl(var(--seed-h) 26% 24%);
+  --edge: hsl(0 0% 100% / 0.55);
+  --hover: hsl(var(--seed-h) 30% 20% / 0.07);
+  --selected: hsl(0 0% 100% / 0.82);
+  --accent: hsl(var(--seed-h) var(--seed-s) 44%);
+  --accent-ink: hsl(var(--seed-h) 40% 98%);
+  --accent-soft: hsl(var(--seed-h) var(--seed-s) 44% / 0.14);
+  --card: hsl(var(--seed-h) 20% 98%);
+  --shadow: 0 1px 2px hsl(var(--seed-h) 40% 10% / 0.10), 0 12px 32px -8px hsl(var(--seed-h) 40% 10% / 0.28);
+  --blur: 28px;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --glass-alpha: 0.58;
+  --ground: hsl(var(--seed-h) 28% 11% / var(--glass-alpha));
+  --ink: hsl(var(--seed-h) 30% 94%);
+  --ink-2: hsl(var(--seed-h) 18% 78%);
+  --ink-3: hsl(var(--seed-h) 14% 68%);
+  --edge: hsl(0 0% 100% / 0.10);
+  --hover: hsl(0 0% 100% / 0.06);
+  --selected: hsl(0 0% 100% / 0.11);
+  --accent: hsl(var(--seed-h) var(--seed-s) 70%);
+  --accent-ink: hsl(var(--seed-h) 40% 10%);
+  --accent-soft: hsl(var(--seed-h) var(--seed-s) 70% / 0.16);
+  --card: hsl(var(--seed-h) 18% 9%);
+  --shadow: 0 1px 2px hsl(0 0% 0% / 0.3), 0 16px 40px -10px hsl(0 0% 0% / 0.6);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  font: 13px/1.4 Figtree, system-ui, sans-serif;
+  color: var(--ink);
+  background: #0d1520 url(../../build/mock/wall.jpg) center / cover no-repeat;
+  display: grid; place-items: center;
+  overflow: hidden;
+}
+::selection { background: var(--accent); color: var(--accent-ink); }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+/* The window: one sheet of frosted glass. */
+.window {
+  width: min(1360px, 94vw); height: min(860px, 92vh);
+  display: grid; grid-template-columns: 236px 1fr;
+  border-radius: 14px; overflow: hidden;
+  background: var(--ground);
+  backdrop-filter: blur(var(--blur)) saturate(1.4);
+  box-shadow: 0 0 0 1px var(--edge) inset, 0 30px 80px -20px hsl(0 0% 0% / 0.55);
+  position: relative;
+}
+
+/* Sidebar */
+.side { display: flex; flex-direction: column; padding: 10px 8px 8px 10px; min-height: 0; }
+.row1 { display: flex; align-items: center; gap: 2px; height: 30px; padding-inline: 4px 2px; }
+.dots { display: flex; gap: 7px; margin-inline-end: auto; }
+.dots i { width: 12px; height: 12px; border-radius: 50%; background: hsl(var(--seed-h) 10% 60% / 0.45); display: block; }
+.dots i:first-child { background: hsl(356 72% 60%); }
+.icon-btn { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; color: var(--ink-2); }
+.icon-btn:hover { background: var(--hover); color: var(--ink); }
+.icon-btn[disabled] { opacity: 0.4; cursor: default; }
+
+/* Workspaces: named segments with a sliding highlight. */
+.spaces { position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; margin: 8px 0 8px; padding: 3px; border-radius: 10px; background: var(--hover); }
+.spaces .hl { position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc((100% - 6px) / 3); border-radius: 8px; background: var(--selected); box-shadow: 0 1px 2px hsl(var(--seed-h) 40% 10% / 0.12); transition: transform 150ms cubic-bezier(.2,.8,.2,1); }
+.spaces button { position: relative; height: 26px; border-radius: 8px; font-weight: 600; color: var(--ink-3); display: flex; align-items: center; justify-content: center; gap: 6px; }
+.spaces button[aria-pressed="true"] { color: var(--ink); }
+.spaces button .sw { width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
+
+.address { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; border-radius: 10px; background: var(--selected); box-shadow: 0 0 0 1px var(--edge) inset; color: var(--ink-3); }
+.address span { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.address .lock { color: var(--ink-2); }
+
+/* Essentials: square tiles. */
+.essentials { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 12px 0 6px; }
+.tile { aspect-ratio: 1; border-radius: 10px; display: grid; place-items: center; background: var(--hover); position: relative; }
+.tile:hover { background: var(--selected); }
+.tile[aria-current="page"] { background: var(--selected); box-shadow: 0 0 0 1.5px var(--accent) inset; }
+.tile .fav { width: 20px; height: 20px; border-radius: 5px; }
+.tile .dot { position: absolute; bottom: 5px; width: 4px; height: 4px; border-radius: 50%; background: var(--accent); }
+
+.scroll { flex: 1; overflow: auto; min-height: 0; margin-inline-end: -4px; padding-inline-end: 4px; }
+.section { display: flex; align-items: center; justify-content: space-between; height: 28px; margin-top: 8px; padding-inline: 8px 4px; font-weight: 600; color: var(--ink-3); }
+.section .icon-btn { width: 22px; height: 22px; }
+.tab { display: flex; align-items: center; gap: 9px; height: 34px; padding: 0 6px 0 9px; border-radius: 8px; color: var(--ink-2); position: relative; }
+.tab:hover { background: var(--hover); color: var(--ink); }
+.tab[aria-current="page"] { background: var(--selected); color: var(--ink); box-shadow: 0 1px 2px hsl(var(--seed-h) 40% 10% / 0.10), 0 0 0 1px var(--edge) inset; }
+.tab .fav { width: 16px; height: 16px; border-radius: 4px; flex: none; }
+.tab .t { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tab .x { opacity: 0; width: 22px; height: 22px; }
+.tab:hover .x, .tab[aria-current="page"] .x { opacity: 1; }
+.tab .audio { color: var(--accent); }
+
+.folder { margin-top: 2px; }
+.folder > .head { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px; border-radius: 8px; font-weight: 600; color: var(--ink); width: 100%; }
+.folder > .head:hover { background: var(--hover); }
+.folder > .head .chev { color: var(--ink-3); transition: transform 150ms ease-out; }
+.folder > .head .count { margin-inline-start: auto; color: var(--ink-3); font-weight: 500; font-variant-numeric: tabular-nums; }
+.folder > .head .swatch { width: 10px; height: 10px; border-radius: 3px; background: var(--c); }
+.folder .items { margin-inline-start: 13px; padding-inline-start: 8px; border-inline-start: 1px solid var(--edge); }
+
+.newtab { display: flex; align-items: center; gap: 9px; height: 34px; padding: 0 9px; border-radius: 8px; color: var(--ink-2); width: 100%; margin-top: 2px; }
+.newtab:hover { background: var(--hover); color: var(--ink); }
+.newtab kbd { margin-inline-start: auto; font: 500 11px Figtree, sans-serif; color: var(--ink-3); }
+
+.foot { display: flex; align-items: center; gap: 2px; padding-top: 8px; margin-top: 6px; border-top: 1px solid var(--edge); }
+.foot .shield { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px 0 8px; border-radius: 8px; color: var(--ink); font-weight: 600; margin-inline-end: auto; background: var(--accent-soft); }
+.foot .shield svg { color: var(--accent); }
+.foot .shield b { font-variant-numeric: tabular-nums; font-weight: 600; }
+.foot .shield small { color: var(--ink-3); font-weight: 500; font-size: 12px; }
+
+/* Page card */
+.stage { padding: 8px 8px 8px 0; min-width: 0; display: flex; }
+.card { flex: 1; border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); background: var(--card); position: relative; }
+
+/* New tab page: the user's wallpaper, softened. */
+.ntp { position: absolute; inset: 0; display: grid; grid-template-rows: 1fr auto; isolation: isolate; color: #fff; }
+.ntp::before { content: ""; position: absolute; inset: -40px; z-index: -2; background: url(../../build/mock/wall.jpg) center / cover; filter: blur(18px) saturate(1.15); }
+.ntp::after { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, hsl(var(--seed-h) 40% 12% / 0.20), hsl(var(--seed-h) 40% 8% / 0.55)); }
+.ntp .center { align-self: center; justify-self: center; width: min(620px, 86%); text-align: center; margin-top: -40px; }
+.ntp .time { font-size: 88px; font-weight: 300; letter-spacing: -0.035em; line-height: 1; font-variant-numeric: tabular-nums; text-shadow: 0 2px 30px hsl(0 0% 0% / 0.25); }
+.ntp .date { margin-top: 10px; font-size: 15px; font-weight: 500; opacity: 0.92; }
+.search { margin-top: 34px; display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 8px 0 18px; border-radius: 16px; background: hsl(0 0% 100% / 0.86); color: hsl(var(--seed-h) 30% 14%); box-shadow: 0 10px 30px -10px hsl(0 0% 0% / 0.45); backdrop-filter: blur(20px); text-align: start; }
+:root[data-theme="dark"] .search { background: hsl(var(--seed-h) 25% 12% / 0.78); color: hsl(var(--seed-h) 30% 94%); box-shadow: 0 0 0 1px hsl(0 0% 100% / 0.08) inset, 0 10px 30px -10px hsl(0 0% 0% / 0.6); }
+.search span { flex: 1; font-size: 15px; opacity: 0.7; }
+.search kbd { font: 600 11px Figtree, sans-serif; padding: 4px 7px; border-radius: 6px; background: hsl(var(--seed-h) 30% 14% / 0.08); opacity: 0.8; }
+.shortcuts { margin: 26px auto 0; display: flex; justify-content: center; gap: 18px; }
+.shortcut { width: 64px; display: grid; justify-items: center; gap: 8px; font-size: 12px; font-weight: 500; text-shadow: 0 1px 8px hsl(0 0% 0% / 0.4); }
+.shortcut .s { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; background: hsl(0 0% 100% / 0.18); box-shadow: 0 0 0 1px hsl(0 0% 100% / 0.22) inset; backdrop-filter: blur(16px); }
+.shortcut .s .fav { width: 22px; height: 22px; border-radius: 6px; }
+.chips { display: flex; justify-content: center; gap: 8px; padding: 0 0 22px; }
+.chip { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 10px; background: hsl(var(--seed-h) 30% 10% / 0.62); box-shadow: 0 0 0 1px hsl(0 0% 100% / 0.14) inset; backdrop-filter: blur(16px); font-weight: 500; font-size: 12.5px; }
+.chip b { font-weight: 700; font-variant-numeric: tabular-nums; }
+.chip .bar { width: 34px; height: 4px; border-radius: 2px; background: hsl(0 0% 100% / 0.25); overflow: hidden; }
+.chip .bar i { display: block; height: 100%; width: 62%; background: #fff; }
+.edit { position: absolute; right: 18px; bottom: 18px; width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: hsl(var(--seed-h) 30% 10% / 0.62); box-shadow: 0 0 0 1px hsl(0 0% 100% / 0.14) inset; color: #fff; }
+
+/* Shield panel */
+.panel { position: absolute; left: 12px; bottom: 50px; width: 300px; padding: 14px; border-radius: 14px; background: var(--card); color: var(--ink); box-shadow: var(--shadow), 0 0 0 1px var(--edge); display: none; z-index: 5; }
+:root[data-shield="open"] .panel { display: block; }
+.panel h2 { margin: 0; font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.panel .site { margin-top: 2px; color: var(--ink-3); font-size: 12px; }
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+.stat { padding: 10px; border-radius: 10px; background: var(--accent-soft); }
+.stat b { display: block; font-size: 22px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.stat span { color: var(--ink-2); font-size: 12px; }
+.panel .label { margin: 14px 0 6px; font-weight: 600; font-size: 12px; color: var(--ink-2); }
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); padding: 3px; border-radius: 10px; background: var(--hover); }
+.seg button { height: 30px; border-radius: 8px; font-weight: 600; color: var(--ink-3); }
+.seg button[aria-pressed="true"] { background: var(--card); color: var(--ink); box-shadow: 0 1px 2px hsl(var(--seed-h) 40% 10% / 0.14), 0 0 0 1px var(--edge); }
+.panel .hint { margin-top: 6px; font-size: 12px; color: var(--ink-2); }
+.toggle-row { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--hover); }
+.toggle-row div { flex: 1; }
+.toggle-row strong { display: block; font-weight: 600; }
+.toggle-row small { color: var(--ink-2); font-size: 12px; }
+.switch { width: 36px; height: 20px; border-radius: 10px; background: var(--hover); box-shadow: 0 0 0 1px var(--edge) inset; position: relative; }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--ink-3); transition: transform 150ms ease-out; }
+.switch[aria-checked="true"] { background: var(--accent); }
+.switch[aria-checked="true"]::after { transform: translateX(16px); background: var(--accent-ink); }
+.panel .links { display: flex; gap: 14px; margin-top: 12px; font-size: 12px; }
+.panel .links a { color: var(--accent); text-decoration: none; font-weight: 600; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="back" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></symbol>
+  <symbol id="fwd" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="reload" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></symbol>
+  <symbol id="sidebar" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><path d="M9.5 4.5v15"/></symbol>
+  <symbol id="lock" viewBox="0 0 24 24"><rect x="5.5" y="10.5" width="13" height="9" rx="2.5"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></symbol>
+  <symbol id="search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></symbol>
+  <symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="x" viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></symbol>
+  <symbol id="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="shield" viewBox="0 0 24 24"><path d="M12 3.5l7 3v5.5c0 4.2-3 7.5-7 8.5-4-1-7-4.3-7-8.5V6.5z"/><path d="M9 12l2 2 4-4"/></symbol>
+  <symbol id="down" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></symbol>
+  <symbol id="puzzle" viewBox="0 0 24 24"><path d="M9 4.5h3.5a2 2 0 1 1 3 1.7V8.5h3v3.3a2 2 0 1 1 0 3.4v4.3H15a2 2 0 1 0-3.4 0H5.5V15a2 2 0 1 0 0-3.4V8.5H9z"/></symbol>
+  <symbol id="gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3v2.2M20.5 12h-2.2M5.7 12H3.5M18 6l-1.6 1.6M7.6 16.4 6 18M18 18l-1.6-1.6M7.6 7.6 6 6"/></symbol>
+  <symbol id="audio" viewBox="0 0 24 24"><path d="M4 10v4h3.5L12 17.5v-11L7.5 10z"/><path d="M16 9.5a3.5 3.5 0 0 1 0 5"/></symbol>
+  <symbol id="pen" viewBox="0 0 24 24"><path d="M14.5 5.5l4 4L9 19H5v-4z"/></symbol>
+  <symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 2"/></symbol>
+  <symbol id="target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></symbol>
+</svg>
+
+<div class="window" role="application" aria-label="Helium++ window">
+  <aside class="side" aria-label="Tabs and workspaces">
+    <div class="row1">
+      <div class="dots" aria-hidden="true"><i></i><i></i><i></i></div>
+      <button class="icon-btn" aria-label="Hide sidebar"><svg class="i"><use href="#sidebar"/></svg></button>
+      <button class="icon-btn" aria-label="Back"><svg class="i"><use href="#back"/></svg></button>
+      <button class="icon-btn" aria-label="Forward" disabled><svg class="i"><use href="#fwd"/></svg></button>
+      <button class="icon-btn" aria-label="Reload"><svg class="i"><use href="#reload"/></svg></button>
+    </div>
+
+    <div class="spaces" role="group" aria-label="Workspaces">
+      <span class="hl" aria-hidden="true"></span>
+      <button aria-pressed="true" style="--c: hsl(var(--seed-h) 55% 55%)"><span class="sw"></span>Home</button>
+      <button aria-pressed="false" style="--c: hsl(150 40% 48%)"><span class="sw"></span>Work</button>
+      <button aria-pressed="false" style="--c: hsl(32 70% 55%)"><span class="sw"></span>Study</button>
+    </div>
+
+    <div class="address" role="button" tabindex="0" aria-label="Address and search">
+      <svg class="i"><use href="#search"/></svg><span>Search or enter address</span>
+    </div>
+
+    <div class="essentials" aria-label="Essentials">
+      <button class="tile" aria-label="Mail"><span class="fav" style="background:#e25c4a"></span><span class="dot"></span></button>
+      <button class="tile" aria-label="Calendar"><span class="fav" style="background:#3f7fe0"></span></button>
+      <button class="tile" aria-label="Music"><span class="fav" style="background:#27b360"></span></button>
+      <button class="tile" aria-label="Notes"><span class="fav" style="background:#e8b730"></span></button>
+    </div>
+
+    <div class="scroll">
+      <div class="section">Today <button class="icon-btn" aria-label="Sort tabs"><svg class="i"><use href="#chev"/></svg></button></div>
+      <a class="tab" aria-current="page"><span class="fav" style="background:linear-gradient(135deg,#7aa7ff,#3c62d9)"></span><span class="t">New tab</span><button class="icon-btn x" aria-label="Close tab"><svg class="i"><use href="#x"/></svg></button></a>
+      <a class="tab"><span class="fav" style="background:#111"></span><span class="t">Pull request 42 · review</span><button class="icon-btn x" aria-label="Close tab"><svg class="i"><use href="#x"/></svg></button></a>
+      <a class="tab"><span class="fav" style="background:#ff4f3f"></span><span class="t">Lo-fi beats to study to</span><svg class="i audio" aria-label="Playing audio"><use href="#audio"/></svg></a>
+
+      <div class="folder">
+        <button class="head" style="--c: hsl(var(--seed-h) 55% 55%)"><svg class="i chev" style="transform:rotate(90deg)"><use href="#chev"/></svg><span class="swatch"></span>Project board<span class="count">3</span></button>
+        <div class="items">
+          <a class="tab"><span class="fav" style="background:#5e6ad2"></span><span class="t">Sprint 14 – Linear</span></a>
+          <a class="tab"><span class="fav" style="background:#0f0f0f"></span><span class="t">Design review notes</span></a>
+          <a class="tab"><span class="fav" style="background:#f24e1e"></span><span class="t">Sidebar redesign – Figma</span></a>
+        </div>
+      </div>
+      <div class="folder">
+        <button class="head" style="--c: hsl(32 70% 55%)"><svg class="i chev"><use href="#chev"/></svg><span class="swatch"></span>Recipes<span class="count">5</span></button>
+      </div>
+
+      <button class="newtab"><svg class="i"><use href="#plus"/></svg>New tab<kbd>Ctrl T</kbd></button>
+    </div>
+
+    <div class="foot">
+      <button class="shield" aria-label="Privacy shield: Medium, 214 blocked today" aria-expanded="false"><svg class="i"><use href="#shield"/></svg><b>214</b><small>blocked</small></button>
+      <button class="icon-btn" aria-label="Downloads"><svg class="i"><use href="#down"/></svg></button>
+      <button class="icon-btn" aria-label="Extensions"><svg class="i"><use href="#puzzle"/></svg></button>
+      <button class="icon-btn" aria-label="Settings"><svg class="i"><use href="#gear"/></svg></button>
+    </div>
+
+    <section class="panel" role="dialog" aria-label="Privacy shield">
+      <h2><svg class="i" style="color:var(--accent)"><use href="#shield"/></svg>Protection is on</h2>
+      <div class="site">github.com</div>
+      <div class="stats">
+        <div class="stat"><b>12</b><span>blocked on this site</span></div>
+        <div class="stat"><b>214</b><span>blocked today</span></div>
+      </div>
+      <div class="label">Privacy level</div>
+      <div class="seg" role="group" aria-label="Privacy level">
+        <button aria-pressed="false">Usability</button><button aria-pressed="true">Medium</button><button aria-pressed="false">Maximum</button>
+      </div>
+      <div class="hint">Strong blocking, balanced for everyday sites.</div>
+      <div class="toggle-row">
+        <div><strong>Performance mode</strong><small>Background tabs sleep after 5 minutes</small></div>
+        <button class="switch" role="switch" aria-checked="false" aria-label="Performance mode"></button>
+      </div>
+      <div class="links"><a href="#">Turn off for this site</a><a href="#">Site settings</a></div>
+    </section>
+  </aside>
+
+  <main class="stage">
+    <div class="card">
+      <div class="ntp">
+        <div class="center">
+          <div class="time" id="time">10:42</div>
+          <div class="date" id="date">Thursday, 29 October</div>
+          <div class="search" role="search"><svg class="i"><use href="#search"/></svg><span>Search privately or enter address</span><kbd>/</kbd></div>
+          <div class="shortcuts">
+            <a class="shortcut"><span class="s"><span class="fav" style="background:#111"></span></span>GitHub</a>
+            <a class="shortcut"><span class="s"><span class="fav" style="background:#ff4f3f"></span></span>YouTube</a>
+            <a class="shortcut"><span class="s"><span class="fav" style="background:#5e6ad2"></span></span>Linear</a>
+            <a class="shortcut"><span class="s"><span class="fav" style="background:#25d366"></span></span>WhatsApp</a>
+            <a class="shortcut"><span class="s"><svg class="i"><use href="#plus"/></svg></span>Add</a>
+          </div>
+        </div>
+        <div class="chips">
+          <span class="chip"><svg class="i"><use href="#shield"/></svg><b>214</b> trackers blocked today</span>
+          <span class="chip"><svg class="i"><use href="#clock"/></svg><b>1h 12m</b> on the web<span class="bar"><i></i></span></span>
+          <button class="chip"><svg class="i"><use href="#target"/></svg>Start a focus round</button>
+        </div>
+        <button class="edit" aria-label="Customise new tab page"><svg class="i"><use href="#pen"/></svg></button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+// Theme and panel state from the URL: ?theme=dark&shield=open (for screenshots).
+const q = new URLSearchParams(location.search);
+document.documentElement.dataset.theme = q.get("theme") || "light";
+document.documentElement.dataset.shield = q.get("shield") || "closed";
+
+// Seed hue from the wallpaper, like the browser: strongest hue bin of vivid mid-tone pixels.
+const img = new Image();
+img.src = "../../build/mock/wall.jpg";
+img.onload = () => {
+  const c = document.createElement("canvas"); c.width = 64; c.height = 36;
+  const x = c.getContext("2d"); x.drawImage(img, 0, 0, 64, 36);
+  let d;
+  try { d = x.getImageData(0, 0, 64, 36).data; } catch { return; }  // file:// taints the canvas; keep the default hue
+  const bins = new Array(12).fill(0), hues = new Array(12).fill(0);
+  for (let i = 0; i < d.length; i += 4) {
+    const r = d[i] / 255, g = d[i + 1] / 255, b = d[i + 2] / 255, mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2;
+    if (mx === mn) continue;
+    const s = (mx - mn) / (1 - Math.abs(2 * l - 1));
+    let h = mx === r ? ((g - b) / (mx - mn)) % 6 : mx === g ? (b - r) / (mx - mn) + 2 : (r - g) / (mx - mn) + 4;
+    h = (h * 60 + 360) % 360;
+    const w = s * (1 - Math.abs(2 * l - 1)), k = Math.min(11, Math.floor(h / 30));
+    bins[k] += w; hues[k] += h * w;
+  }
+  const k = bins.indexOf(Math.max(...bins));
+  if (bins[k] > 0) document.documentElement.style.setProperty("--seed-h", Math.round(hues[k] / bins[k]));
+};
+const now = new Date();
+document.getElementById("time").textContent = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+document.getElementById("date").textContent = now.toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" });
+</script>
+</body>
+</html>

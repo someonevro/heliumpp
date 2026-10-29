@@ -1,0 +1,1479 @@
+--- a/chrome/browser/resources/heliumpp_sidebar/app.css
++++ b/chrome/browser/resources/heliumpp_sidebar/app.css
+@@ -7,25 +7,18 @@
+  * #scheme=relative
+  * #css_wrapper_metadata_end */
+ 
+-/* Every colour is a browser theme token, so the sidebar follows the
+-   wallpaper-derived theme in light and dark. The page itself is see-through:
+-   the native window (acrylic glass or theme frame) shows behind it. */
++/* Values come from chrome://resources/css/heliumpp_tokens.css (DESIGN.md),
++   which derives every colour from the wallpaper-seeded browser theme. The page
++   is see-through: the native window (acrylic glass or theme frame) shows
++   behind it. */
+ :host {
+-  --ink: var(--color-tab-foreground-active-frame-active);
+-  --ink-2: var(--color-tab-foreground-inactive-frame-active);
+-  --hover: var(--color-sys-state-hover-on-subtle);
+-  --selected: var(--color-tab-background-active-frame-active);
+-  --accent: var(--color-sys-primary);
+-  --tonal: var(--color-sys-tonal-container);
+-  --on-tonal: var(--color-sys-on-tonal-container);
+-  --panel: var(--color-sys-base-container-elevated, var(--color-sys-surface));
+-  --edge: color-mix(in srgb, var(--ink) 10%, transparent);
+-  color: var(--ink);
++  color: var(--hp-ink);
++  container-type: inline-size;
+   display: flex;
+   flex-direction: column;
+-  font-size: 13px;
++  font: var(--hp-weight) var(--hp-text) / var(--hp-leading) var(--hp-font);
+   height: 100vh;
+-  padding: 4px 8px 8px 10px;
++  padding: var(--hp-space-2) var(--hp-space-2) var(--hp-space-2) 10px;
+   box-sizing: border-box;
+   position: relative;
+   user-select: none;
+@@ -41,8 +34,8 @@
+ }
+ 
+ :focus-visible {
+-  outline: 2px solid var(--accent);
+-  outline-offset: 1px;
++  outline: 2px solid var(--hp-focus);
++  outline-offset: 2px;
+ }
+ 
+ .i {
+@@ -57,79 +50,175 @@
+ }
+ 
+ .icon-btn {
+-  border-radius: 8px;
+-  color: var(--ink-2);
++  border-radius: var(--hp-radius-tab);
++  color: var(--hp-ink-2);
+   display: grid;
+-  height: 28px;
++  flex: none;
++  height: var(--hp-segment);
+   place-items: center;
+-  width: 28px;
++  transition: background var(--hp-fast) var(--hp-ease);
++  width: var(--hp-segment);
+ }
+ 
+ .icon-btn:hover {
+-  background: var(--hover);
+-  color: var(--ink);
++  background: var(--hp-hover);
++  color: var(--hp-ink);
+ }
+ 
+-/* Workspaces: named segments. */
+-.spaces {
+-  background: var(--hover);
+-  border-radius: 10px;
++.icon-btn:active {
++  background: var(--hp-pressed);
++}
++
++/* Row 1: window controls, sidebar toggle, navigation. */
++.row1 {
++  align-items: center;
+   display: flex;
+   gap: 2px;
+-  margin: 4px 0 10px;
++  height: 30px;
++  padding-inline: var(--hp-space-1) 0;
++}
++
++.nav {
++  display: flex;
++  gap: 2px;
++}
++
++.dots {
++  display: flex;
++  gap: 7px;
++  margin-inline-end: auto;
++}
++
++.dot {
++  background: color-mix(in srgb, var(--hp-ink) 22%, transparent);
++  border-radius: 50%;
++  color: transparent;
++  display: grid;
++  height: 12px;
++  place-items: center;
++  width: 12px;
++}
++
++.dot.close {
++  background: var(--hp-danger);
++}
++
++.dot .i {
++  height: 8px;
++  stroke-width: 2.6;
++  width: 8px;
++}
++
++.dots:hover .dot {
++  color: color-mix(in srgb, black 60%, transparent);
++}
++
++/* Workspaces: named segments; the highlight slides to the active one. */
++.spaces {
++  background: var(--hp-hover);
++  border-radius: var(--hp-radius-control);
++  display: grid;
++  grid-template-columns: repeat(var(--count), minmax(0, 1fr)) var(--add-w);
++  margin: var(--hp-space-2) 0;
+   padding: 3px;
++  position: relative;
++}
++
++.spaces .hl {
++  background: var(--hp-selected);
++  border-radius: var(--hp-radius-tab);
++  bottom: 3px;
++  box-shadow: 0 1px 2px var(--hp-shade-near);
++  left: 3px;
++  position: absolute;
++  top: 3px;
++  transform: translateX(calc(100% * var(--active)));
++  transition: transform var(--hp-base) var(--hp-ease);
++  width: calc((100% - 6px - var(--add-w)) / var(--count));
+ }
+ 
+ .spaces button {
+-  border-radius: 8px;
+-  color: var(--ink-2);
+-  flex: 1;
+-  font-weight: 600;
++  align-items: center;
++  border-radius: var(--hp-radius-tab);
++  color: var(--hp-ink-2);
++  display: flex;
++  font-weight: var(--hp-weight-strong);
++  gap: 6px;
+   height: 26px;
++  justify-content: center;
+   min-width: 0;
++  position: relative;
++}
++
++.spaces button span {
+   overflow: hidden;
+-  padding: 0 6px;
+   text-overflow: ellipsis;
+   white-space: nowrap;
+ }
+ 
+ .spaces button[aria-pressed='true'] {
+-  background: var(--selected);
+-  box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 14%, transparent);
+-  color: var(--ink);
++  color: var(--hp-ink);
++}
++
++.spaces button[aria-pressed='true']::before {
++  background: var(--hp-accent);
++  border-radius: 50%;
++  content: '';
++  flex: none;
++  height: 6px;
++  width: 6px;
+ }
+ 
+ .spaces .add {
+-  display: grid;
++  color: var(--hp-ink-3);
++  width: var(--add-w);
++}
++
++.spaces .add:hover {
++  color: var(--hp-ink);
++}
++
++/* Room for the native address bar (laid over this box by the browser). */
++.address-slot {
+   flex: none;
+-  place-items: center;
+-  width: 26px;
++  height: var(--hp-control);
+ }
+ 
+-/* Essentials: square tiles. */
++/* Essentials: pinned tabs as square tiles, up to four per row. */
+ .essentials {
+   display: grid;
+   gap: 6px;
+-  grid-template-columns: repeat(4, 1fr);
+-  margin-bottom: 8px;
++  grid-template-columns: repeat(4, minmax(0, 1fr));
++  margin: var(--hp-space-3) 0 var(--hp-space-1);
+ }
+ 
+ .tile {
+   aspect-ratio: 1;
+-  background: var(--hover);
+-  border-radius: 10px;
++  background: var(--hp-hover);
++  border-radius: var(--hp-radius-control);
+   display: grid;
+-  max-height: 52px;
++  max-height: 56px;
+   place-items: center;
++  position: relative;
+ }
+ 
+ .tile:hover {
+-  background: var(--selected);
++  background: var(--hp-selected);
+ }
+ 
+ .tile[aria-selected='true'] {
+-  background: var(--selected);
+-  box-shadow: 0 0 0 1.5px var(--accent) inset;
++  background: var(--hp-selected);
++  box-shadow: 0 0 0 1px var(--hp-edge) inset;
++}
++
++.tile[aria-selected='true']::after {
++  background: var(--hp-accent);
++  border-radius: 50%;
++  bottom: 5px;
++  content: '';
++  height: 4px;
++  position: absolute;
++  width: 4px;
+ }
+ 
+ .tile .fav {
+@@ -137,37 +226,39 @@
+   width: 20px;
+ }
+ 
+-/* Tab list. */
++/* Tabs. */
+ .scroll {
+   flex: 1;
+   margin-inline-end: -4px;
++  margin-top: var(--hp-space-2);
+   min-height: 0;
+-  overflow-y: auto;
++  overflow: auto;
+   padding-inline-end: 4px;
+   scrollbar-width: thin;
+ }
+ 
+ .tab {
+   align-items: center;
+-  border-radius: 8px;
+-  color: var(--ink-2);
++  border-radius: var(--hp-radius-tab);
++  color: var(--hp-ink-2);
+   cursor: default;
+   display: flex;
+   gap: 9px;
+-  height: 34px;
++  height: var(--hp-row);
+   padding: 0 4px 0 9px;
++  position: relative;
++  transition: background var(--hp-fast) var(--hp-ease);
+ }
+ 
+ .tab:hover {
+-  background: var(--hover);
+-  color: var(--ink);
++  background: var(--hp-hover);
++  color: var(--hp-ink);
+ }
+ 
+ .tab[aria-selected='true'] {
+-  background: var(--selected);
+-  box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 12%, transparent),
+-      0 0 0 1px var(--edge) inset;
+-  color: var(--ink);
++  background: var(--hp-selected);
++  box-shadow: 0 1px 2px var(--hp-shade-near), 0 0 0 1px var(--hp-edge) inset;
++  color: var(--hp-ink);
+ }
+ 
+ .fav {
+@@ -186,36 +277,41 @@
+ }
+ 
+ .tab .x {
+-  height: 24px;
++  height: 22px;
+   opacity: 0;
+-  width: 24px;
++  width: 22px;
+ }
+ 
+ .tab:hover .x,
++.tab:focus-within .x,
+ .tab[aria-selected='true'] .x {
+   opacity: 1;
+ }
+ 
+-/* Folders (tab groups): a quiet row, the colour as a swatch and a rail. */
++/* Folders (tab groups). */
++.folder {
++  margin-top: 2px;
++}
++
+ .folder .head {
+   align-items: center;
+-  border-radius: 8px;
++  border-radius: var(--hp-radius-tab);
+   display: flex;
+-  font-weight: 600;
+-  gap: 8px;
+-  height: 32px;
+-  padding: 0 8px;
++  font-weight: var(--hp-weight-strong);
++  gap: var(--hp-space-2);
++  height: var(--hp-row);
++  padding: 0 var(--hp-space-2);
+   width: 100%;
+ }
+ 
+ .folder .head:hover {
+-  background: var(--hover);
++  background: var(--hp-hover);
+ }
+ 
+ .folder .chev {
+-  color: var(--ink-2);
++  color: var(--hp-ink-3);
+   display: grid;
+-  transition: transform 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
++  transition: transform var(--hp-base) var(--hp-ease);
+ }
+ 
+ .folder .head[aria-expanded='true'] .chev {
+@@ -225,6 +321,7 @@
+ .folder .swatch {
+   background: var(--c);
+   border-radius: 3px;
++  flex: none;
+   height: 10px;
+   width: 10px;
+ }
+@@ -234,123 +331,125 @@
+ }
+ 
+ .folder .count {
+-  color: var(--ink-2);
++  color: var(--hp-ink-3);
++  font-size: var(--hp-text-xs);
+   font-variant-numeric: tabular-nums;
+   font-weight: 500;
+ }
+ 
+ .folder .items {
+-  border-inline-start: 1.5px solid var(--c);
++  border-inline-start: 1px solid var(--hp-divider);
+   margin-inline-start: 13px;
+-  padding-inline-start: 6px;
++  padding-inline-start: var(--hp-space-2);
+ }
+ 
+ .newtab {
+   align-items: center;
+-  border-radius: 8px;
+-  color: var(--ink-2);
++  border-radius: var(--hp-radius-tab);
++  color: var(--hp-ink-2);
+   display: flex;
+   gap: 9px;
+-  height: 34px;
++  height: var(--hp-row);
+   margin-top: 2px;
+   padding: 0 9px;
+   width: 100%;
+ }
+ 
+ .newtab:hover {
+-  background: var(--hover);
+-  color: var(--ink);
++  background: var(--hp-hover);
++  color: var(--hp-ink);
+ }
+ 
+ .newtab kbd {
+-  color: var(--ink-2);
+-  font-family: inherit;
+-  font-size: 11px;
+-  font-weight: 500;
++  color: var(--hp-ink-3);
++  font: 500 var(--hp-text-xs) var(--hp-font);
+   margin-inline-start: auto;
+ }
+ 
+-/* Footer: the shield, then quiet actions. */
++/* Footer. */
+ .foot {
+   align-items: center;
+-  border-top: 1px solid var(--edge);
++  border-top: 1px solid var(--hp-divider);
+   display: flex;
+   gap: 2px;
+   margin-top: 6px;
+-  padding-top: 8px;
++  padding-top: var(--hp-space-2);
+ }
+ 
+ .shield {
+   align-items: center;
+-  background: var(--tonal);
+-  border-radius: 8px;
+-  color: var(--on-tonal);
++  background: var(--hp-accent-soft);
++  border-radius: var(--hp-radius-tab);
+   display: flex;
++  font-weight: var(--hp-weight-strong);
+   gap: 6px;
+   height: 30px;
+   margin-inline-end: auto;
+-  padding: 0 10px 0 8px;
++  padding: 0 10px 0 var(--hp-space-2);
+ }
+ 
+-.shield b {
+-  font-weight: 600;
++.shield .i {
++  color: var(--hp-accent);
+ }
+ 
+-/* Shield panel, above the footer. */
++.shield:hover {
++  background: color-mix(in srgb, var(--hp-accent) 24%, transparent);
++}
++
++/* Shield panel. */
+ .panel {
+-  background: var(--panel);
+-  border-radius: 14px;
++  background: var(--hp-raised);
++  border-radius: var(--hp-radius-card);
+   bottom: 52px;
+-  box-shadow: 0 1px 2px rgb(0 0 0 / 12%), 0 12px 32px -8px rgb(0 0 0 / 35%),
+-      0 0 0 1px var(--edge);
+-  left: 8px;
++  box-shadow: var(--hp-shadow-pop), 0 0 0 1px var(--hp-edge);
++  left: var(--hp-space-2);
+   padding: 14px;
+   position: absolute;
+-  right: 8px;
++  right: var(--hp-space-2);
+   z-index: 1;
+ }
+ 
+ .panel h2 {
+   align-items: center;
+   display: flex;
+-  font-size: 14px;
+-  font-weight: 700;
+-  gap: 8px;
++  font-size: var(--hp-text-lg);
++  font-weight: var(--hp-weight-strong);
++  gap: var(--hp-space-2);
+   margin: 0 0 10px;
+ }
+ 
+ .panel h2 .i {
+-  color: var(--accent);
++  color: var(--hp-accent);
+ }
+ 
+ .seg {
+-  background: var(--hover);
+-  border-radius: 10px;
++  background: var(--hp-hover);
++  border-radius: var(--hp-radius-control);
+   display: grid;
+   grid-template-columns: repeat(3, 1fr);
+   padding: 3px;
+ }
+ 
+ .seg button {
+-  border-radius: 8px;
+-  color: var(--ink-2);
+-  font-weight: 600;
++  border-radius: var(--hp-radius-tab);
++  color: var(--hp-ink-2);
++  font-weight: var(--hp-weight-strong);
+   height: 30px;
+ }
+ 
+ .seg button[aria-pressed='true'] {
+-  background: var(--selected);
+-  box-shadow: 0 1px 2px rgb(0 0 0 / 14%), 0 0 0 1px var(--edge);
+-  color: var(--ink);
++  background: var(--hp-selected);
++  box-shadow: 0 1px 2px var(--hp-shade-near), 0 0 0 1px var(--hp-edge);
++  color: var(--hp-ink);
+ }
+ 
+ .toggle-row {
+   align-items: center;
+-  border-top: 1px solid var(--edge);
++  border-top: 1px solid var(--hp-divider);
+   display: flex;
+   gap: 10px;
+-  margin-top: 12px;
+-  padding-top: 12px;
++  margin-top: var(--hp-space-3);
++  padding-top: var(--hp-space-3);
+ }
+ 
+ .toggle-row div {
+@@ -359,46 +458,129 @@
+ 
+ .toggle-row strong {
+   display: block;
+-  font-weight: 600;
++  font-weight: var(--hp-weight-strong);
+ }
+ 
+ .toggle-row small {
+-  color: var(--ink-2);
+-  font-size: 12px;
++  color: var(--hp-ink-2);
++  font-size: var(--hp-text-sm);
+ }
+ 
+ .switch {
+-  background: var(--hover);
++  background: var(--hp-hover);
+   border-radius: 10px;
+-  box-shadow: 0 0 0 1px var(--edge) inset;
++  box-shadow: 0 0 0 1px var(--hp-edge) inset;
+   height: 20px;
+   position: relative;
+   width: 36px;
+ }
+ 
+ .switch::after {
+-  background: var(--ink-2);
++  background: var(--hp-ink-2);
+   border-radius: 50%;
+   content: '';
+   height: 16px;
+   left: 2px;
+   position: absolute;
+   top: 2px;
+-  transition: transform 150ms ease-out;
++  transition: transform var(--hp-base) var(--hp-ease);
+   width: 16px;
+ }
+ 
+ .switch[aria-checked='true'] {
+-  background: var(--accent);
++  background: var(--hp-accent);
+ }
+ 
+ .switch[aria-checked='true']::after {
+-  background: var(--color-sys-on-primary);
++  background: var(--hp-on-accent);
+   transform: translateX(16px);
+ }
+ 
+-@media (prefers-reduced-motion: reduce) {
+-  * {
+-    transition: none !important;
++/* Collapsed rail: icons only, one column. */
++@container (max-width: 120px) {
++  :host {
++    align-items: center;
++    padding-inline: var(--hp-space-1);
++  }
++
++  .row1 {
++    padding: 0;
++  }
++
++  .dots,
++  .nav,
++  .address-slot,
++  .t,
++  .x,
++  .count,
++  .chev,
++  .newtab span,
++  .newtab kbd,
++  .shield b,
++  .foot .icon-btn,
++  .spaces .add,
++  .spaces .hl {
++    display: none;
++  }
++
++  .spaces {
++    background: none;
++    grid-template-columns: 1fr;
++    padding: 0;
++  }
++
++  .spaces button {
++    height: var(--hp-segment);
++    width: var(--hp-segment);
++  }
++
++  .spaces button span {
++    display: none;
++  }
++
++  .spaces button::before {
++    background: var(--hp-ink-3);
++    border-radius: 50%;
++    content: '';
++    height: 6px;
++    width: 6px;
++  }
++
++  .spaces button[aria-pressed='true'] {
++    background: var(--hp-selected);
++  }
++
++  .essentials {
++    grid-template-columns: 1fr;
++    width: 36px;
++  }
++
++  .scroll,
++  .foot {
++    width: 36px;
++  }
++
++  .tab,
++  .newtab,
++  .folder .head {
++    justify-content: center;
++    padding: 0;
++  }
++
++  .folder .items {
++    border: 0;
++    margin: 0;
++    padding: 0;
++  }
++
++  .shield {
++    justify-content: center;
++    margin: 0;
++    padding: 0;
++    width: 36px;
++  }
++
++  .foot {
++    justify-content: center;
+   }
+ }
+--- a/chrome/browser/resources/heliumpp_sidebar/app.html.ts
++++ b/chrome/browser/resources/heliumpp_sidebar/app.html.ts
+@@ -10,14 +10,41 @@
+ export function getHtml(this: HeliumSidebarAppElement) {
+   // clang-format off
+   return html`
+-<nav class="spaces" aria-label="Workspaces">
++<header class="row1">
++  <div class="dots" role="group" aria-label="Window">
++    <button class="dot close" aria-label="Close window" title="Close"
++        @click="${this.onCloseWindowClick_}">${ICONS.close}</button>
++    <button class="dot" aria-label="Minimize" title="Minimize"
++        @click="${this.onMinimizeClick_}">${ICONS.minus}</button>
++    <button class="dot" aria-label="Maximize" title="Maximize"
++        @click="${this.onMaximizeClick_}">${ICONS.plus}</button>
++  </div>
++  <button class="icon-btn" aria-label="Toggle sidebar" title="Toggle sidebar"
++      @click="${this.onToggleSidebarClick_}">${ICONS.sidebar}</button>
++  <div class="nav" role="group" aria-label="Navigation">
++    <button class="icon-btn" aria-label="Back" title="Back"
++        @click="${this.onBackClick_}">${ICONS.back}</button>
++    <button class="icon-btn" aria-label="Forward" title="Forward"
++        @click="${this.onForwardClick_}">${ICONS.forward}</button>
++    <button class="icon-btn" aria-label="Reload" title="Reload"
++        @click="${this.onReloadClick_}">${ICONS.reload}</button>
++  </div>
++</header>
++
++<nav class="spaces" aria-label="Workspaces"
++    style="--count: ${this.workspaces_().length || 1}; --active: ${this.activeIndex_()}; --add-w: 28px">
++  <span class="hl"></span>
+   ${this.workspaces_().map(w => html`
+     <button aria-pressed="${this.isActiveWorkspace_(w.id)}" data-id="${w.id}"
+-        @click="${this.onWorkspaceClick_}">${w.name}</button>`)}
+-  <button class="add" aria-label="New workspace"
++        title="${w.name}" @click="${this.onWorkspaceClick_}">
++      <span>${w.name}</span>
++    </button>`)}
++  <button class="add" aria-label="New workspace" title="New workspace"
+       @click="${this.onAddWorkspaceClick_}">${ICONS.plus}</button>
+ </nav>
+ 
++<div class="address-slot" id="addressSlot"></div>
++
+ ${this.essentials_.length ? html`
+   <div class="essentials" role="tablist" aria-label="Essentials">
+     ${this.essentials_.map(tab => html`
+--- a/chrome/browser/resources/heliumpp_sidebar/app.ts
++++ b/chrome/browser/resources/heliumpp_sidebar/app.ts
+@@ -5,7 +5,10 @@
+ import {ColorChangeUpdater} from 'chrome://resources/cr_components/color_change_listener/colors_css_updater.js';
+ import {CrLitElement} from 'chrome://resources/lit/v3_0/lit.rollup.js';
+ import type {Container, Tab, TabGroup} from '/tab_strip_api/tab_strip_api_data_model.mojom-webui.js';
+-import {TabsObserverReceiver} from '/tab_strip_api/tab_strip_api.mojom-webui.js';
++import type {OnCollectionCreatedEvent, OnDataChangedEvent, OnNodeMovedEvent, OnNodesClosedEvent, OnTabsCreatedEvent} from '/tab_strip_api/tab_strip_api_events.mojom-webui.js';
++import type {NodeId, Position} from '/tab_strip_api/tab_strip_api_types.mojom-webui.js';
++import {TabStripObservation} from '/tab_strip_api/tab_strip_observation.js';
++import type {TabStripObserver} from '/tab_strip_api/tab_strip_observer.js';
+ 
+ import {getCss} from './app.css.js';
+ import {getHtml} from './app.html.js';
+@@ -31,7 +34,8 @@
+   '#d15fa6', '#9a6bf0', '#3db2c8', '#f08a3d',
+ ];
+ 
+-export class HeliumSidebarAppElement extends CrLitElement {
++export class HeliumSidebarAppElement extends CrLitElement implements
++    TabStripObserver {
+   static get is() {
+     return 'helium-sidebar-app';
+   }
+@@ -65,8 +69,10 @@
+   ];
+ 
+   private proxy_ = BrowserProxy.getInstance();
+-  private observer_: TabsObserverReceiver|null = null;
+-  private refreshQueued_ = false;
++  // Mirror of the browser's tab tree: one snapshot, then every event applied.
++  private root_: Container|null = null;
++  private observation_ = new TabStripObservation(this);
++  private renderQueued_ = false;
+   // Tab groups by id, for the folder click handler.
+   private groups_ = new Map<string, TabGroup>();
+ 
+@@ -79,30 +85,145 @@
+     this.refresh_();
+   }
+ 
+-  // shortcut: re-reads the whole tab tree (at most once per frame) on any tab
+-  // event instead of applying each event; fine for hundreds of tabs.
++  // Tells the browser where to lay the native address bar.
++  private slotObserver_ = new ResizeObserver(() => this.reportAddressSlot_());
++
++  override firstUpdated() {
++    const slot = this.shadowRoot.querySelector('#addressSlot')!;
++    this.slotObserver_.observe(slot);
++    this.slotObserver_.observe(this);
++  }
++
++  private reportAddressSlot_() {
++    const slot = this.shadowRoot.querySelector<HTMLElement>('#addressSlot')!;
++    const r = slot.getBoundingClientRect();
++    this.proxy_.handler.setAddressSlot(
++        Math.round(r.x), Math.round(r.y), Math.round(r.width),
++        Math.round(r.height));
++  }
++
+   private async refresh_() {
+     const snapshot = await this.proxy_.tabs.getTabs();
+-    this.applyTree_(snapshot.tabStrip);
+-    // Keep exactly one event stream: the one that follows this snapshot.
+-    this.observer_?.$.close();
+-    this.observer_ = new TabsObserverReceiver({
+-      onTabEvents: () => this.scheduleRefresh_(),
+-    });
+-    this.observer_.$.bindHandle(snapshot.stream.handle);
++    this.root_ = snapshot.tabStrip;
++    this.applyTree_(this.root_);
++    this.observation_.bind(snapshot.stream.handle);
+   }
+ 
+-  private scheduleRefresh_() {
+-    if (this.refreshQueued_) {
++  // At most one re-render of the lists per frame, however many events.
++  private scheduleRender_() {
++    if (this.renderQueued_) {
+       return;
+     }
+-    this.refreshQueued_ = true;
++    this.renderQueued_ = true;
+     requestAnimationFrame(() => {
+-      this.refreshQueued_ = false;
+-      this.refresh_();
++      this.renderQueued_ = false;
++      if (this.root_) {
++        this.applyTree_(this.root_);
++      }
+     });
+   }
+ 
++  private static idOf_(c: Container): string|undefined {
++    const d = c.data;
++    const node = d.tab || d.tabGroup || d.splitTab || d.pinnedTabs ||
++        d.unpinnedTabs || d.tabStrip || d.window;
++    return node?.id;
++  }
++
++  // The node with `id` and its parent (null for the root).
++  private find_(id: string, c: Container|null = this.root_,
++                parent: Container|null = null):
++      {node: Container, parent: Container|null}|null {
++    if (!c) {
++      return null;
++    }
++    if (HeliumSidebarAppElement.idOf_(c) === id) {
++      return {node: c, parent};
++    }
++    for (const child of c.children) {
++      const hit = this.find_(id, child, c);
++      if (hit) {
++        return hit;
++      }
++    }
++    return null;
++  }
++
++  private insert_(node: Container, position: Position) {
++    const last: NodeId|undefined = position.path.components.at(-1);
++    const parent = last ? this.find_(last)?.node : this.root_;
++    if (parent) {
++      parent.children.splice(position.index, 0, node);
++    }
++  }
++
++  private remove_(id: string): Container|null {
++    const hit = this.find_(id);
++    if (!hit?.parent) {
++      return null;
++    }
++    hit.parent.children.splice(hit.parent.children.indexOf(hit.node), 1);
++    return hit.node;
++  }
++
++  // TabStripObserver:
++  onTabsCreated(event: OnTabsCreatedEvent) {
++    for (const created of event.tabs) {
++      this.insert_({data: {tab: created.tab}, children: []} as Container,
++                   created.position);
++    }
++    this.scheduleRender_();
++  }
++
++  onNodesClosed(event: OnNodesClosedEvent) {
++    for (const id of event.nodeIds) {
++      this.remove_(id);
++    }
++    this.scheduleRender_();
++  }
++
++  onDataChanged(event: OnDataChangedEvent) {
++    if (event.tab) {
++      const node = this.find_(event.tab.data.id)?.node;
++      const tab = node?.data.tab;
++      if (tab) {
++        // Only the fields named in the mask carry new values.
++        const mask = event.tab.mask as unknown as Record<string, boolean>;
++        const fresh = event.tab.data as unknown as Record<string, unknown>;
++        const target = tab as unknown as Record<string, unknown>;
++        for (const key of Object.keys(mask)) {
++          if (mask[key] && key in fresh) {
++            target[key] = fresh[key];
++          }
++        }
++      }
++    } else if (event.tabGroup) {
++      const node = this.find_(event.tabGroup.data.id)?.node;
++      if (node) {
++        node.data = {tabGroup: event.tabGroup.data} as Container['data'];
++      }
++    } else if (event.splitTab) {
++      const node = this.find_(event.splitTab.data.id)?.node;
++      if (node) {
++        node.data = {splitTab: event.splitTab.data} as Container['data'];
++      }
++    }
++    this.scheduleRender_();
++  }
++
++  onCollectionCreated(event: OnCollectionCreatedEvent) {
++    this.insert_(event.collection, event.position);
++    this.scheduleRender_();
++  }
++
++  onNodeMoved(event: OnNodeMovedEvent) {
++    const node = this.remove_(event.id);
++    if (node) {
++      this.insert_(node, event.to);
++    }
++    this.scheduleRender_();
++  }
++
+   private applyTree_(root: Container) {
+     const tabsIn = (c: Container): Tab[] => c.children.flatMap(
+         child => child.data.tab ? [child.data.tab] : tabsIn(child));
+@@ -147,6 +268,11 @@
+     return this.state_?.workspaces || [];
+   }
+ 
++  protected activeIndex_(): number {
++    return Math.max(0, this.workspaces_().findIndex(
++        w => w.id === this.state_?.activeWorkspace));
++  }
++
+   protected isActiveWorkspace_(id: string): boolean {
+     return this.state_?.activeWorkspace === id;
+   }
+@@ -251,6 +377,34 @@
+   protected onSettingsClick_() {
+     this.proxy_.handler.runCommand(Command.kSettings);
+   }
++
++  protected onBackClick_() {
++    this.proxy_.handler.runCommand(Command.kBack);
++  }
++
++  protected onForwardClick_() {
++    this.proxy_.handler.runCommand(Command.kForward);
++  }
++
++  protected onReloadClick_() {
++    this.proxy_.handler.runCommand(Command.kReload);
++  }
++
++  protected onToggleSidebarClick_() {
++    this.proxy_.handler.runCommand(Command.kToggleSidebar);
++  }
++
++  protected onCloseWindowClick_() {
++    this.proxy_.handler.runCommand(Command.kClose);
++  }
++
++  protected onMinimizeClick_() {
++    this.proxy_.handler.runCommand(Command.kMinimize);
++  }
++
++  protected onMaximizeClick_() {
++    this.proxy_.handler.runCommand(Command.kMaximize);
++  }
+ }
+ 
+ declare global {
+--- a/chrome/browser/resources/heliumpp_sidebar/heliumpp_sidebar.html
++++ b/chrome/browser/resources/heliumpp_sidebar/heliumpp_sidebar.html
+@@ -5,7 +5,9 @@
+   <title>Sidebar</title>
+   <link rel="stylesheet" href="chrome://resources/css/text_defaults_md.css">
+   <link rel="stylesheet" href="chrome://theme/colors.css?sets=ui,chrome">
++  <link rel="stylesheet" href="chrome://resources/css/heliumpp_tokens.css">
+   <style>
++    html { color-scheme: light dark; }
+     html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+   </style>
+ </head>
+--- a/chrome/browser/resources/heliumpp_sidebar/icons.ts
++++ b/chrome/browser/resources/heliumpp_sidebar/icons.ts
+@@ -14,4 +14,9 @@
+   download: html`<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>`,
+   puzzle: html`<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4.5h3.5a2 2 0 1 1 3 1.7V8.5h3v3.3a2 2 0 1 1 0 3.4v4.3H15a2 2 0 1 0-3.4 0H5.5V15a2 2 0 1 0 0-3.4V8.5H9z"/></svg>`,
+   gear: html`<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3v2.2M20.5 12h-2.2M5.7 12H3.5M18 6l-1.6 1.6M7.6 16.4 6 18M18 18l-1.6-1.6M7.6 7.6 6 6"/></svg>`,
++  minus: html`<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>`,
++  sidebar: html`<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="3"/><path d="M9.5 5v14"/></svg>`,
++  back: html`<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>`,
++  forward: html`<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>`,
++  reload: html`<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12a7 7 0 1 1-2.05-4.95"/><path d="M19 5v4h-4"/></svg>`,
+ };
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+@@ -972,6 +972,16 @@
+ 
+ void VerticalTabStripRegionView::SetSidebarLocationBar(
+     std::unique_ptr<views::View> location_bar) {
++  if (web_sidebar_) {
++    // The web sidebar leaves a slot for the bar between its own rows.
++    location_bar->SetProperty(views::kMarginsKey, gfx::Insets());
++    web_sidebar_->SetAddressBar(std::move(location_bar));
++    sidebar_location_bar_ = web_sidebar_->address_bar();
++    sidebar_location_bar_->SetVisible(
++        state_controller_->GetCollapseState() ==
++        tabs::VerticalTabStripCollapseState::kExpanded);
++    return;
++  }
+   const int horizontal_padding =
+       GetLayoutConstant(LayoutConstant::kVerticalTabStripHorizontalPadding);
+   sidebar_location_bar_ =
+@@ -997,6 +1007,11 @@
+   }
+   views::View* bar = sidebar_location_bar_.get();
+   sidebar_location_bar_ = nullptr;
++  if (web_sidebar_) {
++    std::unique_ptr<views::View> taken = web_sidebar_->TakeAddressBar();
++    taken->SetVisible(true);
++    return taken;
++  }
+ 
+   bar->SetVisible(true);
+   // content_area_view_ is created as a FlexLayoutView in the constructor.
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
+@@ -36,6 +36,7 @@
+ #include "ui/views/layout/delegating_layout_manager.h"
+ 
+ class BrowserView;
++class HeliumSidebarWebView;
+ class VerticalTabStripBottomContainer;
+ class VerticalTabStripFocusSwipeController;
+ class ShadowFrameView;
+@@ -265,7 +266,7 @@
+   bool organizer_panel_was_visible_ = false;
+ 
+   // Helium++ web sidebar, when enabled (replaces the native tab list).
+-  raw_ptr<views::View> web_sidebar_ = nullptr;
++  raw_ptr<HeliumSidebarWebView> web_sidebar_ = nullptr;
+   raw_ptr<views::View> content_area_view_ = nullptr;
+   // Whether a leading exclusion exists due to window controls.
+   bool has_leading_exclusion_ = false;
+--- a/chrome/browser/ui/views/location_bar/location_bar_view.cc
++++ b/chrome/browser/ui/views/location_bar/location_bar_view.cc
+@@ -11,6 +11,7 @@
+ #include <string_view>
+ #include <utility>
+ 
++#include "base/command_line.h"
+ #include "base/feature_list.h"
+ #include "base/functional/bind.h"
+ #include "base/functional/callback_helpers.h"
+@@ -179,6 +180,9 @@
+ 
+ namespace {
+ 
++// Corner radius of the sidebar-style bar (DESIGN.md: controls 10).
++constexpr int kSidebarRadius = 10;
++
+ int IncrementalMinimumWidth(const views::View* view) {
+   return (view && view->GetVisible()) ? view->GetMinimumSize().width() : 0;
+ }
+@@ -601,7 +605,7 @@
+ 
+ int LocationBarView::GetBorderRadius() const {
+   if (sidebar_style_) {
+-    return std::max(1, std::min(width(), height()) / 2);
++    return std::max(1, std::min(kSidebarRadius, std::min(width(), height()) / 2));
+   }
+   return ComputeBorderRadius(size());
+ }
+@@ -629,8 +633,12 @@
+     copy_link_button_->SetVisible(show);
+     InvalidateLayout();
+   }
+-  // Hidden while typing to leave room for the text.
+-  const bool show_nav = sidebar_style_ && !omnibox_view_->HasFocus();
++  // Hidden while typing to leave room for the text, and always with the web
++  // sidebar (--helium-web-sidebar), whose top row has its own buttons.
++  static const bool web_sidebar =
++      base::CommandLine::ForCurrentProcess()->HasSwitch("helium-web-sidebar");
++  const bool show_nav =
++      sidebar_style_ && !web_sidebar && !omnibox_view_->HasFocus();
+   for (views::ImageButton* button : nav_buttons_) {
+     if (button->GetVisible() != show_nav) {
+       button->SetVisible(show_nav);
+@@ -1607,8 +1615,7 @@
+     SetBackground(views::CreateSolidBackground(background_color_));
+   } else if (sidebar_style_ && border_color == SK_ColorTRANSPARENT) {
+     SetBackground(views::CreateRoundedRectBackground(
+-        background_color_,
+-        static_cast<float>(std::min(width(), height())) / 2));
++        background_color_, static_cast<float>(GetBorderRadius())));
+   } else {
+     SetBackground(CreateRoundRectBackground(
+         background_color_, border_color, size(),
+--- a/chrome/browser/ui/views/tabs/vertical/helium_sidebar_web_view.cc
++++ b/chrome/browser/ui/views/tabs/vertical/helium_sidebar_web_view.cc
+@@ -5,6 +5,7 @@
+ #include "chrome/browser/ui/views/tabs/vertical/helium_sidebar_web_view.h"
+ 
+ #include "base/command_line.h"
++#include "base/functional/bind.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/webui/webui_embedding_context.h"
+@@ -12,6 +13,7 @@
+ #include "chrome/grit/generated_resources.h"
+ #include "content/public/browser/web_contents.h"
+ #include "third_party/skia/include/core/SkColor.h"
++#include "ui/compositor/layer.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+ 
+ namespace {
+@@ -30,11 +32,17 @@
+   // See-through, so the window's glass or frame colour shows behind the page.
+   contents_wrapper_->web_contents()->SetPageBaseBackgroundColor(
+       SK_ColorTRANSPARENT);
++  heliumpp_sidebar::SetAddressSlotCallback(
++      contents_wrapper_->web_contents(),
++      base::BindRepeating(&HeliumSidebarWebView::OnAddressSlot,
++                          weak_factory_.GetWeakPtr()));
+   SetWebContents(contents_wrapper_->web_contents());
+   contents_wrapper_->web_contents()->WasShown();
+ }
+ 
+ HeliumSidebarWebView::~HeliumSidebarWebView() {
++  heliumpp_sidebar::SetAddressSlotCallback(contents_wrapper_->web_contents(),
++                                           {});
+   contents_wrapper_->web_contents()->WasHidden();
+   contents_wrapper_->SetHost(nullptr);
+ }
+@@ -44,6 +52,42 @@
+   return base::CommandLine::ForCurrentProcess()->HasSwitch(kWebSidebarSwitch);
+ }
+ 
++void HeliumSidebarWebView::SetAddressBar(std::unique_ptr<views::View> bar) {
++  // Its own layer, after the page's native view: the window reorderer then
++  // stacks it above the web contents.
++  bar->SetPaintToLayer();
++  bar->layer()->SetFillsBoundsOpaquely(false);
++  address_bar_ = AddChildView(std::move(bar));
++  InvalidateLayout();
++}
++
++std::unique_ptr<views::View> HeliumSidebarWebView::TakeAddressBar() {
++  if (!address_bar_) {
++    return nullptr;
++  }
++  views::View* bar = address_bar_;
++  address_bar_ = nullptr;
++  bar->DestroyLayer();
++  return RemoveChildViewT(bar);
++}
++
++void HeliumSidebarWebView::OnAddressSlot(const gfx::Rect& slot) {
++  if (slot == address_slot_) {
++    return;
++  }
++  address_slot_ = slot;
++  InvalidateLayout();
++}
++
++void HeliumSidebarWebView::Layout(PassKey) {
++  LayoutSuperclass<views::WebView>(this);
++  if (address_bar_) {
++    // Page pixels are DIPs here: the page is not zoomed.
++    const gfx::Rect slot = gfx::IntersectRects(address_slot_, GetLocalBounds());
++    address_bar_->SetBoundsRect(slot);
++  }
++}
++
+ void HeliumSidebarWebView::ShowUI() {
+   SetVisible(true);
+ }
+--- a/chrome/browser/ui/views/tabs/vertical/helium_sidebar_web_view.h
++++ b/chrome/browser/ui/views/tabs/vertical/helium_sidebar_web_view.h
+@@ -32,6 +32,15 @@
+   // Whether the web sidebar replaces the native one.
+   static bool IsEnabled();
+ 
++  // The native address bar, laid over the page where the page leaves room for
++  // it (security UI and the omnibox popup stay native).
++  void SetAddressBar(std::unique_ptr<views::View> bar);
++  std::unique_ptr<views::View> TakeAddressBar();
++  views::View* address_bar() { return address_bar_; }
++
++  // views::View:
++  void Layout(PassKey) override;
++
+   // WebUIContentsWrapper::Host:
+   void ShowUI() override;
+   void CloseUI() override;
+@@ -39,7 +48,11 @@
+                            const input::NativeWebKeyboardEvent& event) override;
+ 
+  private:
++  void OnAddressSlot(const gfx::Rect& slot);
++
+   raw_ptr<BrowserWindowInterface> browser_;
++  raw_ptr<views::View> address_bar_ = nullptr;
++  gfx::Rect address_slot_;
+   std::unique_ptr<WebUIContentsWrapperT<heliumpp_sidebar::SidebarUI>>
+       contents_wrapper_;
+   // Browser shortcuts (Ctrl+T, ...) typed while the sidebar has focus.
+--- a/chrome/browser/ui/webui/heliumpp_sidebar/BUILD.gn
++++ b/chrome/browser/ui/webui/heliumpp_sidebar/BUILD.gn
+@@ -22,6 +22,7 @@
+     "//components/browser_apis/tab_strip:mojom",
+     "//components/prefs",
+     "//mojo/public/cpp/bindings",
++    "//ui/gfx/geometry",
+   ]
+ }
+ 
+@@ -41,6 +42,7 @@
+     "//chrome/common",
+     "//components/browser_apis/tab_strip/resources",
+     "//content/public/browser",
++    "//ui/base",
+     "//ui/webui",
+   ]
+ }
+--- a/chrome/browser/ui/webui/heliumpp_sidebar/heliumpp_sidebar.mojom
++++ b/chrome/browser/ui/webui/heliumpp_sidebar/heliumpp_sidebar.mojom
+@@ -29,6 +29,15 @@
+   kExtensions,
+   kSettings,
+   kFocusLocationBar,
++  kBack,
++  kForward,
++  kReload,
++  // Collapse or expand the sidebar.
++  kToggleSidebar,
++  kMinimize,
++  // Maximizes, or restores a maximized window.
++  kMaximize,
++  kClose,
+ };
+ 
+ interface PageHandlerFactory {
+@@ -44,6 +53,9 @@
+   SetPrivacyLevel(string level);
+   SetPerformanceMode(bool enabled);
+   RunCommand(Command command);
++  // Where the page leaves room for the native address bar, in page pixels
++  // (zero height: no room, the bar is hidden).
++  SetAddressSlot(int32 x, int32 y, int32 width, int32 height);
+ };
+ 
+ // Page side.
+--- a/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_page_handler.cc
++++ b/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_page_handler.cc
+@@ -14,6 +14,7 @@
+ #include "chrome/browser/ui/browser_commands.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "components/prefs/pref_service.h"
++#include "ui/base/base_window.h"
+ 
+ namespace heliumpp_sidebar {
+ 
+@@ -25,10 +26,12 @@
+ SidebarPageHandler::SidebarPageHandler(
+     mojo::PendingRemote<mojom::Page> page,
+     mojo::PendingReceiver<mojom::PageHandler> receiver,
+-    BrowserWindowInterface* browser)
++    BrowserWindowInterface* browser,
++    base::RepeatingCallback<void(const gfx::Rect&)> on_address_slot)
+     : page_(std::move(page)),
+       receiver_(this, std::move(receiver)),
+-      browser_(browser) {
++      browser_(browser),
++      on_address_slot_(std::move(on_address_slot)) {
+   registrar_.Init(browser_->GetProfile()->GetPrefs());
+   const auto send = base::BindRepeating(&SidebarPageHandler::SendState,
+                                         base::Unretained(this));
+@@ -107,8 +110,43 @@
+     case mojom::Command::kFocusLocationBar:
+       id = IDC_FOCUS_LOCATION;
+       break;
++    case mojom::Command::kBack:
++      id = IDC_BACK;
++      break;
++    case mojom::Command::kForward:
++      id = IDC_FORWARD;
++      break;
++    case mojom::Command::kReload:
++      id = IDC_RELOAD;
++      break;
++    case mojom::Command::kToggleSidebar:
++      id = IDC_TOGGLE_VERTICAL_TABS_COLLAPSE;
++      break;
++    case mojom::Command::kMinimize:
++      id = IDC_MINIMIZE_WINDOW;
++      break;
++    case mojom::Command::kMaximize:
++      id = browser_->GetWindow()->IsMaximized() ? IDC_RESTORE_WINDOW
++                                                : IDC_MAXIMIZE_WINDOW;
++      break;
++    case mojom::Command::kClose:
++      id = IDC_CLOSE_WINDOW;
++      break;
+   }
+   chrome::ExecuteCommand(browser_, id);
+ }
+ 
++void SidebarPageHandler::SetAddressSlot(int32_t x,
++                                        int32_t y,
++                                        int32_t width,
++                                        int32_t height) {
++  // Page input: keep it inside a sane range; the view clips to its bounds.
++  constexpr int32_t kMax = 10000;
++  if (x < 0 || y < 0 || width < 0 || height < 0 || x > kMax || y > kMax ||
++      width > kMax || height > kMax) {
++    return;
++  }
++  on_address_slot_.Run(gfx::Rect(x, y, width, height));
++}
++
+ }  // namespace heliumpp_sidebar
+--- a/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_page_handler.h
++++ b/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_page_handler.h
+@@ -5,11 +5,13 @@
+ #ifndef CHROME_BROWSER_UI_WEBUI_HELIUMPP_SIDEBAR_SIDEBAR_PAGE_HANDLER_H_
+ #define CHROME_BROWSER_UI_WEBUI_HELIUMPP_SIDEBAR_SIDEBAR_PAGE_HANDLER_H_
+ 
++#include "base/functional/callback.h"
+ #include "base/memory/raw_ptr.h"
+ #include "chrome/browser/ui/webui/heliumpp_sidebar/heliumpp_sidebar.mojom.h"
+ #include "components/prefs/pref_change_registrar.h"
+ #include "mojo/public/cpp/bindings/receiver.h"
+ #include "mojo/public/cpp/bindings/remote.h"
++#include "ui/gfx/geometry/rect.h"
+ 
+ class BrowserWindowInterface;
+ 
+@@ -19,7 +21,9 @@
+  public:
+   SidebarPageHandler(mojo::PendingRemote<mojom::Page> page,
+                      mojo::PendingReceiver<mojom::PageHandler> receiver,
+-                     BrowserWindowInterface* browser);
++                     BrowserWindowInterface* browser,
++                     base::RepeatingCallback<void(const gfx::Rect&)>
++                         on_address_slot);
+   SidebarPageHandler(const SidebarPageHandler&) = delete;
+   SidebarPageHandler& operator=(const SidebarPageHandler&) = delete;
+   ~SidebarPageHandler() override;
+@@ -31,6 +35,10 @@
+   void SetPrivacyLevel(const std::string& level) override;
+   void SetPerformanceMode(bool enabled) override;
+   void RunCommand(mojom::Command command) override;
++  void SetAddressSlot(int32_t x,
++                      int32_t y,
++                      int32_t width,
++                      int32_t height) override;
+ 
+  private:
+   mojom::StatePtr BuildState() const;
+@@ -40,6 +48,7 @@
+   mojo::Receiver<mojom::PageHandler> receiver_;
+   raw_ptr<BrowserWindowInterface> browser_;
+   PrefChangeRegistrar registrar_;
++  base::RepeatingCallback<void(const gfx::Rect&)> on_address_slot_;
+ };
+ 
+ }  // namespace heliumpp_sidebar
+--- a/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_ui.cc
++++ b/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_ui.cc
+@@ -6,6 +6,7 @@
+ 
+ #include <utility>
+ 
++#include "base/functional/bind.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/tabs/tab_strip_api/tab_strip_service_feature.h"
+@@ -16,12 +17,45 @@
+ #include "chrome/grit/heliumpp_sidebar_resources_map.h"
+ #include "chrome/grit/tab_strip_api_resources_map.h"
+ #include "content/public/browser/web_contents.h"
++#include "content/public/browser/web_contents_user_data.h"
+ #include "content/public/browser/web_ui.h"
+ #include "content/public/browser/web_ui_data_source.h"
+ #include "ui/webui/webui_util.h"
+ 
+ namespace heliumpp_sidebar {
+ 
++namespace {
++
++class AddressSlotHolder
++    : public content::WebContentsUserData<AddressSlotHolder> {
++ public:
++  AddressSlotHolder(content::WebContents* contents,
++                    AddressSlotCallback callback)
++      : content::WebContentsUserData<AddressSlotHolder>(*contents),
++        callback(std::move(callback)) {}
++  AddressSlotCallback callback;
++  WEB_CONTENTS_USER_DATA_KEY_DECL();
++};
++
++WEB_CONTENTS_USER_DATA_KEY_IMPL(AddressSlotHolder);
++
++void RunAddressSlotCallback(content::WebContents* contents,
++                            const gfx::Rect& slot) {
++  if (auto* holder = AddressSlotHolder::FromWebContents(contents)) {
++    holder->callback.Run(slot);
++  }
++}
++
++}  // namespace
++
++void SetAddressSlotCallback(content::WebContents* contents,
++                            AddressSlotCallback callback) {
++  contents->RemoveUserData(AddressSlotHolder::UserDataKey());
++  if (callback) {
++    AddressSlotHolder::CreateForWebContents(contents, std::move(callback));
++  }
++}
++
+ SidebarUIConfig::SidebarUIConfig()
+     : DefaultTopChromeWebUIConfig(content::kChromeUIScheme,
+                                   chrome::kChromeUIHeliumSidebarHost) {}
+@@ -65,8 +99,11 @@
+   if (!browser) {
+     return;
+   }
++  // The handler is owned by this controller, which the contents outlive.
+   page_handler_ = std::make_unique<SidebarPageHandler>(
+-      std::move(page), std::move(handler), browser);
++      std::move(page), std::move(handler), browser,
++      base::BindRepeating(&RunAddressSlotCallback,
++                          base::Unretained(web_ui()->GetWebContents())));
+ }
+ 
+ WEB_UI_CONTROLLER_TYPE_IMPL(SidebarUI)
+--- a/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_ui.h
++++ b/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_ui.h
+@@ -8,18 +8,31 @@
+ #include <memory>
+ #include <string_view>
+ 
++#include "base/functional/callback.h"
++
+ #include "chrome/browser/ui/webui/heliumpp_sidebar/heliumpp_sidebar.mojom.h"
+ #include "chrome/browser/ui/webui/top_chrome/top_chrome_web_ui_controller.h"
+ #include "chrome/browser/ui/webui/top_chrome/top_chrome_webui_config.h"
+ #include "components/browser_apis/tab_strip/tab_strip_api.mojom.h"
++#include "ui/gfx/geometry/rect.h"
+ #include "mojo/public/cpp/bindings/pending_receiver.h"
+ #include "mojo/public/cpp/bindings/receiver.h"
+ 
++namespace content {
++class WebContents;
++}  // namespace content
++
+ namespace heliumpp_sidebar {
+ 
+ class SidebarPageHandler;
+ class SidebarUI;
+ 
++// Receives the room the page leaves for the native address bar (page pixels;
++// empty: no room). The view hosting the page sets it on the page's contents.
++using AddressSlotCallback = base::RepeatingCallback<void(const gfx::Rect&)>;
++void SetAddressSlotCallback(content::WebContents* contents,
++                            AddressSlotCallback callback);
++
+ class SidebarUIConfig : public DefaultTopChromeWebUIConfig<SidebarUI> {
+  public:
+   SidebarUIConfig();
+--- a/ui/webui/resources/css/BUILD.gn
++++ b/ui/webui/resources/css/BUILD.gn
+@@ -26,6 +26,7 @@
+   in_files = [
+     "action_link.css",
+     "chrome_shared.css",
++    "heliumpp_tokens.css",
+     "spinner.css",
+     "text_defaults_md.css",
+     "text_defaults.css",

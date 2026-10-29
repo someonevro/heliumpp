@@ -1,0 +1,438 @@
+--- a/chrome/browser/helium_theme/helium_theme.cc
++++ b/chrome/browser/helium_theme/helium_theme.cc
+@@ -46,6 +46,8 @@
+ #if BUILDFLAG(IS_WIN)
+ #include <windows.h>
+ 
++#include "base/base_paths.h"
++#include "base/path_service.h"
+ #include "base/win/registry.h"
+ #endif
+ 
+@@ -92,13 +94,16 @@
+ #if BUILDFLAG(IS_LINUX)
+ enum class LinuxDesktop { kOther, kKde, kGnome, kCinnamon, kMate, kXfce };
+ 
+-// From XDG_CURRENT_DESKTOP, a colon-separated list such as "ubuntu:GNOME".
++// XDG_CURRENT_DESKTOP, a colon-separated list such as "ubuntu:GNOME", upper-cased.
++std::vector<std::string> DesktopNames() {
++  return base::SplitString(
++      base::ToUpperASCII(
++          base::Environment::Create()->GetVar("XDG_CURRENT_DESKTOP").value_or("")),
++      ":", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
++}
++
+ LinuxDesktop DetectLinuxDesktop() {
+-  std::string value =
+-      base::Environment::Create()->GetVar("XDG_CURRENT_DESKTOP").value_or("");
+-  for (std::string_view name : base::SplitStringPiece(
+-           base::ToUpperASCII(value), ":", base::TRIM_WHITESPACE,
+-           base::SPLIT_WANT_NONEMPTY)) {
++  for (const std::string& name : DesktopNames()) {
+     if (name == "KDE") return LinuxDesktop::kKde;
+     if (name == "X-CINNAMON" || name == "CINNAMON") return LinuxDesktop::kCinnamon;
+     if (name == "MATE") return LinuxDesktop::kMate;
+@@ -133,12 +138,59 @@
+   base::FilePath file;
+   std::string (*parse)(const std::string&);
+ };
++// Only the running compositor's own file counts: a leftover hyprpaper.conf must
++// not colour a COSMIC or LXQt session. feh and nitrogen serve any X11 window
++// manager, so they are tried unless a full desktop we cannot read is running.
+ std::vector<WallpaperToolConfig> WallpaperToolConfigs() {
+   namespace wp = helium_theme::wallpaper;
+-  return {{ConfigHome().Append("hypr/hyprpaper.conf"), &wp::ParseHyprpaper},
+-          {ConfigHome().Append("sway/config"), &wp::ParseSwayConfig},
+-          {base::GetHomeDir().Append(".fehbg"), &wp::ParseFehbg},
+-          {ConfigHome().Append("nitrogen/bg-saved.cfg"), &wp::ParseNitrogen}};
++  const std::vector<std::string> names = DesktopNames();
++  auto running = [&names](const char* name) {
++    return names.empty() || std::ranges::find(names, name) != names.end();
++  };
++  std::vector<WallpaperToolConfig> tools;
++  if (running("HYPRLAND")) {
++    tools.push_back({ConfigHome().Append("hypr/hyprpaper.conf"), &wp::ParseHyprpaper});
++  }
++  if (running("SWAY")) {
++    tools.push_back({ConfigHome().Append("sway/config"), &wp::ParseSwayConfig});
++  }
++  for (const char* desktop : {"COSMIC", "LXQT", "DEEPIN", "DDE", "UKUI", "ENLIGHTENMENT"}) {
++    if (std::ranges::find(names, desktop) != names.end()) {
++      return tools;
++    }
++  }
++  tools.push_back({base::GetHomeDir().Append(".fehbg"), &wp::ParseFehbg});
++  tools.push_back({ConfigHome().Append("nitrogen/bg-saved.cfg"), &wp::ParseNitrogen});
++  return tools;
++}
++
++// KDE's current activity, so the desktop of that activity is the one read.
++base::FilePath KdeActivityConfig() {
++  return ConfigHome().Append("kactivitymanagerdrc");
++}
++
++// Monitors plugged in now, by their X11/xrandr names (DRM "card1-HDMI-A-1" gives
++// "HDMI-A-1" and "HDMI-1"; drivers differ in which one X uses).
++std::vector<std::string> ConnectedMonitors() {
++  std::vector<std::string> names;
++  base::FileEnumerator connectors(base::FilePath("/sys/class/drm"), false,
++                                  base::FileEnumerator::DIRECTORIES |
++                                      base::FileEnumerator::SHOW_SYM_LINKS);
++  for (base::FilePath dir = connectors.Next(); !dir.empty(); dir = connectors.Next()) {
++    const std::string base_name = dir.BaseName().value();
++    const size_t dash = base_name.find('-');
++    std::string status;
++    if (!base_name.starts_with("card") || dash == std::string::npos ||
++        !base::ReadFileToString(dir.Append("status"), &status) ||
++        !status.starts_with("connected")) {
++      continue;
++    }
++    std::string name = base_name.substr(dash + 1);
++    names.push_back(name);
++    base::ReplaceFirstSubstringAfterOffset(&name, 0, "-A-", "-");
++    names.push_back(name);
++  }
++  return names;
+ }
+ 
+ // GNOME and Cinnamon keep settings in dconf; every gsettings write changes this file.
+@@ -269,11 +321,18 @@
+   std::string path;
+   switch (DetectLinuxDesktop()) {
+     case LinuxDesktop::kKde: {
+-      std::string ini;
++      std::string ini, activity_ini, plugin;
++      base::ReadFileToString(KdeActivityConfig(), &activity_ini);
+       if (base::ReadFileToString(KdeWallpaperConfig(), &ini)) {
+-        path = helium_theme::wallpaper::ParseKdeAppletsrc(ini);
++        path = helium_theme::wallpaper::ParseKdeAppletsrc(
++            ini,
++            helium_theme::wallpaper::ParseIniValue(activity_ini, "main",
++                                                   "currentActivity"),
++            &plugin);
+       }
+-      if (path.empty()) {
++      // A slideshow or picture of the day has no image to read: use the accent,
++      // not the default wallpaper the user never sees.
++      if (path.empty() && (plugin.empty() || plugin == "org.kde.image")) {
+         return ResolveWallpaperPackage(KdeDefaultWallpaper());
+       }
+       break;
+@@ -301,7 +360,7 @@
+     case LinuxDesktop::kXfce: {
+       std::string xml;
+       if (base::ReadFileToString(XfceDesktopConfig(), &xml)) {
+-        path = helium_theme::wallpaper::ParseXfceDesktopXml(xml);
++        path = helium_theme::wallpaper::ParseXfceDesktopXml(xml, ConnectedMonitors());
+       }
+       break;
+     }
+@@ -330,10 +389,26 @@
+ }
+ #endif
+ 
++#if BUILDFLAG(IS_WIN)
++// Windows' own JPEG copy of the image on screen, rewritten on every wallpaper
++// change. The SPI path is the original file, which may be gone or undecodable.
++base::FilePath TranscodedWallpaper() {
++  base::FilePath roaming;
++  if (!base::PathService::Get(base::DIR_ROAMING_APP_DATA, &roaming)) {
++    return base::FilePath();
++  }
++  return roaming.Append(L"Microsoft\\Windows\\Themes\\TranscodedWallpaper");
++}
++#endif
++
+ base::FilePath DefaultWallpaperPath() {
+ #if BUILDFLAG(IS_LINUX)
+   return LinuxWallpaperPath();
+ #elif BUILDFLAG(IS_WIN)
++  base::FilePath transcoded = TranscodedWallpaper();
++  if (!transcoded.empty() && base::PathExists(transcoded)) {
++    return transcoded;
++  }
+   wchar_t buffer[MAX_PATH] = {};
+   if (SystemParametersInfoW(SPI_GETDESKWALLPAPER, MAX_PATH, buffer, 0)) {
+     return base::FilePath(buffer);
+@@ -379,15 +454,29 @@
+ #endif
+ 
+ // The desktop's own accent color, when the platform has one: the Omarchy theme's
+-// `accent` (colors.toml) on Linux, the Windows accent color, the macOS accent
+-// color. Runs on a blocking thread. Not verified on Windows or macOS yet.
++// `accent` (colors.toml), KDE's or GNOME 47's accent on Linux, the Windows accent
++// color, the macOS accent color. Runs on a blocking thread. Not verified on
++// Windows or macOS yet.
+ std::optional<SkColor> DesktopAccentColor() {
+ #if BUILDFLAG(IS_LINUX)
+   std::optional<SkColor> omarchy = ReadOmarchyColor("accent");
+-  if (omarchy || DetectLinuxDesktop() != LinuxDesktop::kKde) {
++  if (omarchy) {
+     return omarchy;
+   }
+-  return KdeAccentColor();
++  switch (DetectLinuxDesktop()) {
++    case LinuxDesktop::kKde:
++      return KdeAccentColor();
++    case LinuxDesktop::kGnome: {
++      const int rgb = helium_theme::wallpaper::ParseGnomeAccent(
++          GSettingsGet("org.gnome.desktop.interface", "accent-color"));
++      if (rgb < 0) {
++        return std::nullopt;
++      }
++      return SkColorSetRGB((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
++    }
++    default:
++      return std::nullopt;
++  }
+ #elif BUILDFLAG(IS_WIN)
+   base::win::RegKey key(HKEY_CURRENT_USER,
+                         L"Software\\Microsoft\\Windows\\DWM", KEY_READ);
+@@ -479,11 +568,14 @@
+                std::optional<SkColor> fallback_accent,
+                std::string stamp,
+                const SkBitmap& bitmap) {
+-  if (!profile || bitmap.isNull()) {
++  if (!profile) {
+     return;
+   }
++  // Saved even when decoding failed (GNOME's default .jxl wallpapers), so the
++  // same file is not decoded again on every reload.
+   profile->GetPrefs()->SetString(kLastSourcePref, stamp);
+-  std::optional<SkColor> color = DominantColor(bitmap);
++  std::optional<SkColor> color =
++      bitmap.isNull() ? std::nullopt : DominantColor(bitmap);
+   if (!color) {
+     color = fallback_accent;
+   }
+@@ -590,6 +682,7 @@
+         case LinuxDesktop::kKde:
+           WatchPath(KdeWallpaperConfig());
+           WatchPath(ConfigHome().Append("kdeglobals"));  // accent, global theme
++          WatchPath(KdeActivityConfig());                // activity switch
+           break;
+         case LinuxDesktop::kGnome:
+         case LinuxDesktop::kCinnamon:
+@@ -606,6 +699,11 @@
+           break;
+       }
+     }
++#elif BUILDFLAG(IS_WIN)
++    // Chromium's theme observer does not see wallpaper changes on Windows.
++    if (wallpaper_override_.empty()) {
++      WatchPath(TranscodedWallpaper());
++    }
+ #endif
+   }
+ 
+@@ -639,7 +737,7 @@
+     });
+   }
+ 
+-#if BUILDFLAG(IS_LINUX)
++#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
+   // A file path is re-armed by the watcher when the file is replaced on save.
+   void WatchPath(const base::FilePath& path) {
+     auto watcher = std::make_unique<base::FilePathWatcher>();
+--- a/chrome/browser/helium_theme/wallpaper_config_parsers.cc
++++ b/chrome/browser/helium_theme/wallpaper_config_parsers.cc
+@@ -71,18 +71,74 @@
+   return UriToPath(Unquote(output));
+ }
+ 
+-std::string ParseKdeAppletsrc(const std::string& ini) {
+-  bool in_image_section = false;
++std::string ParseKdeAppletsrc(const std::string& ini, const std::string& activity,
++                              std::string* plugin) {
++  // Plasma leaves the [Wallpaper] groups of deleted desktops behind, so only a
++  // containment with its own main group (a desktop: location 0) counts.
++  struct Desktop {
++    std::string id, activity, last_screen, location, plugin, image;
++    bool exists = false;
++  };
++  std::vector<Desktop> desktops;
++  auto get = [&desktops](const std::string& id) -> Desktop& {
++    for (Desktop& d : desktops) {
++      if (d.id == id) return d;
++    }
++    desktops.emplace_back().id = id;
++    return desktops.back();
++  };
++  Desktop* main_group = nullptr;
++  Desktop* image_group = nullptr;
++  std::string first_image;
+   for (const std::string& line : Lines(ini)) {
+     if (!line.empty() && line.front() == '[') {
+-      in_image_section =
+-          line.find("[Wallpaper][org.kde.image][General]") != std::string::npos;
+-    } else if (in_image_section && StartsWith(line, "Image=")) {
+-      std::string path = UriToPath(line.substr(6));
+-      if (!path.empty()) return path;
++      main_group = image_group = nullptr;
++      const std::string prefix = "[Containments][";
++      if (!StartsWith(line, prefix)) continue;
++      const size_t close = line.find(']', prefix.size());
++      if (close == std::string::npos) continue;
++      Desktop& d = get(line.substr(prefix.size(), close - prefix.size()));
++      const std::string rest = line.substr(close + 1);
++      if (rest.empty()) {
++        d.exists = true;
++        main_group = &d;
++      } else if (rest == "[Wallpaper][org.kde.image][General]") {
++        image_group = &d;
++      }
++    } else if (main_group) {
++      const size_t eq = line.find('=');
++      if (eq == std::string::npos) continue;
++      const std::string key = line.substr(0, eq), value = line.substr(eq + 1);
++      if (key == "activityId") main_group->activity = value;
++      else if (key == "lastScreen") main_group->last_screen = value;
++      else if (key == "location") main_group->location = value;
++      else if (key == "wallpaperplugin") main_group->plugin = value;
++    } else if (image_group && StartsWith(line, "Image=")) {
++      image_group->image = UriToPath(line.substr(6));
++      if (first_image.empty()) first_image = image_group->image;
+     }
+   }
+-  return "";
++  // The desktop of the current activity on the first screen wins.
++  const Desktop* best = nullptr;
++  int best_score = -1;
++  for (const Desktop& d : desktops) {
++    if (!d.exists || d.plugin.empty() || !(d.location.empty() || d.location == "0")) {
++      continue;
++    }
++    const int score = (!activity.empty() && d.activity == activity ? 2 : 0) +
++                      (d.last_screen == "0" ? 1 : 0);
++    if (score > best_score) {
++      best = &d;
++      best_score = score;
++    }
++  }
++  if (!best) {
++    // No desktop groups at all (a hand-written or partial file): first image.
++    if (plugin) *plugin = "";
++    return first_image;
++  }
++  if (plugin) *plugin = best->plugin;
++  return best->plugin == "org.kde.image" ? best->image : "";
+ }
+ 
+ std::string ParseIniValue(const std::string& ini, const std::string& group,
+@@ -114,27 +170,39 @@
+   return parts == 3 || parts == 4 ? rgb : -1;
+ }
+ 
+-std::string ParseXfceDesktopXml(const std::string& xml) {
++std::string ParseXfceDesktopXml(const std::string& xml,
++                                const std::vector<std::string>& monitors) {
++  // XFCE keeps an entry for every monitor it has ever seen; prefer one that is
++  // plugged in now, else the first.
+   const std::string key = "name=\"last-image\"";
+-  size_t at = xml.find(key);
+-  while (at != std::string::npos) {
++  std::string first;
++  for (size_t at = xml.find(key); at != std::string::npos;
++       at = xml.find(key, at + key.size())) {
+     size_t v = xml.find("value=\"", at);
+     size_t end_of_tag = xml.find('>', at);
+-    if (v != std::string::npos && v < end_of_tag) {
+-      v += 7;
+-      std::string value = xml.substr(v, xml.find('"', v) - v);
+-      for (const auto& [from, to] : std::vector<std::pair<std::string, std::string>>{
+-               {"&amp;", "&"}, {"&lt;", "<"}, {"&gt;", ">"}, {"&quot;", "\""},
+-               {"&apos;", "'"}}) {
+-        for (size_t p; (p = value.find(from)) != std::string::npos;)
+-          value.replace(p, from.size(), to);
++    if (v == std::string::npos || v >= end_of_tag) continue;
++    v += 7;
++    std::string value = xml.substr(v, xml.find('"', v) - v);
++    for (const auto& [from, to] : std::vector<std::pair<std::string, std::string>>{
++             {"&amp;", "&"}, {"&lt;", "<"}, {"&gt;", ">"}, {"&quot;", "\""},
++             {"&apos;", "'"}}) {
++      for (size_t p; (p = value.find(from)) != std::string::npos;)
++        value.replace(p, from.size(), to);
++    }
++    std::string path = UriToPath(value);
++    if (path.empty()) continue;
++    // The innermost enclosing monitor property before this entry.
++    const size_t m = xml.rfind("name=\"monitor", at);
++    if (m != std::string::npos) {
++      const size_t start = m + 13;
++      const std::string name = xml.substr(start, xml.find('"', start) - start);
++      for (const std::string& connected : monitors) {
++        if (name == connected) return path;
+       }
+-      std::string path = UriToPath(value);
+-      if (!path.empty()) return path;
+     }
+-    at = xml.find(key, at + key.size());
++    if (first.empty()) first = path;
+   }
+-  return "";
++  return first;
+ }
+ 
+ std::string ParseFehbg(const std::string& script) {
+@@ -194,4 +262,17 @@
+   return "";
+ }
+ 
++int ParseGnomeAccent(const std::string& output) {
++  // GNOME 47's named accents (libadwaita's colours for each name).
++  static const std::pair<const char*, int> kAccents[] = {
++      {"blue", 0x3584e4},   {"teal", 0x2190a4}, {"green", 0x3a944a},
++      {"yellow", 0xc88800}, {"orange", 0xed5b00}, {"red", 0xe62d42},
++      {"pink", 0xd56199},   {"purple", 0x9141ac}, {"slate", 0x6f8396}};
++  const std::string name = Unquote(output);
++  for (const auto& [accent, rgb] : kAccents) {
++    if (name == accent) return rgb;
++  }
++  return -1;
++}
++
+ }  // namespace helium_theme::wallpaper
+--- a/chrome/browser/helium_theme/wallpaper_config_parsers.h
++++ b/chrome/browser/helium_theme/wallpaper_config_parsers.h
+@@ -6,21 +6,28 @@
+ #define CHROME_BROWSER_HELIUM_THEME_WALLPAPER_CONFIG_PARSERS_H_
+ 
+ #include <string>
++#include <vector>
+ 
+ namespace helium_theme::wallpaper {
+ 
+ // `gsettings get ...picture-uri` output, e.g. 'file:///usr/share/a%20b.jpg'.
+ std::string ParseGSettingsValue(const std::string& output);
+-// ~/.config/plasma-org.kde.plasma.desktop-appletsrc (first org.kde.image Image=).
+-std::string ParseKdeAppletsrc(const std::string& ini);
++// ~/.config/plasma-org.kde.plasma.desktop-appletsrc: the image of the live
++// desktop (current `activity` id if given, first screen preferred). `plugin` gets
++// that desktop's wallpaper plugin; "" when no desktop group was found. Returns ""
++// when the desktop shows something other than one image (slideshow, ...).
++std::string ParseKdeAppletsrc(const std::string& ini, const std::string& activity,
++                              std::string* plugin);
+ // Value of `key` in `[group]` of a KDE/INI file (kdeglobals, look-and-feel
+ // `defaults`), trimmed; "" if missing. Unlike the parsers above, not a path.
+ std::string ParseIniValue(const std::string& ini, const std::string& group,
+                           const std::string& key);
+ // KDE colour value "61,174,233" (optional 4th alpha part) -> 0xRRGGBB, or -1.
+ int ParseKdeRgb(const std::string& value);
+-// xfce4-desktop.xml (first "last-image" property).
+-std::string ParseXfceDesktopXml(const std::string& xml);
++// xfce4-desktop.xml: "last-image" of a connected monitor (property names
++// "monitor<name>"), else the first one.
++std::string ParseXfceDesktopXml(const std::string& xml,
++                                const std::vector<std::string>& monitors);
+ // ~/.fehbg (last quoted path on the feh line).
+ std::string ParseFehbg(const std::string& script);
+ // ~/.config/nitrogen/bg-saved.cfg (first file=).
+@@ -29,6 +36,8 @@
+ std::string ParseSwayConfig(const std::string& config);
+ // hyprpaper.conf: `wallpaper = mon,path`, `path = ...` or `preload = ...`.
+ std::string ParseHyprpaper(const std::string& config);
++// `gsettings get org.gnome.desktop.interface accent-color` ('blue') -> 0xRRGGBB, or -1.
++int ParseGnomeAccent(const std::string& output);
+ 
+ }  // namespace helium_theme::wallpaper
+ 

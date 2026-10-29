@@ -1,0 +1,15 @@
+--- a/components/helium_services/helium_services_helpers.cc
++++ b/components/helium_services/helium_services_helpers.cc
+@@ -23,7 +23,11 @@
+ #define CPU_ARCH_STR "x86_64"
+ #endif
+ 
+-#if defined(CPU_ARCH_STR) && (BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN))
++// Helium++: not on Windows. Helium's feed (updates.helium.computer) offers
++// Helium's own installer, which the update helper trusts (Imput's signature),
++// so Helium++ would "update" into upstream Helium. No Helium++ feed for
++// Windows exists yet; until then updates are manual downloads.
++#if defined(CPU_ARCH_STR) && BUILDFLAG(IS_MAC)
+ #define UPDATES_SUPPORTED
+ #endif
+ 

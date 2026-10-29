@@ -1,0 +1,260 @@
+--- a/chrome/browser/download/chrome_download_manager_delegate.cc
++++ b/chrome/browser/download/chrome_download_manager_delegate.cc
+@@ -855,8 +855,7 @@
+     download::DownloadTargetCallback* callback) {
+   // Isolated tabs keep nothing on disk, but a download would land in the real
+   // Downloads folder, so it is blocked (shows as "Blocked" in Downloads).
+-  if (helium_privacy_mode::IsIsolatedWebContents(
+-          content::DownloadItemUtils::GetWebContents(download))) {
++  if (helium_privacy_mode::IsIsolatedDownload(download)) {
+     download::DownloadTargetInfo target_info;
+     target_info.interrupt_reason =
+         download::DOWNLOAD_INTERRUPT_REASON_FILE_BLOCKED;
+--- a/chrome/browser/download/download_history.cc
++++ b/chrome/browser/download/download_history.cc
+@@ -541,8 +541,7 @@
+            *item)) ||
+       item->IsTemporary() ||
+       // Isolated tabs: not even the (blocked) download's URL goes to disk.
+-      helium_privacy_mode::IsIsolatedWebContents(
+-          content::DownloadItemUtils::GetWebContents(item)) ||
++      helium_privacy_mode::IsIsolatedDownload(item) ||
+       (data->state() != DownloadHistoryData::NOT_PERSISTED) || removing) {
+     return;
+   }
+--- a/chrome/browser/helium_privacy_mode/helium_privacy_mode.cc
++++ b/chrome/browser/helium_privacy_mode/helium_privacy_mode.cc
+@@ -22,7 +22,10 @@
+ #include "chrome/browser/profiles/profile_observer.h"
+ #include "chrome/common/pref_names.h"
+ #include "chrome/browser/helium_theme/helium_theme.h"
++#include "components/download/public/common/download_item.h"
+ #include "content/public/browser/browser_context.h"
++#include "content/public/browser/download_item_utils.h"
++#include "content/public/browser/download_manager.h"
+ #include "content/public/browser/render_frame_host.h"
+ #include "content/public/browser/render_process_host.h"
+ #include "content/public/browser/site_instance.h"
+@@ -121,6 +124,21 @@
+                                   .partition_domain() == "heliumisolated";
+ }
+ 
++bool IsIsolatedDownload(download::DownloadItem* item) {
++  if (!item) {
++    return false;
++  }
++  if (IsIsolatedWebContents(content::DownloadItemUtils::GetWebContents(item))) {
++    return true;
++  }
++  content::BrowserContext* context =
++      content::DownloadItemUtils::GetBrowserContext(item);
++  return context && context->GetDownloadManager()
++                            ->SerializedEmbedderDownloadDataToStoragePartitionConfig(
++                                item->GetSerializedEmbedderDownloadData())
++                            .partition_domain() == "heliumisolated";
++}
++
+ bool IsPerformanceMode(Profile* profile) {
+   return profile->GetPrefs()->GetBoolean(kPerformanceModePref);
+ }
+--- a/chrome/browser/helium_privacy_mode/helium_privacy_mode.h
++++ b/chrome/browser/helium_privacy_mode/helium_privacy_mode.h
+@@ -10,6 +10,10 @@
+ class Profile;
+ namespace content {
+ class WebContents;
++}  // namespace content
++
++namespace download {
++class DownloadItem;
+ }
+ 
+ namespace user_prefs {
+@@ -53,6 +57,10 @@
+ // True for a tab that has its own private (isolated) storage area. Such tabs
+ // must not be written to history, session files or other disk databases.
+ bool IsIsolatedWebContents(content::WebContents* contents);
++
++// True for a download started in an isolated tab, also after the tab closed:
++// decided from the download's own storage partition.
++bool IsIsolatedDownload(download::DownloadItem* item);
+ void SetPerformanceMode(Profile* profile, bool enabled);
+ 
+ bool SetMode(Profile* profile,
+--- a/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_ui.cc
++++ b/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_ui.cc
+@@ -16,6 +16,7 @@
+ #include "chrome/grit/heliumpp_sidebar_resources.h"
+ #include "chrome/grit/heliumpp_sidebar_resources_map.h"
+ #include "chrome/grit/tab_strip_api_resources_map.h"
++#include "components/tabs/public/tab_interface.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/browser/web_contents_user_data.h"
+ #include "content/public/browser/web_ui.h"
+@@ -79,8 +80,19 @@
+   factory_receiver_.Bind(std::move(receiver));
+ }
+ 
++// The page works only inside the window's sidebar view. Opened as a tab it
++// would hold the window it started in, which a tab drag can outlive.
++namespace {
++bool InTab(content::WebContents* contents) {
++  return tabs::TabInterface::MaybeGetFromContents(contents) != nullptr;
++}
++}  // namespace
++
+ void SidebarUI::BindInterface(
+     mojo::PendingReceiver<tabs_api::mojom::TabStripService> receiver) {
++  if (InTab(web_ui()->GetWebContents())) {
++    return;
++  }
+   // The embedding view sets the window before loading the page.
+   BrowserWindowInterface* browser =
+       webui::GetBrowserWindowInterface(web_ui()->GetWebContents());
+@@ -96,7 +108,7 @@
+     mojo::PendingReceiver<mojom::PageHandler> handler) {
+   BrowserWindowInterface* browser =
+       webui::GetBrowserWindowInterface(web_ui()->GetWebContents());
+-  if (!browser) {
++  if (!browser || InTab(web_ui()->GetWebContents())) {
+     return;
+   }
+   // The handler is owned by this controller, which the contents outlive.
+--- a/chrome/browser/ui/webui/help/helium_appimage_updater.cc
++++ b/chrome/browser/ui/webui/help/helium_appimage_updater.cc
+@@ -19,6 +19,7 @@
+ #include "base/json/json_reader.h"
+ #include "base/memory/weak_ptr.h"
+ #include "base/no_destructor.h"
++#include "base/rand_util.h"
+ #include "base/strings/string_number_conversions.h"
+ #include "base/strings/strcat.h"
+ #include "base/strings/utf_string_conversions.h"
+@@ -53,6 +54,11 @@
+ 
+ // Public half of build/keys/update.key (scripts/release_sign.sh keygen).
+ constexpr std::array<uint8_t, 32> kUpdatePublicKey = {{0x42, 0xf3, 0x49, 0x78, 0x49, 0x50, 0x1f, 0xe3, 0x80, 0xc6, 0xad, 0xe6, 0xa3, 0x19, 0xbc, 0x41, 0xae, 0xc1, 0xc6, 0xe2, 0x9f, 0xae, 0xe1, 0xf0, 0x97, 0x17, 0x40, 0xfb, 0x5c, 0x4e, 0x84, 0xc6}};
++// Test-only key (private half: scripts/test_update_signing.pem, public on
++// purpose). Accepted only with --helium-update-target, the test switch that
++// already points the update at a file other than the running AppImage, so test
++// runs never need the release key.
++constexpr std::array<uint8_t, 32> kTestUpdatePublicKey = {{0x6e, 0xef, 0x06, 0xb6, 0x53, 0xcd, 0x6c, 0xfe, 0x3f, 0xa2, 0x19, 0xf5, 0x7b, 0xd8, 0x66, 0x67, 0x73, 0x56, 0x48, 0x84, 0x69, 0x90, 0xd8, 0xc1, 0xab, 0x1e, 0x94, 0xaf, 0xa3, 0x8f, 0x1f, 0x02}};
+ 
+ constexpr size_t kMaxManifestBytes = 64 * 1024;
+ constexpr int64_t kMaxAppImageBytes = 2LL * 1024 * 1024 * 1024;
+@@ -95,7 +101,9 @@
+                       const base::FilePath& target,
+                       int64_t size,
+                       const std::string& sha256_hex) {
+-  base::File file(downloaded, base::File::FLAG_OPEN | base::File::FLAG_READ);
++  // Write access only to flush: the file must be on disk before the rename.
++  base::File file(downloaded, base::File::FLAG_OPEN | base::File::FLAG_READ |
++                                  base::File::FLAG_WRITE);
+   int64_t length = file.IsValid() ? file.GetLength() : -1;
+   bool ok = length == size;
+   if (ok) {
+@@ -118,6 +126,7 @@
+       ok = base::HexEncode(digest) == base::ToUpperASCII(sha256_hex);
+     }
+   }
++  ok = ok && file.Flush();
+   file.Close();
+   ok = ok && base::SetPosixFilePermissions(downloaded, 0755) &&
+        base::ReplaceFile(downloaded, target, nullptr);
+@@ -257,7 +266,10 @@
+     if (!base::HexStringToBytes(*sig, &sig_bytes) || sig_bytes.size() != 64 ||
+         !ED25519_verify(reinterpret_cast<const uint8_t*>(signed_text.data()),
+                         signed_text.size(), sig_bytes.data(),
+-                        kUpdatePublicKey.data())) {
++                        base::CommandLine::ForCurrentProcess()->HasSwitch(
++                            kUpdateTargetSwitch)
++                            ? kTestUpdatePublicKey.data()
++                            : kUpdatePublicKey.data())) {
+       return Fail("the update signature is not valid.");
+     }
+ 
+@@ -276,7 +288,11 @@
+     version_ = *version;
+     size_ = size_bytes;
+     sha256_ = *sha;
+-    download_path_ = target_.AddExtensionASCII("new");
++    // A fresh name per download: a second updater (the About page closed
++    // mid-download, then the background check) or a planted symlink cannot
++    // touch the file that is checked and swapped in.
++    download_path_ = target_.AddExtensionASCII(
++        "new-" + base::NumberToString(base::RandUint64()));
+     last_percent_ = -1;
+     Report(UPDATING, 0, std::u16string());
+ 
+--- a/chrome/browser/ui/webui/onboarding/onboarding_handler.cc
++++ b/chrome/browser/ui/webui/onboarding/onboarding_handler.cc
+@@ -6,6 +6,7 @@
+ 
+ #include <utility>
+ 
++#include "base/containers/fixed_flat_set.h"
+ #include "base/functional/bind.h"
+ #include "base/strings/string_util.h"
+ #include "base/strings/utf_string_conversions.h"
+@@ -454,6 +455,19 @@
+     return RejectJavascriptCallback(callback_id, "pref is not a string");
+   }
+ 
++  // Only what the setup pages write (lib/browser/prefs.ts); other helium.*
++  // prefs (privacy level, addy key, focus sites...) have their own validated
++  // paths.
++  static constexpr auto kWritable = base::MakeFixedFlatSet<std::string_view>({
++      "completed_onboarding", "services.bangs", "services.enabled",
++      "services.ext_proxy", "services.origin_override",
++      "services.user_consented", "services.spellcheck_files",
++      "services.browser_updates", "services.ublock_assets", "ntp.bonjourr",
++      "browser.native_frame_materials"});
++  if (!kWritable.contains(args[1].GetString())) {
++    return RejectJavascriptCallback(callback_id, "pref is not writable here");
++  }
++
+   const auto& pref_name = prefs::kHeliumPrefPrefix + args[1].GetString();
+   auto* pref = pref_service_->FindPreference(pref_name);
+   if (!pref) {
+--- a/components/favicon/content/content_favicon_driver.cc
++++ b/components/favicon/content/content_favicon_driver.cc
+@@ -17,6 +17,9 @@
+ #include "content/public/browser/navigation_handle.h"
+ #include "content/public/browser/page.h"
+ #include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/site_instance.h"
++#include "content/public/browser/storage_partition.h"
++#include "content/public/browser/storage_partition_config.h"
+ #include "third_party/blink/public/mojom/manifest/manifest.mojom.h"
+ #include "ui/gfx/image/image.h"
+ 
+@@ -137,7 +140,14 @@
+ 
+ bool ContentFaviconDriver::IsOffTheRecord() {
+   DCHECK(web_contents());
+-  return web_contents()->GetBrowserContext()->IsOffTheRecord();
++  // Helium++ isolated tabs use an in-memory storage partition of the normal
++  // profile; their favicons and URLs must not reach the Favicons database.
++  return web_contents()->GetBrowserContext()->IsOffTheRecord() ||
++         web_contents()
++             ->GetBrowserContext()
++             ->GetStoragePartition(web_contents()->GetSiteInstance())
++             ->GetConfig()
++             .in_memory();
+ }
+ 
+ void ContentFaviconDriver::OnFaviconUpdated(
+--- a/components/password_manager/core/browser/password_manager.cc
++++ b/components/password_manager/core/browser/password_manager.cc
+@@ -1337,7 +1337,11 @@
+     return nullptr;
+   }
+ 
++  // The HIBP lookup follows "Warn you if passwords are exposed" and never runs
++  // off the record.
+   if (!is_manual_fallback && driver &&
++      client_->GetPrefs()->GetBoolean(prefs::kPasswordLeakDetectionEnabled) &&
++      !client_->IsOffTheRecord() &&
+       !client_->IsSavingAndFillingEnabled(driver->GetLastCommittedOrigin(),
+                                           current_form_url)) {
+     if (!hibp_sign_in_check_) {

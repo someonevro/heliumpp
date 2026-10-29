@@ -1,0 +1,47 @@
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+@@ -173,7 +173,7 @@
+                                views::MaximumFlexSizeRule::kUnbounded));
+ 
+   // Workspace chips above the footer.
+-  auto* workspaces = AddChildView(
++  auto* workspaces = content_area_view_->AddChildView(
+       std::make_unique<WorkspaceSwitcher>(browser_view->browser()));
+   workspaces->SetProperty(
+       views::kMarginsKey,
+@@ -942,7 +942,8 @@
+     std::unique_ptr<views::View> location_bar) {
+   const int horizontal_padding =
+       GetLayoutConstant(LayoutConstant::kVerticalTabStripHorizontalPadding);
+-  sidebar_location_bar_ = AddChildViewAt(std::move(location_bar), 0);
++  sidebar_location_bar_ =
++      content_area_view_->AddChildViewAt(std::move(location_bar), 0);
+   sidebar_location_bar_->SetProperty(
+       views::kMarginsKey, gfx::Insets::TLBR(8, horizontal_padding, 2,
+                                             horizontal_padding));
+@@ -950,7 +951,10 @@
+                                     tabs::VerticalTabStripCollapseState::kExpanded);
+   // Margins at the edge of the layout are collapsed, so give the address bar
+   // breathing room from the window edge with an interior margin.
+-  flex_layout_->SetInteriorMargin(gfx::Insets::TLBR(kSidebarTopInset, 0, 0, 0));
++  // content_area_view_ is created as a FlexLayoutView in the constructor.
++  static_cast<views::FlexLayoutView*>(content_area_view_.get())
++      ->SetInteriorMargin(
++      gfx::Insets::TLBR(kSidebarTopInset, 0, 0, 0));
+   InvalidateLayout();
+ }
+ 
+@@ -961,9 +965,11 @@
+   views::View* bar = sidebar_location_bar_.get();
+   sidebar_location_bar_ = nullptr;
+   bar->SetVisible(true);
+-  flex_layout_->SetInteriorMargin(gfx::Insets());
++  // content_area_view_ is created as a FlexLayoutView in the constructor.
++  static_cast<views::FlexLayoutView*>(content_area_view_.get())
++      ->SetInteriorMargin(gfx::Insets());
+   InvalidateLayout();
+-  return RemoveChildViewT(bar);
++  return content_area_view_->RemoveChildViewT(bar);
+ }
+ 
+ void VerticalTabStripRegionView::OnCollapseStateChanged(

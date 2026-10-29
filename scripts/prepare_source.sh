@@ -11,7 +11,7 @@ dest="$(realpath -m "${1:?usage: prepare_source.sh <dest-dir>}")"
 case "$dest" in "$root"/*) ;; *) echo "dest must be inside $root" >&2; exit 1;; esac
 [ "$dest" != "$b/src" ] || { echo "refusing to touch build/src" >&2; exit 1; }
 pinned="$root/research/helium-chromium-pinned"
-[ "$(git -C "$pinned" rev-parse --short=7 HEAD)" = 832faa7 ] || { echo "helium-chromium-pinned is not at 832faa7" >&2; exit 1; }
+[ "$(git -C "$pinned" rev-parse --short=7 HEAD)" = 58261a2 ] || { echo "helium-chromium-pinned is not at 58261a2" >&2; exit 1; }
 
 . "$root/research/helium-linux/scripts/shared.sh"
 setup_environment

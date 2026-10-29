@@ -1,0 +1,118 @@
+--- a/chrome/browser/resources/heliumpp_sidebar/app.css
++++ b/chrome/browser/resources/heliumpp_sidebar/app.css
+@@ -650,3 +650,11 @@
+     justify-content: center;
+   }
+ }
++
++/* Performance mode: no transitions or animations. */
++:host([reduced]) *,
++:host([reduced]) *::before,
++:host([reduced]) *::after {
++  animation: none !important;
++  transition: none !important;
++}
+--- a/chrome/browser/resources/heliumpp_sidebar/app.ts
++++ b/chrome/browser/resources/heliumpp_sidebar/app.ts
+@@ -4,6 +4,7 @@
+ 
+ import {ColorChangeUpdater} from 'chrome://resources/cr_components/color_change_listener/colors_css_updater.js';
+ import {CrLitElement} from 'chrome://resources/lit/v3_0/lit.rollup.js';
++import type {PropertyValues} from 'chrome://resources/lit/v3_0/lit.rollup.js';
+ import type {Container, Tab, TabGroup} from '/tab_strip_api/tab_strip_api_data_model.mojom-webui.js';
+ import type {OnCollectionCreatedEvent, OnDataChangedEvent, OnNodeMovedEvent, OnNodesClosedEvent, OnTabsCreatedEvent} from '/tab_strip_api/tab_strip_api_events.mojom-webui.js';
+ import type {NodeId, Position} from '/tab_strip_api/tab_strip_api_types.mojom-webui.js';
+@@ -100,6 +101,12 @@
+     this.slotObserver_.observe(this);
+   }
+ 
++  // Performance mode: no motion in the sidebar (app.css :host([reduced])).
++  override updated(changedProperties: PropertyValues<this>) {
++    super.updated(changedProperties);
++    this.toggleAttribute('reduced', this.isPerformanceMode_());
++  }
++
+   private reportAddressSlot_() {
+     const slot = this.shadowRoot.querySelector<HTMLElement>('#addressSlot')!;
+     const r = slot.getBoundingClientRect();
+--- a/chrome/browser/resources/new_tab_page/app.css
++++ b/chrome/browser/resources/new_tab_page/app.css
+@@ -590,6 +590,11 @@
+   position: absolute;
+ }
+ 
++/* Performance mode: the plain theme gradient, no full-page blur. */
++#wall[data-reduced] {
++  filter: none;
++}
++
+ #wall[data-tone='light']::after {
+   background: linear-gradient(180deg,
+       color-mix(in oklab, var(--color-sys-primary) 8%, rgb(255 255 255 / 0.22)),
+--- a/chrome/browser/resources/new_tab_page/app.html
++++ b/chrome/browser/resources/new_tab_page/app.html
+@@ -1,4 +1,5 @@
+-<div id="wall" data-tone="${this.wallTone_()}" style="${this.wallStyle_()}"></div>
++<div id="wall" data-tone="${this.wallTone_()}" ?data-reduced="${this.performanceMode_}"
++    style="${this.wallStyle_()}"></div>
+ <div id="content" ?data-reduced="${this.performanceMode_}"
+     data-tone="${this.wallTone_()}">
+   <div id="hero">
+--- a/chrome/browser/resources/new_tab_page/app.ts
++++ b/chrome/browser/resources/new_tab_page/app.ts
+@@ -1536,9 +1536,10 @@
+     }
+   }
+ 
+-  // The wallpaper thumbnail, softened in CSS; none: the theme gradient shows.
++  // The wallpaper thumbnail, softened in CSS; none (or performance mode, which
++  // skips the blur): the theme gradient shows.
+   protected wallStyle_(): string {
+-    const url = loadTimeData.getString('heliumWallpaper');
++    const url = this.performanceMode_ ? '' : loadTimeData.getString('heliumWallpaper');
+     return url.startsWith('data:image/jpeg;base64,') ?
+         `background-image: url("${url}")` : '';
+   }
+--- a/chrome/browser/ui/views/frame/browser_desktop_window_tree_host_linux.cc
++++ b/chrome/browser/ui/views/frame/browser_desktop_window_tree_host_linux.cc
+@@ -95,6 +95,11 @@
+       prefs::kHeliumNativeFrameMaterials,
+       base::BindRepeating(&BrowserDesktopWindowTreeHostLinux::UpdateFrameHints,
+                           base::Unretained(this)));
++  // Performance mode turns the acrylic off (ShouldUseNativeFrameMaterials).
++  acrylic_pref_registrar_.Add(
++      "helium.performance_mode",
++      base::BindRepeating(&BrowserDesktopWindowTreeHostLinux::UpdateFrameHints,
++                          base::Unretained(this)));
+ }
+ 
+ BrowserDesktopWindowTreeHostLinux::~BrowserDesktopWindowTreeHostLinux() {
+--- a/chrome/browser/ui/views/frame/browser_widget.cc
++++ b/chrome/browser/ui/views/frame/browser_widget.cc
+@@ -233,6 +233,10 @@
+   acrylic_pref_registrar_.Add(
+       prefs::kHeliumNativeFrameMaterials,
+       base::BindRepeating(&BrowserWidget::ThemeChanged, base::Unretained(this)));
++  // Performance mode turns the acrylic off (ShouldUseNativeFrameMaterials).
++  acrylic_pref_registrar_.Add(
++      "helium.performance_mode",
++      base::BindRepeating(&BrowserWidget::ThemeChanged, base::Unretained(this)));
+   SelectNativeTheme();
+ #else
+   SetNativeTheme(ui::NativeTheme::GetInstanceForNativeUi());
+--- a/chrome/browser/ui/views/helium/native_frame_materials.cc
++++ b/chrome/browser/ui/views/helium/native_frame_materials.cc
+@@ -27,9 +27,12 @@
+     return false;
+   }
+ 
++  // Performance mode drops the compositor blur: the window paints opaque.
++  // helium_privacy_mode's pref, same string (helium.performance_mode).
+   const Profile* profile = browser_view->GetProfile();
+   return profile &&
+-         profile->GetPrefs()->GetBoolean(prefs::kHeliumNativeFrameMaterials);
++         profile->GetPrefs()->GetBoolean(prefs::kHeliumNativeFrameMaterials) &&
++         !profile->GetPrefs()->GetBoolean("helium.performance_mode");
+ #else
+   return false;
+ #endif

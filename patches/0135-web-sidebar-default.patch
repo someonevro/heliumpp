@@ -1,0 +1,84 @@
+--- a/chrome/browser/ui/views/location_bar/location_bar_view.cc
++++ b/chrome/browser/ui/views/location_bar/location_bar_view.cc
+@@ -155,6 +155,7 @@
+ #include "chrome/browser/ui/browser_commands.h"
+ #include "components/vector_icons/vector_icons.h"
+ #include "ui/views/background.h"
++#include "chrome/browser/ui/views/tabs/vertical/helium_sidebar_web_view.h"
+ #include "ui/views/border.h"
+ #include "ui/views/bubble/bubble_dialog_delegate_view.h"
+ #include "ui/views/button_drag_utils.h"
+@@ -634,9 +635,8 @@
+     InvalidateLayout();
+   }
+   // Hidden while typing to leave room for the text, and always with the web
+-  // sidebar (--helium-web-sidebar), whose top row has its own buttons.
+-  static const bool web_sidebar =
+-      base::CommandLine::ForCurrentProcess()->HasSwitch("helium-web-sidebar");
++  // sidebar (the default), whose top row has its own buttons.
++  static const bool web_sidebar = HeliumSidebarWebView::IsEnabled();
+   const bool show_nav =
+       sidebar_style_ && !web_sidebar && !omnibox_view_->HasFocus();
+   for (views::ImageButton* button : nav_buttons_) {
+--- a/chrome/browser/ui/views/omnibox/omnibox_placeholder_util.cc
++++ b/chrome/browser/ui/views/omnibox/omnibox_placeholder_util.cc
+@@ -6,7 +6,6 @@
+ 
+ #include <string>
+ 
+-#include "base/command_line.h"
+ #include "base/strings/strcat.h"
+ #include "base/time/time.h"
+ #include "chrome/browser/autocomplete/aim_eligibility_service_factory.h"
+@@ -16,6 +15,7 @@
+ #include "chrome/browser/ui/omnibox/omnibox_controller.h"
+ #include "chrome/browser/ui/omnibox/omnibox_edit_model.h"
+ #include "chrome/browser/ui/omnibox/omnibox_next_features.h"
++#include "chrome/browser/ui/views/tabs/vertical/helium_sidebar_web_view.h"
+ #include "chrome/common/webui_url_constants.h"
+ #include "chrome/grit/generated_resources.h"
+ #include "components/contextual_tasks/public/features.h"
+@@ -92,8 +92,7 @@
+           IDS_OMNIBOX_PLACEHOLDER_TEXT, default_provider->short_name());
+       // The web sidebar's narrow field shows a short hint; the full one,
+       // naming the search engine, stays the accessible name.
+-      if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+-              "helium-web-sidebar")) {
++      if (HeliumSidebarWebView::IsEnabled()) {
+         out_a11y_placeholder = out_placeholder_text;
+         out_placeholder_text = u"Search or enter address";
+       }
+--- a/chrome/browser/ui/views/tabs/vertical/helium_sidebar_web_view.cc
++++ b/chrome/browser/ui/views/tabs/vertical/helium_sidebar_web_view.cc
+@@ -17,7 +17,8 @@
+ #include "ui/base/metadata/metadata_impl_macros.h"
+ 
+ namespace {
+-constexpr char kWebSidebarSwitch[] = "helium-web-sidebar";
++// The web sidebar is the default; this switch brings back the native one.
++constexpr char kNativeSidebarSwitch[] = "helium-native-sidebar";
+ }  // namespace
+ 
+ HeliumSidebarWebView::HeliumSidebarWebView(BrowserWindowInterface* browser)
+@@ -49,7 +50,8 @@
+ 
+ // static
+ bool HeliumSidebarWebView::IsEnabled() {
+-  return base::CommandLine::ForCurrentProcess()->HasSwitch(kWebSidebarSwitch);
++  return !base::CommandLine::ForCurrentProcess()->HasSwitch(
++      kNativeSidebarSwitch);
+ }
+ 
+ void HeliumSidebarWebView::SetAddressBar(std::unique_ptr<views::View> bar) {
+--- a/chrome/browser/ui/views/tabs/vertical/helium_sidebar_web_view.h
++++ b/chrome/browser/ui/views/tabs/vertical/helium_sidebar_web_view.h
+@@ -18,7 +18,8 @@
+ class BrowserWindowInterface;
+ 
+ // Hosts chrome://helium-sidebar.top-chrome inside the vertical tab strip
+-// region (the web sidebar; --helium-web-sidebar for now).
++// region (the web sidebar; the default, --helium-native-sidebar for the
++// native one).
+ class HeliumSidebarWebView : public views::WebView,
+                              public WebUIContentsWrapper::Host {
+   METADATA_HEADER(HeliumSidebarWebView, views::WebView)

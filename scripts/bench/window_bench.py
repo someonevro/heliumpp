@@ -1,5 +1,5 @@
 """Windowed startup + memory bench in a private Xvfb display (never the real desktop).
-Usage: python3 -I window_bench.py <label>=<binary> [...]   env: N rounds (default 5), TABS (default 10)
+Usage: python3 -I window_bench.py <label>=<binary>[,--flag...] [...]   env: N rounds (default 5), TABS (default 10)
 Per label: one fresh profile (vertical layout, onboarding done), one warm-up launch, then N measured
 launches of the same profile. Reports Chromium's own Startup.* histograms (ms), and on the last round
 the summed PSS (MB) of all browser processes after opening TABS Wikipedia tabs. stdlib only."""
@@ -45,13 +45,13 @@ def seed(prof):
                               'privacy_mode': 'medium', 'theme': {'match_wallpaper': os.environ.get('NO_WALLPAPER') != '1'}, 'services': {'schema_version': 1, 'user_consented': True}},
                    'vertical_tabs': {'collapsed_state': False, 'uncollapsed_width': 200}}, f)
 
-def launch(binary, prof):
+def launch(binary, prof, flags=()):
     try: os.remove(f'{prof}/DevToolsActivePort')
     except FileNotFoundError: pass
     env = dict(os.environ, DISPLAY=DISP)
     p = subprocess.Popen([binary, f'--user-data-dir={prof}', '--ozone-platform=x11', '--no-sandbox', '--disable-gpu',
                           '--no-first-run', '--remote-debugging-port=0', '--window-size=1100,800',
-                          '--enable-logging=stderr', 'chrome://new-tab-page'],
+                          '--enable-logging=stderr', *flags, 'chrome://new-tab-page'],
                          env=env, stdout=subprocess.DEVNULL, stderr=open(f'{prof}.log', 'w'))
     for _ in range(300):
         try:
@@ -85,11 +85,11 @@ xvfb = subprocess.Popen(['Xvfb', DISP, '-screen', '0', '1100x800x24'], stdout=su
 time.sleep(1)
 try:
     for spec in sys.argv[1:]:
-        lab, binary = spec.split('=', 1); prof = f'{root}/build/bench-window-{lab}'
+        lab, binary = spec.split('=', 1); binary, *flags = binary.split(','); prof = f'{root}/build/bench-window-{lab}'
         subprocess.run(['rm', '-rf', prof]); seed(prof)
-        p, port, ws = launch(binary, prof); time.sleep(8); stop(p, ws)  # warm-up: creates the profile
+        p, port, ws = launch(binary, prof, flags); time.sleep(8); stop(p, ws)  # warm-up: creates the profile
         for r in range(N):
-            t0 = time.time(); p, port, ws = launch(binary, prof); t_devtools = time.time() - t0
+            t0 = time.time(); p, port, ws = launch(binary, prof, flags); t_devtools = time.time() - t0
             time.sleep(6)
             vals = {h.split('.', 1)[1]: hist(ws, h) for h in HISTS}
             theme = sum('Applied desktop accent' in l or 'grayscale theme' in l for l in open(f'{prof}.log'))

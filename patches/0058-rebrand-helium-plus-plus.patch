@@ -11,7 +11,7 @@
      Type the access code to start casting
 --- a/chrome/app/actor_strings.grdp
 +++ b/chrome/app/actor_strings.grdp
-@@ -123,16 +123,16 @@
+@@ -126,16 +126,16 @@
     Task complete
    </message>
    <message name="IDS_ACTOR_NOTIFICATION_BUTTON_GO_TO_CHROME" desc="Label for the notification button for the user to go to chrome." formatter_data="android_java">
@@ -31,7 +31,7 @@
    </message>
    <message name="IDS_ACTOR_NOTIFICATION_BODY_WORKING_WITH_STEP_INFO" desc="Notification body text when the actor is working on a task with step progress." formatter_data="android_java">
      <ph name="TASK_TITLE">%1$s<ex>My Task</ex></ph>: <ph name="STEP_PROGRESS">%2$s<ex>Searching flights</ex></ph>
-@@ -144,7 +144,7 @@
+@@ -147,7 +147,7 @@
      <ph name="TASK_TITLE">%s<ex>My Task</ex></ph>: Gemini stopped working on this task
    </message>
    <message name="IDS_ACTOR_NOTIFICATION_BODY_COMPLETE" desc="Notification body text when the actor has completed a task." formatter_data="android_java">
@@ -40,7 +40,7 @@
    </message>
    <message name="IDS_ACTOR_NOTIFICATION_BODY_STOPPED" desc="Notification body text when a task is stopped." formatter_data="android_java">
      <ph name="TASK_TITLE">%s<ex>My Task</ex></ph>: Gemini stopped working on this task
-@@ -198,7 +198,7 @@
+@@ -201,7 +201,7 @@
      View
    </message>
    <message name="IDS_PEEK_STATE_CLOSE_BUTTON_DESCRIPTION" desc="The accessibility content description for the button that closes peek view." formatter_data="android_java">
@@ -49,7 +49,7 @@
    </message>
    <message name="IDS_PEEK_STATE_PLAY_BUTTON_A11Y_LABEL" desc="Accessibility label for the button to resume/play the actor task." formatter_data="android_java" is_accessibility_with_no_ui="true">
      Resume
-@@ -207,7 +207,7 @@
+@@ -210,7 +210,7 @@
      Pause
    </message>
    <message name="IDS_PEEK_STATE_ACCESSIBLE_LABEL" desc="Accessibility label for the Gemini in Chrome peek view which represents a minimized chat. The placeholder is the displayed text (e.g. title or description) of the peek view." formatter_data="android_java">
@@ -1352,7 +1352,7 @@
        </message>
  
        <!-- Realbox Strings -->
-@@ -1353,160 +1353,160 @@
+@@ -1353,191 +1353,191 @@
        <!-- Signin Email Confirmation tab modal dialog -->
        <if expr="not is_chromeos">
          <message name="IDS_SIGNIN_EMAIL_CONFIRMATION_TITLE" desc="Title of the signin email confirmation tab modal dialog.">
@@ -1457,6 +1457,47 @@
 -          <ph name="EXISTING_USER">$1<ex>Elisa</ex></ph> is already signed in. To keep your browsing separate, sign in to Helium in your own profile as <ph name="USER_EMAIL_ADDRESS">$2<ex>bob.beckett@9ma1l.qjz9zk</ex></ph>. You’ll also get your extensions and more on all your devices.
 +          <ph name="EXISTING_USER">$1<ex>Elisa</ex></ph> is already signed in. To keep your browsing separate, sign in to Helium++ in your own profile as <ph name="USER_EMAIL_ADDRESS">$2<ex>bob.beckett@9ma1l.qjz9zk</ex></ph>. You’ll also get your extensions and more on all your devices.
          </message>
+         <!-- Account Preview Settings Signin Promo Subtitles -->
+         <message name="IDS_ACCOUNT_PREVIEW_SETTINGS_PROMO_SUBTITLE_PASSWORDS_WITH_DEVICE" desc="Subtitle of a sign-in promo in Settings informing the user they can access their passwords from their other device.">
+-          To get your passwords and more from <ph name="DEVICE">$1<ex>your phone</ex></ph>, sign in to Helium
++          To get your passwords and more from <ph name="DEVICE">$1<ex>your phone</ex></ph>, sign in to Helium++
+         </message>
+         <message name="IDS_ACCOUNT_PREVIEW_SETTINGS_PROMO_SUBTITLE_BOOKMARKS_WITH_DEVICE" desc="Subtitle of a sign-in promo in Settings informing the user they can access their bookmarks from their other device.">
+-          To get your bookmarks and more from <ph name="DEVICE">$1<ex>your phone</ex></ph>, sign in to Helium
++          To get your bookmarks and more from <ph name="DEVICE">$1<ex>your phone</ex></ph>, sign in to Helium++
+         </message>
+         <message name="IDS_ACCOUNT_PREVIEW_SETTINGS_PROMO_SUBTITLE_SAVED_INFO_WITH_DEVICE" desc="Subtitle of a sign-in promo in Settings informing the user they can access their saved info (such as autofill data, addresses, and payment methods) from their other device.">
+-          To get your saved info and more from <ph name="DEVICE">$1<ex>your phone</ex></ph>, sign in to Helium
++          To get your saved info and more from <ph name="DEVICE">$1<ex>your phone</ex></ph>, sign in to Helium++
+         </message>
+         <message name="IDS_ACCOUNT_PREVIEW_SETTINGS_PROMO_SUBTITLE_READING_LIST_WITH_DEVICE" desc="Subtitle of a sign-in promo in Settings informing the user they can access their reading list from their other device.">
+-          To get your reading list and more from <ph name="DEVICE">$1<ex>your phone</ex></ph>, sign in to Helium
++          To get your reading list and more from <ph name="DEVICE">$1<ex>your phone</ex></ph>, sign in to Helium++
+         </message>
+         <message name="IDS_ACCOUNT_PREVIEW_SETTINGS_PROMO_SUBTITLE_EXTENSIONS_WITH_DEVICE" desc="Subtitle of a sign-in promo in Settings informing the user they can access their extensions from their computer. Only desktop/computer DEVICE are supported for extensions.">
+-          To get your extensions and more from <ph name="DEVICE">$1<ex>your computer</ex></ph>, sign in to Helium
++          To get your extensions and more from <ph name="DEVICE">$1<ex>your computer</ex></ph>, sign in to Helium++
+         </message>
+         <message name="IDS_ACCOUNT_PREVIEW_SETTINGS_PROMO_SUBTITLE_PASSWORDS" desc="Subtitle of a sign-in promo in Settings informing the user they can access their passwords on all their devices.">
+-          To get your passwords and more on all your devices, sign in to Helium
++          To get your passwords and more on all your devices, sign in to Helium++
+         </message>
+         <message name="IDS_ACCOUNT_PREVIEW_SETTINGS_PROMO_SUBTITLE_BOOKMARKS" desc="Subtitle of a sign-in promo in Settings informing the user they can access their bookmarks on all their devices.">
+-          To get your bookmarks and more on all your devices, sign in to Helium
++          To get your bookmarks and more on all your devices, sign in to Helium++
+         </message>
+         <message name="IDS_ACCOUNT_PREVIEW_SETTINGS_PROMO_SUBTITLE_SAVED_INFO" desc="Subtitle of a sign-in promo in Settings informing the user they can access their saved info (such as autofill data, addresses, and payment methods) on all their devices.">
+-          To get your saved info and more on all your devices, sign in to Helium
++          To get your saved info and more on all your devices, sign in to Helium++
+         </message>
+         <message name="IDS_ACCOUNT_PREVIEW_SETTINGS_PROMO_SUBTITLE_READING_LIST" desc="Subtitle of a sign-in promo in Settings informing the user they can access their reading list on all their devices.">
+-          To get your reading list and more on all your devices, sign in to Helium
++          To get your reading list and more on all your devices, sign in to Helium++
+         </message>
+         <message name="IDS_ACCOUNT_PREVIEW_SETTINGS_PROMO_SUBTITLE_EXTENSIONS" desc="Subtitle of a sign-in promo in Settings informing the user they can access their extensions on all their devices.">
+-          To get your extensions and more on all your devices, sign in to Helium
++          To get your extensions and more on all your devices, sign in to Helium++
+         </message>
          <message name="IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_CHROME_SIGNIN_SUBTITLE" desc="Subtitle of the Chromium Signin Bubble intercept that is shown when a signed out user signs in on the web with it's first account.">
 -          To get your passwords and more on all your devices, sign in to Helium
 +          To get your passwords and more on all your devices, sign in to Helium++
@@ -1560,7 +1601,7 @@
          </message>
        </if>
  
-@@ -1519,7 +1519,7 @@
+@@ -1550,7 +1550,7 @@
            ChromiumOS could not sync your data because your account sign-in details are out of date.
          </message>
          <message name="IDS_SYNC_SIGN_IN_ERROR_BUBBLE_VIEW_MESSAGE_2" desc="Message in the sign-in error notification when the user's sign-in credentials are out of date.">
@@ -1569,7 +1610,7 @@
          </message>
          <message name="IDS_SYNC_UNAVAILABLE_ERROR_BUBBLE_VIEW_MESSAGE" desc="Message in the sign-in error notification when sync is not available for their domain.">
            ChromiumOS could not sync your data because Sync is not available for your domain.
-@@ -1528,86 +1528,86 @@
+@@ -1559,86 +1559,86 @@
            ChromiumOS could not sync your data due to an error signing in.
          </message>
          <message name="IDS_SYNC_OTHER_SIGN_IN_ERROR_BUBBLE_VIEW_MESSAGE_2" desc="Message in the sign-in error notification when there's an error signing in.">
@@ -1678,7 +1719,7 @@
        </message>
        <if expr="is_win">
          <message name="IDS_APP_SHORTCUTS_SUBDIR_NAME_BETA" desc="Unused in Chromium builds" translateable="false">
-@@ -1618,44 +1618,44 @@
+@@ -1649,44 +1649,44 @@
  
        <!-- MediaStream capture status tray icon -->
        <message name="IDS_MEDIA_STREAM_STATUS_TRAY_TEXT_AUDIO_AND_VIDEO" desc="Tool tip for the capture status tray icon when microphone and camera are being used">
@@ -1734,7 +1775,7 @@
          </message>
        </if>
  
-@@ -1663,40 +1663,40 @@
+@@ -1694,40 +1694,40 @@
        <if expr="not is_android and not is_chromeos">
          <!-- User pod remove sync warning text -->
          <message name="IDS_LOGIN_POD_USER_REMOVE_WARNING_SYNC" desc="Main text shown as a warning when attempting to remove an user.">
@@ -1785,7 +1826,7 @@
          </message>
          <message name="IDS_TUTORIAL_PASSWORD_MANAGER_CLICK_PASSWORD_MANAGER" desc="The description of the 'click password manager' step in password manager tutorial">
            Click “Password Manager”
-@@ -1711,29 +1711,29 @@
+@@ -1742,29 +1742,29 @@
  
        <!-- Settings API bubble -->
        <message name="IDS_EXTENSIONS_SETTINGS_API_SECOND_LINE_START_PAGES" desc="Second line in the Settings API bubble. Only shown if the secondary change by the extension was just the start pages. The triple single quotes are needed to preserve the space before and after the sentence which is needed when the language (Chrome is being translated to) uses space as word separator. Please preserve them, unless the language being translated to does not use space as word separator.">
@@ -1821,7 +1862,7 @@
          </message>
          <message name="IDS_INBOUND_MDNS_RULE_NAME_BETA" desc="Unused in Chromium builds" translateable="false">
          </message>
-@@ -1742,7 +1742,7 @@
+@@ -1773,7 +1773,7 @@
          <message name="IDS_INBOUND_MDNS_RULE_NAME_DEV" desc="Unused in Chromium builds" translateable="false">
          </message>
          <message name="IDS_INBOUND_MDNS_RULE_DESCRIPTION" desc="The description of the firewall rule allowing inbound mDNS traffic.">
@@ -1830,7 +1871,7 @@
          </message>
          <message name="IDS_INBOUND_MDNS_RULE_DESCRIPTION_BETA" desc="Unused in Chromium builds" translateable="false">
          </message>
-@@ -1754,51 +1754,51 @@
+@@ -1785,51 +1785,51 @@
  
        <if expr="not is_android">
          <message name="IDS_CONTENT_CONTEXT_ACCESSIBILITY_LABELS_BUBBLE_TEXT" desc="The text of a bubble that confirms users allows integrating the accessibility labels service of Google to Chromium.">
@@ -1893,7 +1934,7 @@
            </message>
          </if>
        </if>
-@@ -1806,13 +1806,13 @@
+@@ -1837,13 +1837,13 @@
        <!-- Update Recommended dialog -->
        <if expr="not is_chromeos">
          <message name="IDS_UPDATE_RECOMMENDED_DIALOG_TITLE" desc="The window title for the Update Recommended dialog.">
@@ -1911,7 +1952,7 @@
          </message>
          <message name="IDS_RELAUNCH_AND_UPDATE" desc="The button in the Update Recommended dialog which updates and relaunches Chrome.">
            Relaunch
-@@ -1832,76 +1832,76 @@
+@@ -1863,76 +1863,76 @@
  
        <if expr="is_win or is_macosx or is_linux">
          <message name="IDS_UPDATE_RECOMMENDED_DIALOG_TITLE_ALT" desc="Alternate window title for the Update Recommended dialog." translateable="false">
@@ -2008,7 +2049,7 @@
          </message>
        </if>
        <message name="IDS_RECOVERY_BUBBLE_TEXT" desc="Text for the chrome recovery bubble view full description.">
-@@ -1910,80 +1910,80 @@
+@@ -1941,80 +1941,80 @@
  
        <!-- Critical Notification bubble -->
        <message name="IDS_CRITICAL_NOTIFICATION_TITLE" desc="The title for a bubble that appears when there is a critical update and Chromium must restart to install it. It counts down a timer and then Chromium automatically restarts.">
@@ -2111,7 +2152,7 @@
          </message>
          <message name="IDS_LOCAL_NETWORK_ACCESS_PERMISSION_DESC" desc="Text shown in the macOS permission dialog, describing why Chrome needs the permission to access local network.">
            This will allow you to select from available devices and display content on them.
-@@ -1992,12 +1992,12 @@
+@@ -2023,12 +2023,12 @@
  
        <!-- Side panel strings -->
        <message name="IDS_SIDE_PANEL_CUSTOMIZE_CHROME_TITLE" desc="The name of the Customize Chrome feature in the side panel combo box.">
@@ -2126,7 +2167,7 @@
        </message>
  
        <!-- Lens Overlay Strings -->
-@@ -2273,7 +2273,7 @@
+@@ -2304,7 +2304,7 @@
            Learn more
          </message>
          <message name="IDS_LENS_PERMISSION_BUBBLE_DIALOG_LEARN_MORE_ABOUT_GOOGLE_LENS_LINK" desc="Accessibility label for text link that is shown to users to learn more about privacy in relation to Google Lens.">
@@ -2135,7 +2176,7 @@
          </message>
          <message name="IDS_LENS_PERMISSION_BUBBLE_DIALOG_TITLE" desc="The title of the lens permission search bubble dialog, introducing Lens as a way to search what's on their screen.">
            Search anything on this page
-@@ -2342,7 +2342,7 @@
+@@ -2373,7 +2373,7 @@
        <!-- OOBE -->
        <if expr="is_chromeos">
          <message name="IDS_INSTALLING_UPDATE" desc="Label shown on the updates installation screen during OOBE">
@@ -2144,7 +2185,7 @@
          </message>
          <message name="IDS_EULA_SCREEN_ACCESSIBLE_TITLE" desc="Title to be spoken on opening the OOBE EULA screen">
            ChromiumOS terms
-@@ -2352,7 +2352,7 @@
+@@ -2383,7 +2383,7 @@
        <!-- Native notifications for Windows 10 -->
        <if expr="is_win">
          <message name="IDS_WIN_NOTIFICATION_SETTINGS_CONTEXT_MENU_ITEM_NAME" desc="The name of the button in Windows Notification Center which leads to Chrome notification settings.">
@@ -2153,7 +2194,7 @@
          </message>
        </if>
        <!-- Relaunch notification bubble and dialog. -->
-@@ -2360,118 +2360,118 @@
+@@ -2391,118 +2391,118 @@
          <if expr="not is_chromeos">
            <message name="IDS_RELAUNCH_RECOMMENDED_TITLE" desc="The title of a dialog that tells users that a browser relaunch is recommended for an update available for some number of days.">
              {0, plural,
@@ -2313,7 +2354,7 @@
          </message>
        </if>
  
-@@ -2485,107 +2485,107 @@
+@@ -2516,104 +2516,104 @@
        <!-- Chrome parent extension/app install blocking dialog. -->
        <if expr="enable_extensions_core">
          <message name="IDS_EXTENSION_PERMISSIONS_BLOCKED_BY_PARENT_PROMPT_MESSAGE" desc="Text for the dialog indicating that a parent has blocked extensions and apps.">
@@ -2375,10 +2416,6 @@
          <message name="IDS_FRE_SIGN_IN_TITLE_0" meaning="Title" desc="This string appears as a heading on a full-page screen that asks the user to sign in to Chromium with their Google Account. It appears when the user launches Chromium for the first time. When they sign in, they can personalize and customize Chromium and remember their settings in their Google Account. The tone should be inviting and alluring.">
 -          Sign in to Helium
 +          Sign in to Helium++
-         </message>
-         <message name="IDS_FRE_GET_YOUR_BROWSER_READY_TITLE" meaning="Title" desc="It appears when the user launches Chromium for the first time on the page that is displayed before the sign in page. When they sign in, they can personalize and customize Chromium and remember their settings in their Google Account. The tone should be inviting and alluring.">
--          Let's get your Helium ready
-+          Let's get your Helium++ ready
          </message>
  
          <!-- Default Browser Promo -->
@@ -2450,7 +2487,7 @@
          </message>
  
          <!-- Feature Showcase - Password Manager -->
-@@ -2593,7 +2593,7 @@
+@@ -2621,7 +2621,7 @@
            Stay safe with Password Manager
          </message>
          <message name="IDS_FEATURE_SHOWCASE_PASSWORD_MANAGER_SUBTITLE" desc="Description for the Password Manager page in the Feature Showcase.">
@@ -2459,7 +2496,7 @@
          </message>
  
          <!-- Feature Showcase - Lens -->
-@@ -2606,14 +2606,14 @@
+@@ -2634,14 +2634,14 @@
  
          <!-- Feature Showcase - Gemini -->
          <message name="IDS_FEATURE_SHOWCASE_GEMINI_TITLE" desc="This is the headline for the Gemini (AI assistant) opt-in screen. It introduces the benefit of AI assistance for productivity. (CHAR LIMIT = 60)">
@@ -2476,7 +2513,7 @@
        </message>
  
        <!-- Notification quiet permission IPH -->
-@@ -2626,21 +2626,21 @@
+@@ -2654,21 +2654,21 @@
  
        <!-- ChromeLabs bubble -->
        <message name="IDS_CHROMELABS_RELAUNCH_FOOTER_MESSAGE" desc="Text that shows in the footer of the Chrome Labs bubble when relaunch is needed for changes to take effect.">
@@ -2502,7 +2539,7 @@
        </message>
        <message name="IDS_TAILORED_SECURITY_UNCONSENTED_PROMOTION_MESSAGE_DESCRIPTION" desc="Description shown in the message shown when a user changes their account-level tailored security setting encouraging them to enable Enhanced Safe Browsing">
          Enhanced protection does more to block phishing and malware
-@@ -2655,39 +2655,39 @@
+@@ -2683,39 +2683,39 @@
        <!--Launch On Startup-->
        <if expr="is_win">
          <message name="IDS_SETTINGS_FOREGROUND_LAUNCH_ON_STARTUP_LABEL" desc="Label for settings toggle button that enables or disables opening Chromium on system startup">
@@ -2552,7 +2589,7 @@
          </message>
          <message name="IDS_NO_UPDATE_RESPONSE" desc="Updater response for no updates when handling install result.">
            No update is available
-@@ -2696,7 +2696,7 @@
+@@ -2724,7 +2724,7 @@
            Installation failed. Please try again.
          </message>
          <message name="IDS_INSTALLER_DISPLAY_NAME" desc="Name for the updater metainstaller.">
@@ -2561,7 +2598,7 @@
          </message>
          <message name="IDS_CLOSE_BUTTON" desc="Close button tooltip">
            Close
-@@ -2735,13 +2735,13 @@
+@@ -2763,13 +2763,13 @@
            Canceling...
          </message>
          <message name="IDS_TEXT_RESTART_BROWSER" desc="For when a browser must be restarted to complete the installation.">
@@ -2578,7 +2615,7 @@
          </message>
          <message name="IDS_UPDATER_CLOSE" desc="For close button on the UI post install completion.">
            Close
-@@ -2895,99 +2895,99 @@
+@@ -2923,99 +2923,99 @@
  
          <!--Windows service strings.-->
          <message name="IDS_UPDATER_SERVICE_DISPLAY_NAME" desc="The name of the Windows service. Displayed in the Windows Services management console.">
@@ -2699,7 +2736,7 @@
        </message>
        <message name="IDS_GLIC_STATUS_ICON_TOOLTIP_CANARY" translateable="false" desc="This is the tooltip that is shown when the glic status icon is hovered and the Glic window is closed. It indicates that this is the Canary version of the browser.">
          Open Gemini (Canary)
-@@ -2999,7 +2999,7 @@
+@@ -3027,7 +3027,7 @@
          Open Gemini (Beta)
        </message>
        <message name="IDS_GLIC_STATUS_ICON_TOOLTIP_CLOSE" translateable="false" desc="This is the tooltip that is shown when the glic status icon is hovered and the Glic window is open.">
@@ -2708,7 +2745,7 @@
        </message>
        <message name="IDS_GLIC_STATUS_ICON_TOOLTIP_CLOSE_CANARY" translateable="false" desc="This is the tooltip that is shown when the glic status icon is hovered and the Glic window is open. It indicates that this is the Canary version of the browser.">
          Close Gemini (Canary)
-@@ -3011,7 +3011,7 @@
+@@ -3039,7 +3039,7 @@
          Close Gemini (Beta)
        </message>
        <message name="IDS_GLIC_STATUS_ICON_TOOLTIP_TOGGLE" translateable="false" desc="This is the tooltip that is shown when the glic status icon is hovered.">
@@ -2717,7 +2754,7 @@
        </message>
        <message name="IDS_GLIC_STATUS_ICON_TOOLTIP_TOGGLE_CANARY" translateable="false" desc="This is the tooltip that is shown when the glic status icon is hovered. It indicates that this is the Canary version of the browser.">
          Toggle Gemini (Canary)
-@@ -3023,162 +3023,162 @@
+@@ -3051,81 +3051,81 @@
          Toggle Gemini (Beta)
        </message>
        <message name="IDS_GLIC_STATUS_ICON_MENU_SHOW" translateable="false" desc="This is the menu item for showing the glic UI.">
@@ -2774,6 +2811,13 @@
 +          Show Gemini in Helium++ in system tray
          </message>
        </if>
+ 
+       <!-- GEiC (Gemini Enterprise in Chrome) settings -->
+       <message name="IDS_SETTINGS_GEIC_SECTION_TITLE" desc="Text of the Gemini Enterprise section header on the AI settings page. Also used as the label of the row button leading to the Gemini Enterprise subpage, and as the title of that subpage.">
+-        Gemini Enterprise in Helium
++        Gemini Enterprise in Helium++
+       </message>
+ 
        <if expr="is_macosx">
          <message name="IDS_OMNIBOX_EVERYWHERE_STATUS_ICON_MENU_TOGGLE" desc="In Title Case: Label for the toggle item in the Search in Chromium status tray context menu.">
 -          Open Search with Helium
@@ -2786,9 +2830,9 @@
 +          Open search with Helium++
          </message>
        </if>
-       <message name="IDS_OMNIBOX_EVERYWHERE_STATUS_ICON_TOOLTIP" desc="Tooltip text for the Search in Chromium status tray icon.">
--        Search in Helium
-+        Search in Helium++
+       <message name="IDS_OMNIBOX_EVERYWHERE_STATUS_ICON_TOOLTIP" desc="Tooltip text for the Search with Chromium status tray icon.">
+-        Search with Helium
++        Search with Helium++
        </message>
        <message name="IDS_OMNIBOX_EVERYWHERE_PROFILE_TOOLTIP" desc="Tooltip header for the profile icon in Omnibox Everywhere.">
 -        Helium profile
@@ -2798,8 +2842,22 @@
 -        Search with Helium
 +        Search with Helium++
        </message>
+       <if expr="is_win">
+         <message name="IDS_OMNIBOX_EVERYWHERE_NAME_BETA" desc="Unused; Chromium has no side-by-side channels." translateable="false">
+-          Search with Helium Beta
++          Search with Helium++ Beta
+         </message>
+         <message name="IDS_OMNIBOX_EVERYWHERE_NAME_DEV" desc="Unused; Chromium has no side-by-side channels." translateable="false">
+-          Search with Helium Dev
++          Search with Helium++ Dev
+         </message>
+         <message name="IDS_OMNIBOX_EVERYWHERE_NAME_CANARY" desc="Unused; Chromium has no side-by-side channels." translateable="false">
+-          Search with Helium Canary
++          Search with Helium++ Canary
+         </message>
+       </if>
        <message name="IDS_SETTINGS_OMNIBOX_EVERYWHERE_TITLE" desc="Title of the Omnibox Everywhere section on the search settings page.">
-         Search from desktop
+@@ -3133,94 +3133,94 @@
        </message>
        <if expr="is_macosx">
          <message name="IDS_SETTINGS_OMNIBOX_EVERYWHERE_TOGGLE" desc="Name of the toggle that controls whether Search with Chromium is shown in the Mac menu bar (on Mac only).">
@@ -2832,8 +2890,8 @@
 +        Search with Helium++ from anywhere
        </message>
        <message name="IDS_LOOMNIBOX_FRE_LENS_SECONDARY" desc="Secondary description detailing Google Lens functionality in Loomnibox.">
--        Ask about content outside of Helium, like another app or file you have open
-+        Ask about content outside of Helium++, like another app or file you have open
+-        Ask about content outside of Helium, like other apps or files
++        Ask about content outside of Helium++, like other apps or files
        </message>
        <message name="IDS_LOOMNIBOX_FRE_TO_SEARCH_OR_CUSTOMIZE" desc="Text in the Stage 2 FRE chin following the shortcut dropdown indicating it searches with Chromium or customizes in settings.">
 -        to search with Helium or customize in <ph name="BEGIN_LINK">&lt;a href="#" class="settings-link"&gt;</ph>Settings<ph name="END_LINK">&lt;/a&gt;</ph>
@@ -2862,10 +2920,6 @@
        <message name="IDS_SETTINGS_GLIC_SELECTION_SHORTCUT_SUBLABEL" desc="Sublabel describing the selection shortcut triggering in Gemini.">
 -        To select part of the screen in Gemini in Helium, use keyboard shortcut.
 +        To select part of the screen in Gemini in Helium++, use keyboard shortcut.
-       </message>
-       <message name="IDS_SETTINGS_GLIC_HOTKEY_SCOPE_CHROME" desc="Label for the 'In Chromium' option in the shortcut invocation scope dropdown.">
--        In Helium
-+        In Helium++
        </message>
  
        <!-- Profile Picker Glic version-->
@@ -2921,7 +2975,7 @@
        </message>
        <message name="IDS_DICE_MIGRATION_CONFIRMATION_TOAST_BUTTON" desc="The text on the button of the confirmation toast shown after the user clicks the accept button on the Dice Migration dialog, that allows the users to control the sync settings or sign out of Chrome.">
          Manage
-@@ -3188,12 +3188,12 @@
+@@ -3230,12 +3230,12 @@
        <if expr="not is_android">
          <if expr="use_titlecase">
            <message name="IDS_PROFILE_MENU_ACCOUNT_SETTINGS_BUTTON" desc="Button in the avatar menu bubble view for opening Chrome account settings.">
@@ -2936,7 +2990,7 @@
            </message>
          </if>
        </if>
-@@ -3207,10 +3207,10 @@
+@@ -3249,10 +3249,10 @@
          </message>
  
          <message name="IDS_DICTATION_ONBOARDING_TITLE" desc="The title string in the onboarding dialog for the dictation feature." translateable="false">
@@ -2949,7 +3003,7 @@
          </message>
          <message name="IDS_DICTATION_ONBOARDING_BULLET_DISCLAIMER" desc="The disclaimer text in the onboarding dialog describing the use of AI and potential for mistakes and providing a link for more details." translateable="false">
            Dictation uses AI and can make mistakes. <ph name="LEARN_MORE_LINK">$1<ex>Learn more</ex></ph>
-@@ -3220,140 +3220,140 @@
+@@ -3262,140 +3262,140 @@
        <!--Desktop to iOS promo strings-->
        <if expr="not is_android">
          <message name="IDS_IOS_DESKTOP_ESB_PROMO_BUBBLE_DESCRIPTION_REMINDER" desc="The description for the iOS desktop ESB promo bubble with a reminder button.">
@@ -3132,7 +3186,7 @@
          </message>
        </if>
  
-@@ -3362,7 +3362,7 @@
+@@ -3404,7 +3404,7 @@
          Your settings were changed by an unknown app
        </message>
        <message name="IDS_DEFAULT_SEARCH_ENGINE_RESET_NOTIFICATION_BODY" desc="Body text of the notification shown when Chromium resets the default search engine, explaining that a change from outside Chromium was detected.">
@@ -3141,7 +3195,7 @@
        </message>
        <message name="IDS_DEFAULT_SEARCH_ENGINE_RESET_NOTIFICATION_GOT_IT_BUTTON" desc="Label for the 'Got it' button in the default search engine reset notification, which dismisses the UI.">
          Got it
-@@ -3387,24 +3387,24 @@
+@@ -3429,16 +3429,16 @@
  
        <!-- JS optimizations bubble -->
        <message name="IDS_JS_OPTIMIZATION_BUBBLE_BODY_NON_POLICY_BODY" desc="Body text for the JavaScript optimization bubble when disabled for other reasons.">
@@ -3160,6 +3214,9 @@
 +        Sign in to Helium++
        </message>
  
+       <!-- Contextual Tasks -->
+@@ -3448,10 +3448,10 @@
+ 
        <!-- Enterprise device signals disclaimer -->
        <message name="IDS_ENTERPRISE_DEVICE_SIGNALS_DISCLAIMER_TITLE" desc="Title of an enterprise device signals collection disclaimer modal dialog. The dialog is shown on Chrome startup to managed Chrome users who have not previously acknowledged device signals collection.">
 -        Your work secured on Helium
@@ -3173,7 +3230,7 @@
    </release>
 --- a/chrome/app/extensions_strings.grdp
 +++ b/chrome/app/extensions_strings.grdp
-@@ -526,7 +526,7 @@
+@@ -529,7 +529,7 @@
      Scope
    </message>
    <message name="IDS_EXTENSIONS_APPS_TITLE" desc="The text displayed in the sidebar to go to the apps section of the page.">
@@ -3182,7 +3239,7 @@
    </message>
    <message name="IDS_EXTENSIONS_REMOVE" desc="The generic label for a button to remove an entry.">
      Remove
-@@ -550,7 +550,7 @@
+@@ -553,7 +553,7 @@
      Discover more extensions and themes on the <ph name="BEGIN_LINK">&lt;a target="_blank" href="$1"&gt;</ph>Chrome Web Store<ph name="END_LINK">&lt;/a&gt; <ex>&lt;/a&gt;</ex> </ph>
    </message>
    <message name="IDS_EXTENSIONS_MODERN_WEB_GUIDANCE_PROMO" desc="The promotional text displayed in the sidebar of the chrome://extensions page when Developer Mode is enabled. It encourages developers to download the Chrome Extensions and Chrome Web Store skill for their AI coding agents to get latest API updates and best practices.">
@@ -3191,7 +3248,7 @@
    </message>
    <message name="IDS_EXTENSIONS_SIDEBAR_KEYBOARD_SHORTCUTS" desc="The text for the link to manage keyboard shortcuts for extensions.">
      Keyboard shortcuts
-@@ -739,16 +739,16 @@
+@@ -742,16 +742,16 @@
      Supercharge your browser with extensions and themes
    </message>
    <message name="IDS_EXTENSIONS_ZERO_STATE_CHIPS_IPH_DESCRIPTION" desc="An one line description for the extensions zero state in-product-help promo.">
@@ -3231,7 +3288,7 @@
          </message>
          <!-- Search Promotion specific strings -->
          <message name="IDS_SEARCH_PROMOTION_IPH_TITLE_ARM_A" desc="Title of the search promotion IPH bubble for Arm A.">
-@@ -1781,7 +1781,7 @@
+@@ -1777,7 +1777,7 @@
            T&amp;ake screenshot
          </message>
          <message name="IDS_CHROMELABS" desc="The text label of the Chrome Labs menu item">
@@ -3240,7 +3297,7 @@
          </message>
        </if>
        <!-- macOS Capitalization Policy (go/chrome-capitalization):
-@@ -1837,7 +1837,7 @@
+@@ -1833,7 +1833,7 @@
            Reopen Closed Split View
          </message>
          <message name="IDS_CHROMELABS" desc="In Title Case: The text label of the Chrome Labs menu item">
@@ -3249,7 +3306,7 @@
          </message>
        </if>
  
-@@ -1860,7 +1860,7 @@
+@@ -1856,7 +1856,7 @@
        </if>
  
        <message name="IDS_TOS_NOTIFICATION_TITLE" desc="The title of the notification that informs the user that a term of service change is coming." formatter_data="android_java">
@@ -3258,7 +3315,7 @@
        </message>
        <message name="IDS_TOS_NOTIFICATION_BODY_TEXT" desc="The body text of the notification that informs the user that a term of service change is coming." formatter_data="android_java">
          Please review the new terms
-@@ -1894,7 +1894,7 @@
+@@ -1890,7 +1890,7 @@
          Your browser and profile are managed
        </message>
        <message name="IDS_CHROME_ENTERPRISE_RELEASE_NOTES" desc="Menu item to open the Chrome Enterprise and Education release notes.">
@@ -3267,7 +3324,7 @@
        </message>
        <message name="IDS_CHROME_WHATS_NEW" desc="The text label of the Help menu item which takes the user to the Chrome What's New page.">
          What's new
-@@ -2611,7 +2611,7 @@
+@@ -2613,7 +2613,7 @@
          Actions
        </message>
        <message name="IDS_DOWNLOAD_BY_EXTENSION_URL" desc="Indicates which extension downloaded this file by name and URL.">
@@ -3276,7 +3333,7 @@
        </message>
        <message name="IDS_DOWNLOADS_PAGE_INITIATOR_LINE" desc="Line that indicates the site that initiated a file download.">
          From <ph name="DISPLAY_INITIATOR_ORIGIN">$1<ex>https://example.com</ex></ph>
-@@ -2937,7 +2937,7 @@
+@@ -2939,7 +2939,7 @@
          Show full download history in a new tab
        </message>
        <message name="IDS_DOWNLOAD_BUBBLE_ESB_PROMO" desc="Text for the in-product-help bubble shown for the esb promo download bubble.">
@@ -3285,7 +3342,7 @@
        </message>
        <message name="IDS_DOWNLOAD_BUBBLE_ESB_PROMO_CUSTOM_ACTION" desc="Text for the custom action within the in-product-help bubble shown for the esb promo download bubble.">
          Settings
-@@ -3038,8 +3038,8 @@
+@@ -3040,8 +3040,8 @@
        <message name="IDS_DOWNLOAD_BUBBLE_INTERRUPTED_STATUS_PATH_TOO_LONG" desc="Status text for a download item that was interrupted because the file path name is too long.">
          File name or location is too long
        </message>
@@ -3296,7 +3353,7 @@
        </message>
        <message name="IDS_DOWNLOAD_BUBBLE_INTERRUPTED_SUBPAGE_SUMMARY_PATH_TOO_LONG" desc="Subpage summary text for a download item that was interrupted because the file path name is too long.">
          Try using a shorter file name or saving to a different folder
-@@ -3056,7 +3056,7 @@
+@@ -3058,7 +3058,7 @@
        <message name="IDS_DOWNLOAD_BUBBLE_INTERRUPTED_STATUS_WRONG" desc="Status text for a download item that had something go wrong.">
          Something went wrong
        </message>
@@ -3305,7 +3362,7 @@
          Extension downloads are disabled
        </message>
        <message name="IDS_DOWNLOAD_BUBBLE_INTERRUPTED_STATUS_NETWORK_ERROR" desc="Status text for a download item with a network error.">
-@@ -3256,7 +3256,7 @@
+@@ -3258,7 +3258,7 @@
        </message>
        <if expr="_google_chrome">
          <message name="IDS_DOWNLOAD_ROW_ESB_PROMOTION" desc="Link button text that teaches the user about Enhanced Protection.">
@@ -3314,7 +3371,7 @@
          </message>
          <message name="IDS_DOWNLOAD_ROW_ESB_PROMO_A11Y" desc="ARIA (accessibility) label describing a link which opens in a new tab.">
            Opens security settings page in a new tab
-@@ -3341,7 +3341,7 @@
+@@ -3343,7 +3343,7 @@
          Checking for malware...
        </message>
        <message name="IDS_DOWNLOAD_LOCAL_DECRYPTION_PROMPT_ALERT" desc="Accessible alert announced when a local decryption prompt appears on a suspicious archive">
@@ -3323,7 +3380,7 @@
        </message>
  
        <!-- Web App Window Title string -->
-@@ -3447,7 +3447,7 @@
+@@ -3449,7 +3449,7 @@
          Adding to Start Menu
        </message>
        <message name="IDS_WEB_APP_INSTALL_CHROME_APPS_LOCATION" desc="Installer option text signifying where inside the Start Menu the web app shortcut will be created on Windows.">
@@ -3332,7 +3389,7 @@
        </message>
        <message name="IDS_WEB_APP_INSTALL_CREATE_DESKTOP_SHORTCUT" desc="Label of the checkbox to add a shortcut to the desktop after installing the web app.">
          Add desktop shortcut
-@@ -3569,10 +3569,10 @@
+@@ -3571,10 +3571,10 @@
            Quit
          </message>
          <message name="IDS_QUIT_WITH_APPS_EXPLANATION" desc="Text displayed in a notification explaining that Chrome will continue running in the background as long as there are Chrome Apps open.">
@@ -3345,7 +3402,7 @@
          </message>
          <message name="IDS_QUIT_WITH_APPS_SUPPRESSION_LABEL" desc="Button text to prevent a notification from showing in future.">
            Don't show this again
-@@ -4027,7 +4027,7 @@
+@@ -4029,7 +4029,7 @@
          Notifications from this site may be disruptive
        </message>
        <message name="IDS_NOTIFICATIONS_QUIET_PERMISSION_BUBBLE_PREDICTION_SERVICE_DESCRIPTION" desc="Text used as notification message when requesting permission for Web Notifications via a notification. Used when the prediction service has decided that the user will be very unlikely to grant this permission.">
@@ -3354,7 +3411,7 @@
        </message>
        <message name="IDS_GEOLOCATION_OFF_EXPLANATORY_TEXT" desc="Explanatory animated text that appears (and then disappears) in the address bar as part of the less-prominent UX, when a website requests the geolocation permission.">
          Location blocked
-@@ -4036,7 +4036,7 @@
+@@ -4038,7 +4038,7 @@
          Location blocked
        </message>
        <message name="IDS_GEOLOCATION_QUIET_PERMISSION_BUBBLE_PREDICTION_SERVICE_DESCRIPTION" desc="Text used as notification message when requesting permission for Geolocation. Used when the prediction service has decided that the user will be very unlikely to grant this permission.">
@@ -3363,7 +3420,7 @@
        </message>
        <message name="IDS_GEOLOCATION_QUIET_PERMISSION_BUBBLE_ALLOW_BUTTON" desc="Text displayed on the button that enables geolocation for a site. This button is part of the geolocation status bubble, which is triggered when a user clicks on the blocked geolocation icon in the omnibox.">
          Allow for this site
-@@ -4567,7 +4567,7 @@
+@@ -4569,7 +4569,7 @@
          Allow remote debugging?
        </message>
        <message name="IDS_DEV_TOOLS_CONNECTION_DIALOG_MESSAGE_PART_1" desc="Message displayed in the dialog asking user to confirm allowing a debugging connection to this browser instance.">
@@ -3372,7 +3429,7 @@
        </message>
        <message name="IDS_DEV_TOOLS_CONNECTION_DIALOG_MESSAGE_PART_2" desc="Message displayed in the dialog asking user to confirm allowing a debugging connection to this browser instance.">
          Only web developers should turn on this feature, and only use it with trusted apps.
-@@ -4972,7 +4972,7 @@
+@@ -4971,7 +4971,7 @@
          Omnibox
        </message>
        <message name="IDS_UTILITY_PROCESS_FILE_UTILITY_NAME" desc="The name of the utility process used for various Chrome specific file operations.">
@@ -3381,7 +3438,7 @@
        </message>
        <if expr="not is_android">
          <message name="IDS_UTILITY_PROCESS_PROFILE_IMPORTER_NAME" desc="The name of the utility process used for importing profiles.">
-@@ -5003,7 +5003,7 @@
+@@ -5002,7 +5002,7 @@
          No-op Service
        </message>
        <message name="IDS_SERVICE_PROCESS_DOCUMENT_ANALYSIS_NAME" desc="The name of the service process used for document analysis operations as part of Safe Browsing.">
@@ -3390,7 +3447,7 @@
        </message>
        <!-- Theme preview infobar -->
        <message name="IDS_THEME_INSTALL_INFOBAR_LABEL" desc="Text displayed on an infobar when a theme has been installed.">
-@@ -5980,7 +5980,7 @@
+@@ -5979,7 +5979,7 @@
          To allow this extension, enter your password.
        </message>
        <message name="IDS_SKIP_PARENT_PERMISSION_EXTENSION_INFORMATION" desc="Text informing the parent about the option to skip parent approvals in Family Link">
@@ -3399,7 +3456,7 @@
        </message>
        <message name="IDS_PARENT_PERMISSION_PROMPT_ENTER_PASSWORD_LABEL" desc="Text for the label shown above the parent password entry field.">
          Enter password
-@@ -6047,13 +6047,13 @@
+@@ -6046,13 +6046,13 @@
          "<ph name="EXTENSION_NAME">$1<ex>Babylon Toolbar</ex></ph>" added
        </message>
        <message name="IDS_EXTENSION_EXTERNAL_INSTALL_ALERT_BUBBLE_HEADING_APP" desc="The heading text (below the title) for the bubble that alerts the user that a new external app was installed.">
@@ -3416,7 +3473,7 @@
        </message>
  
        <message name="IDS_EXTENSIONS_ADDED_WITHOUT_KNOWLEDGE" desc="Text shown in the extensions settings for items that might have been forcefully added to Chrome without the user's knowledge">
-@@ -6111,22 +6111,22 @@
+@@ -6110,22 +6110,22 @@
        <!-- Force Installed Deprecated Apps Deletion Dialog strings. -->
        <if expr="is_macosx">
          <message name="IDS_FORCE_INSTALLED_DEPRECATED_APPS_CONTENT" desc="Content of the force installed deprecated app dialog">
@@ -3443,7 +3500,7 @@
          </message>
        </if>
        <!-- End Force Installed Deprecated Apps Deletion Dialog strings. -->
-@@ -6135,7 +6135,7 @@
+@@ -6134,7 +6134,7 @@
          Ask your admin to update this app
        </message>
        <message name="IDS_FORCE_INSTALLED_PREINSTALLED_DEPRECATED_APPS_CONTENT" desc="Content of the force installed preinstalled deprecated app dialog">
@@ -3452,7 +3509,7 @@
        </message>
        <if expr="use_titlecase">
          <message name="IDS_FORCE_INSTALLED_PREINSTALLED_DEPRECATED_APPS_GO_TO_SITE_BUTTON" desc="Label for the button that opens the website for the app">
-@@ -6157,29 +6157,29 @@
+@@ -6156,29 +6156,29 @@
        </message>
        <if expr="is_macosx">
          <message name="IDS_DEPRECATED_APPS_MONITOR_RENDERER" desc="Dialog content that educates users that Chrome Apps will soon no longer launch.">
@@ -3487,7 +3544,7 @@
        </message>
        <message name="IDS_DEPRECATED_APPS_DELETION_LINK" desc="Contains link to trigger the deprecated apps deletion dialog from chrome://apps">
          {NUM_APPS, plural,
-@@ -6576,7 +6576,7 @@
+@@ -6575,7 +6575,7 @@
        </message>
  
        <message name="IDS_APP_HOME_REMOVE_APP" desc="Menu entry label for removing an app from context menu on App Home that isn't locally installed">
@@ -3496,7 +3553,7 @@
        </message>
  
        <message name="IDS_APP_HOME_APP_SETTINGS" desc="Menu entry label for navigation to App Settings page for an app from context menu on App Home">
-@@ -6675,7 +6675,7 @@
+@@ -6674,7 +6674,7 @@
          Update error
        </message>
        <message name="IDS_COMPONENTS_SVC_STATUS_ERROR_HELIUM_SERVICES" desc="Service Status">
@@ -3505,7 +3562,7 @@
        </message>
        <message name="IDS_COMPONENTS_UNKNOWN" desc="Service Status">
          Unknown
-@@ -7001,7 +7001,7 @@
+@@ -6999,7 +6999,7 @@
        </message>
  
        <message name="IDS_BAD_FLAGS_FROM_FILE_WARNING_MESSAGE" desc="Message shown when command-line flags are loaded from a file. [Keep it short so it fits in the infobar.]">
@@ -3514,7 +3571,7 @@
        </message>
  
        <!-- Bad Environment Variables Infobar-->
-@@ -7131,7 +7131,7 @@
+@@ -7129,7 +7129,7 @@
            Reason: The inverted rule <ph name="REVERT_RULE">$1<ex>!example.com</ex></ph> was found in the "Force open in" list.
          </message>
          <message name="IDS_ABOUT_BROWSER_SWITCH_INTERNALS_OPEN_BROWSER_DEFAULT_REASON" desc="about:browser-switch/internals, section URL Checker, the explaination reason for check result, displayed when the entered URL did not match any listed rule and default browser will not get switched">
@@ -3523,7 +3580,7 @@
          </message>
          <message name="IDS_ABOUT_BROWSER_SWITCH_INTERNALS_INVALID_URL" desc="about:browser-switch/internals, section URL Checker, specific error message when the url is invalid">
            Invalid URL. Make sure it is formatted properly.
-@@ -7725,7 +7725,7 @@
+@@ -7723,7 +7723,7 @@
          Cards
        </message>
        <message name="IDS_NTP_CUSTOMIZE_NO_BACKGROUND_LABEL" desc="The label for the 'Default Chrome' tile in the customization menu on the New Tab Page">
@@ -3532,7 +3589,7 @@
        </message>
        <message name="IDS_NTP_CUSTOMIZE_CHROME_CHANGE_THEME_LABEL" desc="The label for the action button for changing Chrome theme in the New Tab Page customize chrome side panel.">
          Change theme
-@@ -7749,7 +7749,7 @@
+@@ -7747,7 +7747,7 @@
          <ph name="THIRD_PARTY_NTP_MANAGER">$1<ex>ZomboCom</ex></ph> is managing your new tab page, opens in a new tab
        </message>
        <message name="IDS_NTP_CUSTOMIZE_CHROME_RESET_TO_CLASSIC_CHROME_COMPLETE" desc="Text for a screenreader to read aloud when the user's theme has finished changing to classic chrome in the Customize Chrome side panel.">
@@ -3541,7 +3598,7 @@
        </message>
        <message name="IDS_NTP_CUSTOMIZE_CHROME_RESET_TO_UPLOADED_IMAGE_COMPLETE" desc="Text for a screenreader to read aloud when the user's theme has finished changing to an uploaded image in the Customize Chrome side panel.">
          Theme updated to uploaded image
-@@ -8718,16 +8718,16 @@
+@@ -8716,16 +8716,16 @@
        </message>
        <!-- NTP Modules -->
        <message name="IDS_NTP_MODULES_SETUP_LIST_DISABLE_TOAST_MESSAGE" desc="Text shown in the toast confirming a module has been disabled.">
@@ -3562,7 +3619,7 @@
        </message>
        <message name="IDS_NTP_MODULES_INFO_BUTTON_TITLE" desc="Text shown in tooltip of info button of an NTP module.">
          About this card
-@@ -8811,7 +8811,7 @@
+@@ -8809,7 +8809,7 @@
          You’re seeing suggested files to help you easily get back to your most recent activity in Google Drive.
          <ph name="BREAK">&lt;br&gt;</ph>
          <ph name="BREAK">&lt;br&gt;</ph>
@@ -3571,7 +3628,7 @@
        </message>
        <message name="IDS_NTP_MODULES_DRIVE_SEE_MORE" desc="A label for the see more button in the Drive module.">
          See more
-@@ -8826,7 +8826,7 @@
+@@ -8824,7 +8824,7 @@
          You’re seeing suggested files to help you easily get back to your most recent activity in Microsoft SharePoint and OneDrive.
          <ph name="BREAK">&lt;br&gt;</ph>
          <ph name="BREAK">&lt;br&gt;</ph>
@@ -3580,7 +3637,7 @@
        </message>
        <message name="IDS_NTP_MODULES_MICROSOFT_FILES_DISABLE_BUTTON_TEXT" desc="Text shown on the disable button of a NTP Microsoft files card.">
          Don't show SharePoint and OneDrive files
-@@ -8862,7 +8862,7 @@
+@@ -8860,7 +8860,7 @@
          You’re seeing your calendar to help you easily navigate to your next event in Google Calendar.
          <ph name="BREAK">&lt;br&gt;</ph>
          <ph name="BREAK">&lt;br&gt;</ph>
@@ -3589,7 +3646,7 @@
        </message>
        <message name="IDS_NTP_MODULES_GOOGLE_CALENDAR_MORE_ACTIONS" desc="Text shown on the tooltip for the 3 dot menu on the Google Calendar card on the NTP.">
          More actions for Google Calendar
-@@ -8889,7 +8889,7 @@
+@@ -8887,7 +8887,7 @@
         You’re seeing your calendar to help you easily navigate to your next event in Outlook Calendar.
         <ph name="BREAK">&lt;br&gt;</ph>
         <ph name="BREAK">&lt;br&gt;</ph>
@@ -3598,7 +3655,7 @@
       </message>
        <message name="IDS_NTP_MODULES_CALENDAR_DOUBLE_BOOKED" desc="Text displaying that the calendar event is booked at the same time as another." meaning="The meeting takes place at the same time as another.">
          Double-Booked
-@@ -8958,13 +8958,13 @@
+@@ -8956,13 +8956,13 @@
          You’re seeing pages you've visited and suggested searches to help you easily get back to your most recent activity.
          <ph name="BREAK">&lt;br&gt;</ph>
          <ph name="BREAK">&lt;br&gt;</ph>
@@ -3614,7 +3671,7 @@
        </message>
        <message name="IDS_NTP_MODULES_HISTORY_CLUSTERS_SENTENCE2" desc="Variant of the name of the History Clusters module in sentence case shown in various UIs.">
          Journeys
-@@ -9000,7 +9000,7 @@
+@@ -8998,7 +8998,7 @@
          You’re seeing tabs from other devices to help you easily get back to your most recent activity.
          <ph name="BREAK">&lt;br&gt;</ph>
          <ph name="BREAK">&lt;br&gt;</ph>
@@ -3623,7 +3680,7 @@
        </message>
        <message name="IDS_NTP_MODULES_TAB_RESUMPTION_MULTI_DISMISS" desc="String text for module dismissal in the Tab Resumption module.">
          Tabs hidden
-@@ -9039,7 +9039,7 @@
+@@ -9037,7 +9037,7 @@
          You’re seeing your recently used tab groups to help you easily pick up where you left off.
          <ph name="BREAK">&lt;br&gt;</ph>
          <ph name="BREAK">&lt;br&gt;</ph>
@@ -3632,7 +3689,7 @@
        </message>
        <message name="IDS_NTP_MODULES_TAB_GROUPS_TITLE" desc="Title for Tab Groups NTP module on the new tab page.">
          Your tab groups
-@@ -9082,10 +9082,10 @@
+@@ -9080,10 +9080,10 @@
  
        <!-- Mobile NTP Middle Slot Promo -->
        <message name="IDS_NTP_MOBILE_PROMO_HEADER" desc="Header for a promo that shows on the Desktop NTP prompting user to scan a QR code with their mobile device">
@@ -3645,7 +3702,7 @@
        </message>
        <message name="IDS_NTP_MOBILE_PROMO_QR_CODE_LABEL" desc="Accessibility label for a QR code that shows on the Desktop NTP that prompts the user to scan it.">
          Scan QR Code
-@@ -9283,7 +9283,7 @@
+@@ -9281,7 +9281,7 @@
          Please try again later
        </message>
        <message name="IDS_SHOW_CUSTOMIZE_CHROME_SIDE_PANEL" desc="The title of the menu item for showing the Customize Chrome side panel.">
@@ -3654,7 +3711,7 @@
        </message>
        <if expr="use_titlecase">
          <message name="IDS_SHOW_CUSTOMIZE_CHROME_TOOLBAR" desc="The title of the menu item for showing the toolbar section of the Customize Chrome side panel.">
-@@ -10310,7 +10310,7 @@
+@@ -10284,7 +10284,7 @@
          Use the split view menu to switch between side by side and stacked layouts.
        </message>
  
@@ -3663,7 +3720,7 @@
        <if expr="use_titlecase">
          <then>
            <message name="IDS_BROWSER_LAYOUT_MENU" desc="In Title Case: The submenu for browser layout options.">
-@@ -10353,7 +10353,7 @@
+@@ -10327,7 +10327,7 @@
            </message>
          </else>
        </if>
@@ -3672,7 +3729,7 @@
  
        <!-- Vertical Tab Strings -->
        <message name="IDS_SWITCH_TO_VERTICAL_TAB" desc="The button in context menu that switches to vertical tab view.">
-@@ -10587,7 +10587,7 @@
+@@ -10564,7 +10564,7 @@
            Open
          </message>
          <message name="IDS_INTENT_PICKER_BUBBLE_VIEW_STAY_IN_CHROME" desc="Message contained in a button to continue the navigation within Chrome.">
@@ -3681,7 +3738,7 @@
          </message>
          <message name="IDS_INTENT_PICKER_BUBBLE_VIEW_INITIATING_ORIGIN" desc="The label for the initiating origin of the intent picker.">
            From <ph name="ORIGIN">$1<ex>https://9oo91e.qjz9zk</ex></ph>
-@@ -10640,7 +10640,7 @@
+@@ -10617,7 +10617,7 @@
              You can access it on Google Password Manager.
            </message>
            <message name="IDS_IOS_PASSWORD_PROMO_BUBBLE_FOOTER_DESCRIPTION_GENERIC" desc="The description for the iOS promo bubble footer which lets the user know how to use their saved passwords on their phone: download Chrome for iOS and sign in to their account.">
@@ -3690,7 +3747,7 @@
            </message>
          </if>
        </if>
-@@ -10736,7 +10736,7 @@
+@@ -10713,7 +10713,7 @@
            You can find it in your Addresses and More
          </message>
          <message name="IDS_IOS_DESKTOP_ADDRESS_PROMO_BUBBLE_FOOTER_DESCRIPTION_QR" desc="The description for the iOS desktop address promo bubble footer which lets the user know how to use their saved addresses on their phone: follow the QR code, download Chrome for iOS and sign in to their account.">
@@ -3699,7 +3756,7 @@
          </message>
        </if>
  
-@@ -10768,7 +10768,7 @@
+@@ -10745,7 +10745,7 @@
            You can access it in your Payment Methods
          </message>
          <message name="IDS_IOS_DESKTOP_PAYMENT_PROMO_BUBBLE_FOOTER_DESCRIPTION_QR" desc="The description for the iOS desktop payment promo bubble footer which lets the user know how to use their saved payment methods on their phone: follow the QR code, download Chrome for iOS and sign in to their account.">
@@ -3708,7 +3765,7 @@
          </message>
        </if>
  
-@@ -10836,10 +10836,10 @@
+@@ -10816,10 +10816,10 @@
          <ph name="WINDOW_TITLE">$1</ph> (Guest)
        </message>
        <message name="IDS_ACCESSIBLE_WINDOW_TITLE_WITH_PROFILE_FORMAT" desc="The format for describing the accessible window title when the window is associated with a particular named profile.">
@@ -3721,7 +3778,7 @@
        </message>
        <message name="IDS_ACCNAME_FULLSCREEN" desc="The accessible name of the fullscreen button in the new merged menu">
          Full screen
-@@ -11026,7 +11026,7 @@
+@@ -11006,7 +11006,7 @@
          Get back here fast by bookmarking this tab
        </message>
        <message name="IDS_CHROME_TIP" desc="Accessible name used by a screen reader for the in-product-help or tutorial bubble icon." is_accessibility_with_no_ui="true">
@@ -3730,7 +3787,7 @@
        </message>
        <message name="IDS_EXTENSIONS_MENU_IPH_ENTRY_POINT_TITLE" desc="">
          See what extensions can read or change a site
-@@ -11056,7 +11056,7 @@
+@@ -11036,7 +11036,7 @@
           Enhance your browser with extensions
        </message>
        <message name="IDS_EXTENSIONS_ZERO_STATE_PROMO_CUSTOM_ACTION_IPH_DESCRIPTION" desc="Body text shown on the promotional UI appearing when the user has no extensions installed.">
@@ -3739,7 +3796,7 @@
        </message>
        <message name="IDS_EXTENSIONS_ZERO_STATE_PROMO_CUSTOM_ACTION_IPH_ACCEPT" desc="Text on the custom action button that opens a new tab to the Chrome Web Store.">
           Discover extensions
-@@ -11110,7 +11110,7 @@
+@@ -11090,7 +11090,7 @@
          Open App settings
        </message>
        <message name="IDS_UPDATED_CONNECTION_SECURITY_INDICATORS_PROMO" desc="Text shown on promotional UI appearing next to the new omnibox connection security icon">
@@ -3748,7 +3805,7 @@
        </message>
        <message name="IDS_READING_LIST_IN_SIDE_PANEL_PROMO" desc="Text shown on promotional UI appearing next to the side panel button">
          Your reading list has moved to the new side panel. Try it here.
-@@ -11233,10 +11233,10 @@
+@@ -11213,10 +11213,10 @@
  
        <!-- Customize Chrome Tutorial Strings -->
        <message name="IDS_TUTORIAL_CUSTOMIZE_CHROME_START_TUTORIAL_IPH" desc="The description of the IPH to start the customize chrome tutorial">
@@ -3761,7 +3818,7 @@
        </message>
        <message name="IDS_TUTORIAL_CUSTOMIZE_CHROME_CHANGE_THEME" desc="The description of the 'change theme' step in customize chrome tutorial">
          Click “Change theme” to explore themes inspired by artists, nature and more
-@@ -11251,7 +11251,7 @@
+@@ -11231,7 +11231,7 @@
          Click the back arrow to explore other options
        </message>
        <message name="IDS_TUTORIAL_CUSTOMIZE_CHROME_SUCCESS_BODY" desc="The description of the body text in the 'success' step in customize chrome tutorial">
@@ -3770,7 +3827,7 @@
        </message>
  
        <!-- Password Manager Tutorial Strings -->
-@@ -11358,12 +11358,12 @@
+@@ -11338,12 +11338,12 @@
           Show original content?
        </message>
        <message name="IDS_NEAR_OOM_REDUCTION_MESSAGE_DESCRIPTION" desc="The description of the message stating that the browser removed some content on the page using too much memory.">
@@ -3785,7 +3842,7 @@
        </message>
        <message name="IDS_TAILORED_SECURITY_UNCONSENTED_MESSAGE_ACCEPT" desc="The text on the 'accept' button when asking if the user wants to enable Enhanced Safe Browsing">
          Turn on
-@@ -11465,10 +11465,10 @@
+@@ -11445,10 +11445,10 @@
            Use Google Password Manager to sign in faster to sites from any of your devices
          </message>
          <message name="IDS_PASSWORDS_SAVE_PRIMING_PROMO_BODY_NOT_SIGNED_IN" desc="Body of IPH prompting users to consider saving passwords">
@@ -3798,7 +3855,7 @@
          </message>
          <message name="IDS_PASSWORDS_SAVE_RECOVERY_PROMO_BODY" desc="Body of IPH prompting users to reconsider saving passwords">
            To save your password to Google Password Manager, click the key
-@@ -11600,7 +11600,7 @@
+@@ -11580,7 +11580,7 @@
            </message>
          </if>
          <message name="IDS_IMPORTED_FROM_BOOKMARK_FOLDER" desc="Name for bookmark panel folder imported from another browser">
@@ -3807,7 +3864,7 @@
          </message>
          <message name="IDS_EXTENSIONS_IMPORTER_LOCK_TITLE" desc="Dialog title for importer lock dialog">
            Import profile still in use
-@@ -11624,7 +11624,7 @@
+@@ -11604,7 +11604,7 @@
              Full Disk Access required
            </message>
            <message name="IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_MESSAGE" desc="Message for the dialog shown when Full Disk Access is needed to import bookmarks from Safari.">
@@ -3816,7 +3873,7 @@
            </message>
            <message name="IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_LINK" desc="Help link text in the dialog shown when Full Disk Access is needed to import from Safari.">
              Learn how to grant Full Disk Access from your System Preferences.
-@@ -11796,10 +11796,10 @@
+@@ -11787,10 +11787,10 @@
          Delete browsing data
        </message>
        <message name="IDS_CLEAR_BROWSING_DATA_HISTORY_NOTICE" desc="A dialog informing the user that their Chrome browsing history was deleted, but other forms of history can still be found on Google My Activity.">
@@ -3829,7 +3886,7 @@
        </message>
        <message name="IDS_CLEAR_BROWSING_DATA_HISTORY_NOTICE_OK" desc="Button in a dialog that informs the user that the deletion of Chrome's browsing data has been completed.">
          Ok, got it
-@@ -11832,7 +11832,7 @@
+@@ -11823,7 +11823,7 @@
        </message>
  
        <message name="IDS_ZOOMLEVELS_CHROME_ERROR_PAGES_LABEL" desc="Label for zoom level list entry for Chrome error pages.">
@@ -3838,7 +3895,7 @@
        </message>
  
        <message name="IDS_STORAGE_ACCESS_MANAGE_TEXT" desc="The text on the button to manage the StorageAcccess settings.">
-@@ -11845,7 +11845,7 @@
+@@ -11836,7 +11836,7 @@
        <!-- Automatic updates -->
        <if expr="is_macosx">
          <message name="IDS_PROMOTE_INFOBAR_TEXT" desc="The text to show in the automatic update setup infobar.  Mac-only.">
@@ -3847,7 +3904,7 @@
          </message>
          <message name="IDS_PROMOTE_INFOBAR_PROMOTE_BUTTON" desc="The 'Set up automatic updates' button in the automatic update setup infobar.  Mac-only.">
            Set up automatic updates
-@@ -11854,7 +11854,7 @@
+@@ -11845,7 +11845,7 @@
            Don't ask again
          </message>
          <message name="IDS_PROMOTE_AUTHENTICATION_PROMPT" desc="The prompt displayed in the authentication dialog when setting up automatic updates for all users.  The system will add a sentence asking for an administrator's name and password.  Mac-only.">
@@ -3856,7 +3913,7 @@
          </message>
          <message name="IDS_PROMOTE_PREFLIGHT_LAUNCH_ERROR" desc="Status label shown when an administrator user requested automatic updates for all users, but the OS failed to start the pre-flight process.  Mac-only.">
            Failed to set up automatic updates for all users (preflight launch error: <ph name="ERROR_NUMBER">$1<ex>1</ex></ph>)
-@@ -12656,7 +12656,7 @@
+@@ -12662,7 +12662,7 @@
  
        <!-- Tab Group Deletion Dialog -->
        <message name="IDS_TAB_GROUP_DELETION_DIALOG_MISSING_EMAIL" desc="The email address used in the deletion dialog body when an email is missing.">
@@ -3865,7 +3922,7 @@
        </message>
        <message name="IDS_TAB_GROUP_DELETION_DIALOG_BODY_SYNCED_DELETE" desc="The body text for deleting a synced group or groups. Displayed in the Tab Group Deletion Dialog.">
          {GROUP_COUNT, plural,
-@@ -13257,7 +13257,7 @@
+@@ -13272,7 +13272,7 @@
            Collaborate with others
          </message>
          <message name="IDS_DATA_SHARING_NEED_SIGN_IN_AND_SYNC_HISTORY_BODY" desc="The body of dialog that prompts users to sign in and opt in to history sync.">
@@ -3874,7 +3931,7 @@
          </message>
          <message name="IDS_DATA_SHARING_NEED_SYNC_HISTORY_BODY" desc="The body of dialog that prompts users to sign in and opt in to history sync.">
            To share tabs and collaborate with others, sync your history and tabs to <ph name="EMAIL">$1<ex>foo@9ma1l.qjz9zk</ex></ph>
-@@ -13284,13 +13284,13 @@
+@@ -13299,13 +13299,13 @@
            Make sure you trust the person that sent this invitation
          </message>
          <message name="IDS_DATA_SHARING_ORGANIZATION_DISALLOW_SIGN_IN_BODY" desc="The body text of the organization disallowing signin dialog.">
@@ -3890,7 +3947,7 @@
          </message>
          <message name="IDS_DATA_SHARING_SETTINGS" desc="The generic text on buttons that take users to Chrome settings page.">
            Settings
-@@ -13458,7 +13458,7 @@
+@@ -13473,7 +13473,7 @@
        <message name="IDS_APP_MENU_BUTTON_UPDATE" desc="Short label next to app-menu button when an update is available.">
          Update
        </message>
@@ -3899,7 +3956,7 @@
          Services updated
        </message>
        <if expr="is_win or is_macosx or is_linux">
-@@ -13469,7 +13469,7 @@
+@@ -13484,7 +13484,7 @@
            Relaunch to update
          </message>
          <message name="IDS_APP_MENU_BUTTON_UPDATE_ALT3" desc="Alternate short label next to app-menu button when an update is available.">
@@ -3908,7 +3965,7 @@
          </message>
        </if>
        <message name="IDS_APP_MENU_BUTTON_ERROR" desc="Short label next to app-menu button when the user needs to resolve something.">
-@@ -13511,10 +13511,10 @@
+@@ -13526,10 +13526,10 @@
          <ph name="APP_NAME">$1<ex>html5rocks.com</ex></ph> is sharing a window and audio.
        </message>
        <message name="IDS_MEDIA_TAB_CAPTURE_NOTIFICATION_TEXT" desc="label used in screen capture notification UI to show the screen sharing status when the stream is consumed by the same app initiating the window picker">
@@ -3921,7 +3978,7 @@
        </message>
        <message name="IDS_MEDIA_SCREEN_CAPTURE_NOTIFICATION_HIDE" desc="Text shown on a link that hides the notification that the screen is being captured.">
          Hide
-@@ -13584,13 +13584,13 @@
+@@ -13599,13 +13599,13 @@
        <!-- Mac First-run dialog messages -->
        <if expr="is_macosx">
          <message name="IDS_FIRSTRUN_DLG_MAC_COMPLETE_INSTALLATION_LABEL" desc="Label at top of Dialog noting what's going to happen">
@@ -3938,7 +3995,7 @@
          </message>
        </if>
  
-@@ -13605,7 +13605,7 @@
+@@ -13620,7 +13620,7 @@
        <!-- Killed Tab Strings -->
        <if expr="is_chromeos">
          <message name="IDS_KILLED_TAB_BY_OOM_MESSAGE" desc="The message displayed on the killed tab page when the page was killed by an out of memory error.">
@@ -3947,7 +4004,7 @@
          </message>
        </if>
        <message name="IDS_KILLED_TAB_FEEDBACK_MESSAGE" desc="The text to auto-populate the feedback page with. The triple single quotes are needed to preserve the line break.">
-@@ -13740,8 +13740,8 @@
+@@ -13758,8 +13758,8 @@
          <message name="IDS_EXTENSIONS_INSTALL_LOCATION_SHARED_MODULE" desc="The text explaining the the installation of the extension was because of extensions that depend on this shared module">
            Installed because of dependent extension(s).
          </message>
@@ -3958,7 +4015,7 @@
          </message>
  
          <!-- Extension blocklist state -->
-@@ -13755,7 +13755,7 @@
+@@ -13773,7 +13773,7 @@
            This extension violates the Chrome Web Store policy.
          </message>
          <message name="IDS_EXTENSIONS_BLOCKLISTED_POTENTIALLY_UNWANTED" desc="The text explaining the reason for disabling extension or app. The extension in question might have been installed without user consent.">
@@ -3967,7 +4024,7 @@
          </message>
  
          <!-- Enhanced Safe Browsing CRX allowlist warning -->
-@@ -13791,7 +13791,7 @@
+@@ -13809,7 +13809,7 @@
            <ph name="THIRD_PARTY_TOOL_NAME">$1<ex>SuperDuper PC Cleaner Pro</ex></ph> wants to reset your settings.
          </message>
          <message name="IDS_TRIGGERED_RESET_PROFILE_SETTINGS_EXPLANATION" desc="Dialog title for reset dialog triggered by a third party tool">
@@ -3976,7 +4033,7 @@
          </message>
          <message name="IDS_TRIGGERED_RESET_PROFILE_SETTINGS_DEFAULT_TOOL_NAME" desc="Default tool name when a reset was triggered but a name could not be found.">
            A cleanup tool
-@@ -13883,7 +13883,7 @@
+@@ -13901,7 +13901,7 @@
          Shared Tab
        </message>
        <message name="IDS_TOOLBAR_BUTTON_SEND_TAB_TO_SELF_BUTTON_HINT_TEXT" desc="The hint text shown on received tab dialog shown from the toolbar button. Where 'THERE' is the device the user selected.">
@@ -3985,7 +4042,7 @@
        </message>
        <message name="IDS_MENU_SEND_TAB_TO_SELF" desc="The label of a menu entry to share the current tab to another device">
          Send to your &amp;device
-@@ -13917,10 +13917,10 @@
+@@ -13935,10 +13935,10 @@
          <ph name="BEGIN_LINK">$1</ph>Your devices<ph name="END_LINK">$2</ph> · <ph name="EMAIL">$3<ex>foo@9ma1l.qjz9zk</ex></ph>
        </message>
        <message name="IDS_SEND_TAB_TO_SELF_SIGN_IN_PROMO_LABEL" desc="Text when a signed out user attempts to use send-tab-to-self, then sees a sign-in promo.">
@@ -3998,7 +4055,7 @@
        </message>
        <message name="IDS_SEND_TAB_TO_SELF_SIGN_IN_PROMO_BODY" desc="Body label text of the send-tab-to-self sign-in promo bubble.">
          To send links between devices, ensure both are signed in to the same Google account.
-@@ -13941,7 +13941,7 @@
+@@ -13959,7 +13959,7 @@
          Sent!
        </message>
        <message name="IDS_TUTORIAL_SEND_TAB_TO_SELF_SUCCESS_BODY" desc="Success description educating about sign-in and cross-device sharing.">
@@ -4007,7 +4064,7 @@
        </message>
        <message name="IDS_SEND_TAB_TO_SELF_VERIFY_ITS_YOU_PROMO_TITLE" desc="Title of the send-tab-to-self sign-in promo bubble when the user needs to verify their identity (reauthenticate).">
          Send a link to another device
-@@ -15035,14 +15035,14 @@
+@@ -15129,14 +15129,14 @@
  '''
        </message>
        <message name="IDS_REFUSE_TO_RUN_AS_ROOT" desc="Short error message displayed in an error dialog on startup if the user tries to run Chrome as root.">
@@ -4025,7 +4082,7 @@
          </message>
        </if>
  
-@@ -15277,7 +15277,7 @@
+@@ -15371,7 +15371,7 @@
          </message>
        </if>
        <message name="IDS_SYNC_START_SYNC_BUTTON_LABEL" desc="The label that appears on the sync button in the options dialog when sync has not been set up by the user.">
@@ -4034,7 +4091,7 @@
        </message>
        <message name="IDS_SIGNED_IN_WITH_SYNC_DISABLED_BY_POLICY" desc="The message that appears in the settings page indicating that user is signed in, but sync is disabled by enterprise policy.">
          Sync is disabled by your administrator.
-@@ -15710,7 +15710,7 @@
+@@ -15809,7 +15809,7 @@
          </message>
          <!-- App menu -->
          <message name="IDS_ABOUT_MAC" desc="In Title Case: The Mac menu item to open the about box.">
@@ -4043,7 +4100,7 @@
          </message>
          <message name="IDS_CLEAR_BROWSING_DATA_MAC" desc="In Title Case: The Mac menu item for clearing browsing data.">
            Delete Browsing Data...
-@@ -15722,7 +15722,7 @@
+@@ -15821,7 +15821,7 @@
            Services
          </message>
          <message name="IDS_HIDE_APP_MAC" desc="In Title Case: The Mac menu item to hide all browser windows in the app menu.">
@@ -4052,7 +4109,7 @@
          </message>
          <message name="IDS_HIDE_OTHERS_MAC" desc="In Title Case: The Mac menu item to hide other applications' windows in the app menu.">
            Hide Others
-@@ -15731,7 +15731,7 @@
+@@ -15830,7 +15830,7 @@
            Show All
          </message>
          <message name="IDS_EXIT_MAC" desc="In Title Case: The Mac menu item to quit the browser in the app menu.">
@@ -4061,7 +4118,7 @@
          </message>
          <!-- File menu -->
          <message name="IDS_NEW_MAC" desc="In Title Case: The Mac menu item for creating a new file in the file menu.">
-@@ -16009,7 +16009,7 @@
+@@ -16108,7 +16108,7 @@
            Report an Issue...
          </message>
          <message name="IDS_HELP_MAC" desc="The Mac menu item to show help in the Help menu.">
@@ -4070,7 +4127,7 @@
          </message>
        </if> <!-- is_macosx -->
  
-@@ -16376,15 +16376,15 @@
+@@ -16475,15 +16475,15 @@
        <!-- Extra Mac UI Strings -->
        <if expr="is_macosx">
          <message name="IDS_PLEASE_RELAUNCH_BROWSER" desc="Title of the alert when Chrome needs to be relaunched for a change/update to take effect.">
@@ -4089,7 +4146,7 @@
          </message>
          <message name="IDS_INSTALL_FROM_DMG_YES" desc="Button to approve installation from the disk image.  Mac-only.">
            Install
-@@ -16393,13 +16393,13 @@
+@@ -16492,13 +16492,13 @@
            Don't Install
          </message>
          <message name="IDS_INSTALL_FROM_DMG_AUTHENTICATION_PROMPT" desc="The prompt to be displayed in the authentication dialog when installing from the disk image.  The system will add a sentence asking for an administrator's name and password.  Mac-only.">
@@ -4105,7 +4162,7 @@
          </message>
        </if>
  
-@@ -16421,7 +16421,7 @@
+@@ -16520,7 +16520,7 @@
            Proxy Configuration Help
          </message>
          <message name="IDS_ABOUT_LINUX_PROXY_CONFIG_BODY" desc="HTML body of page shown on systems where system proxy configuration is unsupported.">
@@ -4114,7 +4171,7 @@
  
            &lt;p&gt;But you can still configure via the command line.  Please see &lt;code&gt;man <ph name="PRODUCT_BINARY_NAME">$2<ex>google-chrome</ex></ph>&lt;/code&gt; for more information on flags and environment variables.&lt;/p&gt;
          </message>
-@@ -17515,19 +17515,19 @@
+@@ -17614,19 +17614,19 @@
  
      <!-- Automation infobar -->
      <message name="IDS_CONTROLLED_BY_AUTOMATION" desc="Message shown when the browser session is being controlled by an automated test.">
@@ -4138,7 +4195,7 @@
      </message>
  
      <!-- Security Key permission -->
-@@ -17685,8 +17685,8 @@
+@@ -17784,8 +17784,8 @@
      <message name="IDS_FILE_SYSTEM_ACCESS_USAGE_BUBBLE_FILES_TEXT" desc="Text to display a list of files in the File System Access usage bubble">
        {0, plural, offset:2
          =1 {<ph name="FILE1">{1}<ex>README.md</ex></ph>}
@@ -4149,7 +4206,7 @@
        }
      </message>
      <message name="IDS_FILE_SYSTEM_ACCESS_USAGE_EXPAND" desc="Tooltip for and name of a button that shows (expands) a detailed list of files and directories">
-@@ -17813,7 +17813,7 @@
+@@ -17912,7 +17912,7 @@
        </message>
        <if expr="is_macosx">
          <message name="IDS_WEBAUTHN_YOUR_CHROME_PROFILE" desc="Menu item text. The user selects this to use a hardware-based authentication mechanism that is built in to the computer, such as a fingerprint reader. The credential itself is stored in the Chrome profile, however, and this text emphasizes that.">
@@ -4158,7 +4215,7 @@
          </message>
        </if>
        <message name="IDS_WEBAUTHN_TRANSPORT_INTERNAL" desc="Menu item text. The user selects this to use a hardware-based authentication mechanism that is built in to the computer, such as a fingerprint reader.">
-@@ -17903,7 +17903,7 @@
+@@ -18002,7 +18002,7 @@
  
        <if expr="is_macosx">
          <message name="IDS_WEBAUTHN_BLUETOOTH_PERMISSION" desc="Body text in a dialog that appears when the user has requested some function that depends on Bluetooth, but Chrome doesn't have permission to use Bluetooth. The action on this dialog is a button that will open the macOS System Settings so that the user can grant permission.">
@@ -4167,16 +4224,16 @@
          </message>
        </if>
  
-@@ -18079,7 +18079,7 @@
+@@ -18178,7 +18178,7 @@
          On other devices
        </message>
        <message name="IDS_WEBAUTHN_SOURCE_CHROME_PROFILE" desc="The subtitle shown in a button that lets the user select a passkey to sign in, indicating that the passkey resides in the user's Chrome Profile.">
 -        Your Helium profile
 +        Your Helium++ profile
        </message>
-       <message name="IDS_WEBAUTHN_SOURCE_ICLOUD_KEYCHAIN" desc="The subtitle shown in a button that lets the user select a passkey to sign in, indicating that the passkey resides in the user's iCloud Keychain.">
-         iCloud Keychain
-@@ -18539,24 +18539,24 @@
+       <message name="IDS_WEBAUTHN_SOURCE_ICLOUD_KEYCHAIN" desc="The subtitle shown in a button that lets the user select a passkey to sign in, indicating that the passkey resides in Apple Passwords. Apple Passwords is an Apple brand and should be translated the same as it is in Apple devices. If you edit the language code in https://support.apple.com/es-es/104955 you can see how Apple translates it in several languages. ('Passwords' is usually localized.)">
+         Apple Passwords
+@@ -18663,24 +18663,24 @@
      </message>
  
      <message name="IDS_TAILORED_SECURITY_ENABLED_DIALOG_MAIN_TEXT" desc="Title shown in the tab dialog when the account tailored security setting changes for a consented primary account">
@@ -4206,7 +4263,7 @@
      </message>
      <message name="IDS_TAILORED_SECURITY_UNCONSENTED_ACCEPT_BUTTON" desc="The text on the accept button in the tab modal dialog when the account tailored security setting changes for an unconsented primary account">
        Turn on
-@@ -18570,7 +18570,7 @@
+@@ -18694,7 +18694,7 @@
        Enhanced Safe Browsing is on
      </message>
      <message name="IDS_TAILORED_SECURITY_CONSENTED_ENABLE_MESSAGE_DESCRIPTION" desc="Description shown in the Android message when the account tailored security setting changes for a consented primary account">
@@ -4215,7 +4272,7 @@
      </message>
      <message name="IDS_TAILORED_SECURITY_CONSENTED_DISABLE_MESSAGE_TITLE" desc="Title shown in the Android message when the account tailored security setting changes for a consented primary account">
        Enhanced Safe Browsing is off
-@@ -18636,7 +18636,7 @@
+@@ -18760,7 +18760,7 @@
      </message>
  
      <message name="IDS_APP_PAUSE_HEADING_FOR_WEB_APPS" desc="Tells the user the app will be paused.">
@@ -4224,7 +4281,7 @@
      </message>
  
      <!-- App block prompt -->
-@@ -19192,10 +19192,10 @@
+@@ -19316,10 +19316,10 @@
          From your recent search
        </message>
        <message name="IDS_MULTISTEP_FILTER_IPH_BODY" desc="Text shown in the IPH bubble for educating users about Multistep Filter." translateable="false">
@@ -4237,7 +4294,7 @@
        </message>
        <message name="IDS_LINK_COPIED_TOAST_BODY" desc="Text on a toast notification that is shown when a link is successfully copied.">
          Link copied
-@@ -19258,7 +19258,7 @@
+@@ -19382,7 +19382,7 @@
          Close
        </message>
        <message name="IDS_NON_MILESTONE_UPDATE_TOAST_BODY" desc="Text on a toast notification that is shown when a non milestone update is complete.">
@@ -4246,7 +4303,7 @@
        </message>
        <message name="IDS_GLIC_SHARE_IMAGE_FAILED_TOAST_BODY" desc="Text on a toast notification that is shown when sharing an image with Gemini fails (when using the 'Create image with Gemini' context menu item)">
          Could not share image with Gemini. Try again or try another image.
-@@ -19497,7 +19497,7 @@
+@@ -19621,7 +19621,7 @@
        Launch application
      </message>
      <message name="IDS_IWA_INSTALLER_VERIFICATION_TITLE" desc="Title of the verification step of the IWA installation">
@@ -4255,7 +4312,7 @@
      </message>
      <message name="IDS_IWA_INSTALLER_VERIFICATION_SUBTITLE" desc="Subtitle of the verification step of the IWA installation">
        Please wait while verification is in progress
-@@ -19509,7 +19509,7 @@
+@@ -19633,7 +19633,7 @@
          other {Checking public key and integrity block... # minutes remaining}}
      </message>
      <message name="IDS_IWA_INSTALLER_VERIFICATION_ERROR_TITLE" desc="Title of an error popup during the verification step of the Isolated Web App installer">
@@ -4264,7 +4321,7 @@
      </message>
      <message name="IDS_IWA_INSTALLER_VERIFICATION_ERROR_SUBTITLE" desc="Subtitle of an error popup during the verification step of the Isolated Web App installer">
        This bundle might be broken or compromised. Please close this window and download it again
-@@ -19599,8 +19599,8 @@
+@@ -19723,8 +19723,8 @@
          </message>
          <message name="IDS_SETTINGS_SAFETY_HUB_REVOKED_PERMISSIONS_MENU_NOTIFICATION" desc="Title for the permissions review Safety Check module on the Magic Stack. Shown when Safety Check has identified several sites that send abusive notifications.">
            {NUM_SITES, plural,
@@ -4275,7 +4332,7 @@
          </message>
          <message name="IDS_SETTINGS_SAFETY_HUB_COMPROMISED_PASSWORDS_MENU_NOTIFICATION" desc="Summary for the compromised passwords Safety Check module on the Magic Stack. Shown when Safety Check has identified insecure credentials.">
            {NUM_SITES, plural,
-@@ -19619,7 +19619,7 @@
+@@ -19743,7 +19743,7 @@
  
      <!-- PDF Searchify elements. -->
      <message name="IDS_PDF_SEARCHIFY_IPH_TITLE" desc="Title of in product help to introduce PDF Searchify feature.">
@@ -4284,7 +4341,7 @@
      </message>
      <message name="IDS_PDF_SEARCHIFY_IPH_BODY" desc="Content of in product help to introduce PDF Searchify feature.">
      PDFs automatically get converted so you can search and select text
-@@ -19708,7 +19708,7 @@
+@@ -19832,7 +19832,7 @@
      Always allow
    </message>
    <message name="IDS_CHROME_NO_LONGER_SHOW_WARNINGS_NOTIFICATION_BODY" desc="The body for the notification sent by Chrome informing the user that their decision to never show warnings for the url has been applied.">
@@ -4293,7 +4350,7 @@
    </message>
    <message name="IDS_CHROME_NO_LONGER_SHOW_WARNINGS_NOTIFICATION_TITLE_NEW" desc="The title for the notification sent by Chrome informing the user that their decision to never show warnings for the url has been applied.">
      Notifications allowed from <ph name="DOMAIN">$1<ex>example.com</ex></ph>
-@@ -19720,13 +19720,13 @@
+@@ -19844,13 +19844,13 @@
      <!-- Chrome Apps Deprecation -->
      <if expr="is_chromeos">
        <message name="IDS_USER_INSTALLED_CHROME_APP_DEPRECATION_NOTIFICATION_MESSAGE" desc="Message of the notification displayed while launching a user-installed app.">
@@ -4309,7 +4366,7 @@
        </message>
        <message name="IDS_USER_INSTALLED_CHROME_APP_DEPRECATION_BLOCKED_LAUNCH_DIALOG_CLOSE_BUTTON" desc="The text of the button to dismiss the dialog displayed when a Chrome App launch is blocked.">
          Got it
-@@ -19807,10 +19807,10 @@
+@@ -19931,10 +19931,10 @@
        Choose your account
      </message>
      <message name="IDS_ACCOUNT_CHOOSER_SUBTITLE" desc="Text description for saving files to Drive via Chrome PDF viewer.">
@@ -4322,7 +4379,7 @@
      </message>
      <message name="IDS_ACCOUNT_CHOOSER_DRIVE" desc="Google Drive product name.">
        Drive
-@@ -19827,10 +19827,10 @@
+@@ -19951,10 +19951,10 @@
  
      <!-- Tips Notifications-->
      <message name="IDS_TIPS_NOTIFICATIONS_HELPFUL_BUTTON_TEXT" desc="Text for the helpful button found on tips notifications.">
@@ -4335,7 +4392,7 @@
      </message>
      <message name="IDS_TIPS_NOTIFICATIONS_ENHANCED_SAFE_BROWSING_SUBTITLE" desc="Subtitle for the enhanced safe browsing tip notification.">
        Add an extra layer of security against online threats with enhanced protection
-@@ -19860,7 +19860,7 @@
+@@ -19984,7 +19984,7 @@
        Create, save, and manage your passwords so you can easily sign in
      </message>
      <message name="IDS_TIPS_NOTIFICATIONS_SIGNIN_TITLE" desc="Title for the sign-in tip notification. [CHAR_LIMIT=32]">
@@ -4344,7 +4401,7 @@
      </message>
      <message name="IDS_TIPS_NOTIFICATIONS_SIGNIN_SUBTITLE" desc="Subtitle for the sign-in tip notification.">
        Sign in to easily continue on all your devices
-@@ -19881,7 +19881,7 @@
+@@ -20005,7 +20005,7 @@
        Pick up where you left off
      </message>
      <message name="IDS_TIPS_NOTIFICATIONS_RECENT_TABS_SUBTITLE" desc="Subtitle for the recent tabs tip notification.">
@@ -4353,7 +4410,7 @@
      </message>
  
      <!-- chrome://updater -->
-@@ -19908,7 +19908,7 @@
+@@ -20032,7 +20032,7 @@
          App Name or ID
        </message>
        <message name="IDS_UPDATER_APP_POLICIES" desc="Header for a section of the enterprise policy table detailing the policies in effect for a specific application.">
@@ -4362,7 +4419,7 @@
        </message>
        <message name="IDS_UPDATER_APP_STATES_QUERY_FAILED" desc="An error message indicating that the list of installed applications could not be retrieved from Chrome's updater.">
          Failed to query installed applications.
-@@ -20034,7 +20034,7 @@
+@@ -20158,7 +20158,7 @@
          Export History Files
        </message>
        <message name="IDS_UPDATER_FILTER_CHIP_APP" desc="Text displayed in a filter chip showing the selected application's names or identifier strings.">
@@ -4371,7 +4428,7 @@
        </message>
        <message name="IDS_UPDATER_FILTER_CHIP_DATE" desc="Text displayed in a filter chip showing the selected date range.">
          Date: <ph name="DATE_RANGE">$1<ex>Jan 1, 2025 to Feb 1, 2025</ex></ph>
-@@ -20049,7 +20049,7 @@
+@@ -20173,7 +20173,7 @@
          Updater Scope: <ph name="OUTCOMES">$1<ex>Per-system updater, Per-user updater</ex></ph>
        </message>
        <message name="IDS_UPDATER_HELP_CENTER_TOOLTIP" desc="Tooltip for the help center link about maintaining Chrome updates.">
@@ -4380,7 +4437,7 @@
        </message>
        <message name="IDS_UPDATER_INACTIVE_VERSIONS_LABEL" desc="A label for a list of inactive versions of the Chrome Updater. Multiple Chrome Updater versions may be present on a users machine but only one may be active at a time.">
          Inactive Versions:
-@@ -20217,7 +20217,7 @@
+@@ -20341,7 +20341,7 @@
          Update Error
        </message>
        <message name="IDS_UPDATER_VIEW_ALL_CHROME_POLICIES" desc="Label for a button that opens the chrome://policy page.">
@@ -4389,7 +4446,7 @@
        </message>
        <message name="IDS_UPDATER_VIEW_RAW_DETAILS" desc="Title of the button to display the contents of a Chrome Updater log in JSON format">
          Source
-@@ -20246,7 +20246,7 @@
+@@ -20370,7 +20370,7 @@
  
      <!-- Chrome finds Notifications -->
      <message name="IDS_CHROME_FINDS_NOTIFICATIONS_HELPFUL_BUTTON_TEXT" desc="Text for the helpful button found on Chrome finds notifications.">
@@ -4418,44 +4475,44 @@
    </message>
    <message name="IDS_SETTINGS_GLIC_INLINE_CUE_MENU_PREVIEW_PILL" desc="Text inside the floating pill in the preview box.">
      Explain
-@@ -324,22 +324,22 @@
+@@ -330,22 +330,22 @@
         and will be finalized and replaced next week. This also includes finalizing the links for
-        "Learn more about Gemini Spark" and "unexpected actions". -->
+        "Learn more about Gemini tasks" and "unexpected actions". -->
    <message name="IDS_GLIC_EXPERIMENTAL_OPT_IN_TITLE" desc="Title for the experimental opt-in dialog" is_accessibility_with_no_ui="true">
 -    First, turn on Helium auto browse for this device
 +    First, turn on Helium++ auto browse for this device
    </message>
    <message name="IDS_SETTINGS_GLIC_EXPERIMENTAL_TRIGGERING_TOGGLE" desc="Label for the Gemini experimental triggering setting" formatter_data="android_java">
-     Let Gemini Spark browse on this device
+     Let other Gemini apps browse remotely from any device
    </message>
-   <message name="IDS_SETTINGS_GLIC_EXPERIMENTAL_TRIGGERING_SUB_LABEL" desc="Sublabel explaining Gemini Spark feature." formatter_data="android_java">
--    Gemini Spark can use Helium auto browse on this device to interact with sites and complete tasks on your behalf. <ph name="LINK_BEGIN">&lt;a href="#"&gt;</ph>Learn more<ph name="LINK_END">&lt;/a&gt;</ph>
-+    Gemini Spark can use Helium++ auto browse on this device to interact with sites and complete tasks on your behalf. <ph name="LINK_BEGIN">&lt;a href="#"&gt;</ph>Learn more<ph name="LINK_END">&lt;/a&gt;</ph>
+   <message name="IDS_SETTINGS_GLIC_EXPERIMENTAL_TRIGGERING_SUB_LABEL" desc="Sublabel explaining the setting that lets other Gemini apps use Chrome auto browse on this device." formatter_data="android_java">
+-    When you start a task from other Gemini apps, including gemini.9oo91e.qjz9zk and Gemini mobile apps, Gemini can use Helium auto browse on this device to interact with sites and complete tasks on your behalf. <ph name="LINK_BEGIN">&lt;a href="#"&gt;</ph>Learn more<ph name="LINK_END">&lt;/a&gt;</ph>
++    When you start a task from other Gemini apps, including gemini.9oo91e.qjz9zk and Gemini mobile apps, Gemini can use Helium++ auto browse on this device to interact with sites and complete tasks on your behalf. <ph name="LINK_BEGIN">&lt;a href="#"&gt;</ph>Learn more<ph name="LINK_END">&lt;/a&gt;</ph>
    </message>
-   <message name="IDS_SETTINGS_GLIC_EXPERIMENTAL_TRIGGERING_SUB_LABEL_V2" desc="Sublabel explaining Gemini Spark feature with accessible link attributes.">
--    Gemini Spark can use Helium auto browse on this device to interact with sites and complete tasks on your behalf. <ph name="LINK_BEGIN">&lt;a href="$1" target="_blank" aria-label="$2" aria-description="$3"&gt;</ph>Learn more<ph name="LINK_END">&lt;/a&gt;</ph>
-+    Gemini Spark can use Helium++ auto browse on this device to interact with sites and complete tasks on your behalf. <ph name="LINK_BEGIN">&lt;a href="$1" target="_blank" aria-label="$2" aria-description="$3"&gt;</ph>Learn more<ph name="LINK_END">&lt;/a&gt;</ph>
+   <message name="IDS_SETTINGS_GLIC_EXPERIMENTAL_TRIGGERING_SUB_LABEL_V2" desc="Sublabel explaining the setting that lets other Gemini apps use Chrome auto browse on this device, with accessible link attributes.">
+-    When you start a task from other Gemini apps, including gemini.9oo91e.qjz9zk and Gemini mobile apps, Gemini can use Helium auto browse on this device to interact with sites and complete tasks on your behalf. <ph name="LINK_BEGIN">&lt;a href="$1" target="_blank" aria-label="$2" aria-description="$3"&gt;</ph>Learn more<ph name="LINK_END">&lt;/a&gt;</ph>
++    When you start a task from other Gemini apps, including gemini.9oo91e.qjz9zk and Gemini mobile apps, Gemini can use Helium++ auto browse on this device to interact with sites and complete tasks on your behalf. <ph name="LINK_BEGIN">&lt;a href="$1" target="_blank" aria-label="$2" aria-description="$3"&gt;</ph>Learn more<ph name="LINK_END">&lt;/a&gt;</ph>
    </message>
-   <message name="IDS_SETTINGS_GLIC_EXPERIMENTAL_TRIGGERING_SUB_LABEL_LEARN_MORE_LINK_LABEL" desc="Accessible name for the 'Learn more' link in the Gemini Spark toggle sublabel." is_accessibility_with_no_ui="true">
-     Learn more about Gemini Spark
+   <message name="IDS_SETTINGS_GLIC_EXPERIMENTAL_TRIGGERING_SUB_LABEL_LEARN_MORE_LINK_LABEL" desc="Accessible name for the 'Learn more' link in the experimental triggering toggle sublabel." is_accessibility_with_no_ui="true">
+     Learn more about Gemini tasks
    </message>
-   <message name="IDS_SETTINGS_GLIC_EXPERIMENTAL_TRIGGERING_WHEN_ON_1" desc="Bullet point explaining what happens when Gemini Spark is enabled." formatter_data="android_java">
--    Gemini Spark can only use auto browse on this device if the device is awake and Helium is running.
-+    Gemini Spark can only use auto browse on this device if the device is awake and Helium++ is running.
+   <message name="IDS_SETTINGS_GLIC_EXPERIMENTAL_TRIGGERING_WHEN_ON_1" desc="Bullet point explaining what happens when this setting is enabled." formatter_data="android_java">
+-    Gemini can only use auto browse on this device if the device is awake and Helium is running.
++    Gemini can only use auto browse on this device if the device is awake and Helium++ is running.
    </message>
-   <message name="IDS_SETTINGS_GLIC_EXPERIMENTAL_TRIGGERING_WHEN_ON_2" desc="Bullet point explaining notifications when Gemini Spark is enabled." formatter_data="android_java">
-     Gemini Spark will decide which actions to take based on the tasks you start or update.
-@@ -348,7 +348,7 @@
-     Gemini Spark will have access to the same sites as you, including the sites you’re signed in to. It will share necessary info with third parties, which could include personal info you might find sensitive.
+   <message name="IDS_SETTINGS_GLIC_EXPERIMENTAL_TRIGGERING_WHEN_ON_2" desc="Bullet point explaining notifications when this setting is enabled." formatter_data="android_java">
+     Gemini will decide which actions to take based on the tasks you start or update.
+@@ -354,7 +354,7 @@
+     Gemini will have access to the same sites as you, including the sites you’re signed in to. It will share necessary info with third parties, which could include personal info you might find sensitive.
    </message>
-   <message name="IDS_SETTINGS_GLIC_EXPERIMENTAL_TRIGGERING_CONSIDER_2" desc="Bullet point explaining access risk when enabling Gemini Spark." formatter_data="android_java">
--    Anybody with access to your Gemini Spark agent could control your Helium browser.
-+    Anybody with access to your Gemini Spark agent could control your Helium++ browser.
+   <message name="IDS_SETTINGS_GLIC_EXPERIMENTAL_TRIGGERING_CONSIDER_2" desc="Bullet point explaining access risk when enabling this setting." formatter_data="android_java">
+-    Anybody with access to your Gemini apps could control your Helium browser.
++    Anybody with access to your Gemini apps could control your Helium++ browser.
    </message>
-   <message name="IDS_SETTINGS_GLIC_EXPERIMENTAL_TRIGGERING_CONSIDER_3" desc="Bullet point explaining user responsibility and risks for Gemini Spark." formatter_data="android_java">
-     Gemini Spark is experimental and may do things like share your info or make purchases without asking. <ph name="LINK_BEGIN">&lt;a href="$1" target="_blank"&gt;</ph>Review the risks<ph name="LINK_END">&lt;/a&gt;</ph>.
-@@ -360,16 +360,16 @@
-     Review the risks of Gemini Spark
+   <message name="IDS_SETTINGS_GLIC_EXPERIMENTAL_TRIGGERING_CONSIDER_3" desc="Bullet point explaining user responsibility and risks for this setting." formatter_data="android_java">
+     Gemini may make mistakes, like sharing your info or making purchases without asking. <ph name="LINK_BEGIN">&lt;a href="$1" target="_blank"&gt;</ph>Review the risks<ph name="LINK_END">&lt;/a&gt;</ph>.
+@@ -366,16 +366,16 @@
+     Review the risks of using Gemini
    </message>
    <message name="IDS_SETTINGS_GLIC_PERMISSIONS_CHROME_WEB_ACTUATION_TOGGLE" desc="Title for the Gemini feature introduction screen" formatter_data="android_java">
 -    Let Helium browse for you
@@ -5638,7 +5695,7 @@
        </message>
  
        <!-- Realbox Strings -->
-@@ -1321,159 +1321,159 @@
+@@ -1321,190 +1321,190 @@
        <!-- Signin Email Confirmation tab modal dialog -->
        <if expr="not is_chromeos">
          <message name="IDS_SIGNIN_EMAIL_CONFIRMATION_TITLE" desc="Title of the signin email confirmation tab modal dialog.">
@@ -5741,6 +5798,47 @@
          <message name="IDS_ACCOUNT_PREVIEW_PROFILE_SEPARATION_SUBTITLE_EXTENSIONS" desc="Body of the web signin interception bubble with account preview, informing the user they can keep accounts separate and access extensions on all their devices.">
 -          <ph name="EXISTING_USER">$1<ex>Elisa</ex></ph> is already signed in. To keep your browsing separate, sign in to Helium in your own profile as <ph name="USER_EMAIL_ADDRESS">$2<ex>bob.beckett@9ma1l.qjz9zk</ex></ph>. You’ll also get your extensions and more on all your devices.
 +          <ph name="EXISTING_USER">$1<ex>Elisa</ex></ph> is already signed in. To keep your browsing separate, sign in to Helium++ in your own profile as <ph name="USER_EMAIL_ADDRESS">$2<ex>bob.beckett@9ma1l.qjz9zk</ex></ph>. You’ll also get your extensions and more on all your devices.
+         </message>
+         <!-- Account Preview Settings Signin Promo Subtitles -->
+         <message name="IDS_ACCOUNT_PREVIEW_SETTINGS_PROMO_SUBTITLE_PASSWORDS_WITH_DEVICE" desc="Subtitle of a sign-in promo in Settings informing the user they can access their passwords from their other device.">
+-          To get your passwords and more from <ph name="DEVICE">$1<ex>your phone</ex></ph>, sign in to Helium
++          To get your passwords and more from <ph name="DEVICE">$1<ex>your phone</ex></ph>, sign in to Helium++
+         </message>
+         <message name="IDS_ACCOUNT_PREVIEW_SETTINGS_PROMO_SUBTITLE_BOOKMARKS_WITH_DEVICE" desc="Subtitle of a sign-in promo in Settings informing the user they can access their bookmarks from their other device.">
+-          To get your bookmarks and more from <ph name="DEVICE">$1<ex>your phone</ex></ph>, sign in to Helium
++          To get your bookmarks and more from <ph name="DEVICE">$1<ex>your phone</ex></ph>, sign in to Helium++
+         </message>
+         <message name="IDS_ACCOUNT_PREVIEW_SETTINGS_PROMO_SUBTITLE_SAVED_INFO_WITH_DEVICE" desc="Subtitle of a sign-in promo in Settings informing the user they can access their saved info (such as autofill data, addresses, and payment methods) from their other device.">
+-          To get your saved info and more from <ph name="DEVICE">$1<ex>your phone</ex></ph>, sign in to Helium
++          To get your saved info and more from <ph name="DEVICE">$1<ex>your phone</ex></ph>, sign in to Helium++
+         </message>
+         <message name="IDS_ACCOUNT_PREVIEW_SETTINGS_PROMO_SUBTITLE_READING_LIST_WITH_DEVICE" desc="Subtitle of a sign-in promo in Settings informing the user they can access their reading list from their other device.">
+-          To get your reading list and more from <ph name="DEVICE">$1<ex>your phone</ex></ph>, sign in to Helium
++          To get your reading list and more from <ph name="DEVICE">$1<ex>your phone</ex></ph>, sign in to Helium++
+         </message>
+         <message name="IDS_ACCOUNT_PREVIEW_SETTINGS_PROMO_SUBTITLE_EXTENSIONS_WITH_DEVICE" desc="Subtitle of a sign-in promo in Settings informing the user they can access their extensions from their computer. Only desktop/computer DEVICE are supported for extensions.">
+-          To get your extensions and more from <ph name="DEVICE">$1<ex>your computer</ex></ph>, sign in to Helium
++          To get your extensions and more from <ph name="DEVICE">$1<ex>your computer</ex></ph>, sign in to Helium++
+         </message>
+         <message name="IDS_ACCOUNT_PREVIEW_SETTINGS_PROMO_SUBTITLE_PASSWORDS" desc="Subtitle of a sign-in promo in Settings informing the user they can access their passwords on all their devices.">
+-          To get your passwords and more on all your devices, sign in to Helium
++          To get your passwords and more on all your devices, sign in to Helium++
+         </message>
+         <message name="IDS_ACCOUNT_PREVIEW_SETTINGS_PROMO_SUBTITLE_BOOKMARKS" desc="Subtitle of a sign-in promo in Settings informing the user they can access their bookmarks on all their devices.">
+-          To get your bookmarks and more on all your devices, sign in to Helium
++          To get your bookmarks and more on all your devices, sign in to Helium++
+         </message>
+         <message name="IDS_ACCOUNT_PREVIEW_SETTINGS_PROMO_SUBTITLE_SAVED_INFO" desc="Subtitle of a sign-in promo in Settings informing the user they can access their saved info (such as autofill data, addresses, and payment methods) on all their devices.">
+-          To get your saved info and more on all your devices, sign in to Helium
++          To get your saved info and more on all your devices, sign in to Helium++
+         </message>
+         <message name="IDS_ACCOUNT_PREVIEW_SETTINGS_PROMO_SUBTITLE_READING_LIST" desc="Subtitle of a sign-in promo in Settings informing the user they can access their reading list on all their devices.">
+-          To get your reading list and more on all your devices, sign in to Helium
++          To get your reading list and more on all your devices, sign in to Helium++
+         </message>
+         <message name="IDS_ACCOUNT_PREVIEW_SETTINGS_PROMO_SUBTITLE_EXTENSIONS" desc="Subtitle of a sign-in promo in Settings informing the user they can access their extensions on all their devices.">
+-          To get your extensions and more on all your devices, sign in to Helium
++          To get your extensions and more on all your devices, sign in to Helium++
          </message>
          <message name="IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_CHROME_SIGNIN_SUBTITLE" desc="Subtitle of the Chrome Signin Bubble intercept that is shown when a signed out user signs in on the web with it's first account.">
 -          To get your passwords and more on all your devices, sign in to Helium
@@ -5845,7 +5943,7 @@
          </message>
        </if>
  
-@@ -1487,7 +1487,7 @@
+@@ -1518,7 +1518,7 @@
              ChromeOS Flex could not sync your data because your account sign-in details are out of date.
            </message>
            <message name="IDS_SYNC_SIGN_IN_ERROR_BUBBLE_VIEW_MESSAGE_2" desc="Message in the sign-in error notification when the user's sign-in credentials are out of date.">
@@ -5854,7 +5952,7 @@
            </message>
            <message name="IDS_SYNC_UNAVAILABLE_ERROR_BUBBLE_VIEW_MESSAGE" desc="Message in the sign-in error notification when sync is not available for their domain.">
              ChromeOS Flex could not sync your data because Sync is not available for your domain.
-@@ -1496,7 +1496,7 @@
+@@ -1527,7 +1527,7 @@
              ChromeOS Flex could not sync your data due to an error signing in.
            </message>
            <message name="IDS_SYNC_OTHER_SIGN_IN_ERROR_BUBBLE_VIEW_MESSAGE_2" desc="Message in the sign-in error notification when there's an error signing in.">
@@ -5863,7 +5961,7 @@
            </message>
          </if>
          <if expr="not reven">
-@@ -1507,7 +1507,7 @@
+@@ -1538,7 +1538,7 @@
              ChromeOS could not sync your data because your account sign-in details are out of date.
            </message>
            <message name="IDS_SYNC_SIGN_IN_ERROR_BUBBLE_VIEW_MESSAGE_2" desc="Message in the sign-in error notification when the user's sign-in credentials are out of date.">
@@ -5872,7 +5970,7 @@
            </message>
            <message name="IDS_SYNC_UNAVAILABLE_ERROR_BUBBLE_VIEW_MESSAGE" desc="Message in the sign-in error notification when sync is not available for their domain.">
              ChromeOS could not sync your data because Sync is not available for your domain.
-@@ -1516,137 +1516,137 @@
+@@ -1547,137 +1547,137 @@
              ChromeOS could not sync your data due to an error signing in.
            </message>
            <message name="IDS_SYNC_OTHER_SIGN_IN_ERROR_BUBBLE_VIEW_MESSAGE_2" desc="Message in the sign-in error notification when there's an error signing in.">
@@ -6045,7 +6143,7 @@
          </message>
        </if>
  
-@@ -1654,40 +1654,40 @@
+@@ -1685,40 +1685,40 @@
        <if expr="not is_android and not is_chromeos">
          <!-- User pod remove sync warning text -->
          <message name="IDS_LOGIN_POD_USER_REMOVE_WARNING_SYNC" desc="Main text shown as a warning when attempting to remove an user.">
@@ -6096,7 +6194,7 @@
          </message>
          <message name="IDS_TUTORIAL_PASSWORD_MANAGER_CLICK_PASSWORD_MANAGER" desc="The description of the 'click password manager' step in password manager tutorial">
            Click “Google Password Manager”
-@@ -1710,84 +1710,84 @@
+@@ -1741,84 +1741,84 @@
  
        <!-- Settings API bubble -->
        <message name="IDS_EXTENSIONS_SETTINGS_API_SECOND_LINE_START_PAGES" desc="Second line in the Settings API bubble. Only shown if the secondary change by the extension was just the start pages. The triple single quotes are needed to preserve the space before and after the sentence which is needed when the language (Chrome is being translated to) uses space as word separator. Please preserve them, unless the language being translated to does not use space as word separator.">
@@ -6202,7 +6300,7 @@
            </message>
          </if>
        </if>
-@@ -1795,13 +1795,13 @@
+@@ -1826,13 +1826,13 @@
        <!-- Update Recommended dialog -->
        <if expr="not is_chromeos">
          <message name="IDS_UPDATE_RECOMMENDED_DIALOG_TITLE" desc="The window title for the Update Recommended dialog.">
@@ -6220,7 +6318,7 @@
          </message>
          <message name="IDS_RELAUNCH_AND_UPDATE" desc="The button in the Update Recommended dialog which updates and relaunches Chrome.">
            Relaunch
-@@ -1831,74 +1831,74 @@
+@@ -1862,74 +1862,74 @@
  
        <if expr="is_win or is_macosx or is_linux">
          <message name="IDS_UPDATE_RECOMMENDED_DIALOG_TITLE_ALT" desc="Alternate window title for the Update Recommended dialog.">
@@ -6314,7 +6412,7 @@
          </message>
        </if>
        <message name="IDS_RECOVERY_BUBBLE_TEXT" desc="Text for the chrome recovery bubble view full description.">
-@@ -1907,80 +1907,80 @@
+@@ -1938,80 +1938,80 @@
  
        <!-- Critical Notification bubble -->
        <message name="IDS_CRITICAL_NOTIFICATION_TITLE" desc="The title for a bubble that appears when there is a critical update and Chrome must restart to install it. It counts down a timer and then Chrome automatically restarts.">
@@ -6417,7 +6515,7 @@
          </message>
          <message name="IDS_LOCAL_NETWORK_ACCESS_PERMISSION_DESC" desc="Text shown in the macOS permission dialog, describing why Chrome needs the permission to access local network.">
            This will allow you to select from available devices and display content on them.
-@@ -1989,12 +1989,12 @@
+@@ -2020,12 +2020,12 @@
  
        <!-- Side panel strings -->
        <message name="IDS_SIDE_PANEL_CUSTOMIZE_CHROME_TITLE" desc="The name of the Customize Chrome feature in the side panel combo box.">
@@ -6432,7 +6530,7 @@
        </message>
  
        <!-- Lens Overlay Strings -->
-@@ -2272,7 +2272,7 @@
+@@ -2303,7 +2303,7 @@
            Learn more
          </message>
          <message name="IDS_LENS_PERMISSION_BUBBLE_DIALOG_LEARN_MORE_ABOUT_GOOGLE_LENS_LINK" desc="Accessibility label for text link that is shown to users to learn more about privacy in relation to Google Lens.">
@@ -6441,7 +6539,7 @@
          </message>
          <message name="IDS_LENS_PERMISSION_BUBBLE_DIALOG_TITLE" desc="The title of the lens permission search bubble dialog, introducing Lens as a way to search what's on their screen.">
            Search anything on this page with Google Lens
-@@ -2339,18 +2339,18 @@
+@@ -2370,18 +2370,18 @@
  
          <!-- On Sign-in Avatar Button Label Desktop -->
          <message name="IDS_AVATAR_BUTTON_MAKING_CHROME_YOURS" desc="The avatar button label when the user has just signed in. When clicked, it opens the profile menu.">
@@ -6463,7 +6561,7 @@
            </message>
          </if>
        </if>
-@@ -2358,7 +2358,7 @@
+@@ -2389,7 +2389,7 @@
        <!-- OOBE -->
        <if expr="is_chromeos">
          <message name="IDS_INSTALLING_UPDATE" desc="Label shown on the updates installation screen during OOBE">
@@ -6472,7 +6570,7 @@
          </message>
          <if expr="reven">
            <message name="IDS_EULA_SCREEN_ACCESSIBLE_TITLE" desc="Title to be spoken on opening the OOBE EULA screen">
-@@ -2375,7 +2375,7 @@
+@@ -2406,7 +2406,7 @@
        <!-- Native notifications for Windows 10 -->
        <if expr="is_win">
          <message name="IDS_WIN_NOTIFICATION_SETTINGS_CONTEXT_MENU_ITEM_NAME" desc="The name of the button in Windows Notification Center which leads to Chrome notification settings.">
@@ -6481,7 +6579,7 @@
          </message>
        </if>
        <!-- Relaunch notification bubble and dialog. -->
-@@ -2383,51 +2383,51 @@
+@@ -2414,51 +2414,51 @@
          <if expr="not is_chromeos">
            <message name="IDS_RELAUNCH_RECOMMENDED_TITLE" desc="The title of a dialog that tells users that a browser relaunch is recommended for an update available for some number of days.">
              {0, plural,
@@ -6555,7 +6653,7 @@
            </message>
          </if>
        </if>
-@@ -2435,63 +2435,63 @@
+@@ -2466,63 +2466,63 @@
        <!-- Chrome launch blocking dialog. -->
        <if expr="not is_android and not is_chromeos">
          <message name="IDS_ENTERPRISE_STARTUP_CLOUD_POLICY_ENROLLMENT_TOOLTIP" desc="The information message of Chrome launch blocking dialog for machine level user cloud policy enrollment.">
@@ -6637,7 +6735,7 @@
        </message>
      </if>
  
-@@ -2512,56 +2512,56 @@
+@@ -2543,56 +2543,56 @@
        <!-- Chrome parent extension/app install blocking dialog. -->
        <if expr="enable_extensions_core">
          <message name="IDS_EXTENSION_PERMISSIONS_BLOCKED_BY_PARENT_PROMPT_MESSAGE" desc="Text for the dialog indicating that a parent has blocked extensions and apps.">
@@ -6708,16 +6806,12 @@
          </message>
          <message name="IDS_FRE_WELCOME_METRICS_POPUP_TITLE" desc="This is the title of a setting in a dialog regarding technical data sharing. It refers to data about app performance and stability. (CHAR LIMIT = 35)">
            Usage statistics and crash reports
-@@ -2577,60 +2577,60 @@
+@@ -2608,57 +2608,57 @@
          </message>
  
          <message name="IDS_FRE_SIGN_IN_TITLE_0" meaning="Title" desc="This string appears as a heading on a full-page screen that asks the user to sign in to Chrome with their Google Account. It appears when the user launches Chrome for the first time. When they sign in, they can personalize and customize Chrome and remember their settings in their Google Account. The tone should be inviting and alluring.">
 -          Sign in to Helium
 +          Sign in to Helium++
-         </message>
-         <message name="IDS_FRE_GET_YOUR_BROWSER_READY_TITLE" meaning="Title" desc="It appears when the user launches Chrome for the first time on the page that is displayed before the sign in page. When they sign in, they can personalize and customize Chrome and remember their settings in their Google Account. The tone should be inviting and alluring.">
--          Let's get your Helium ready
-+          Let's get your Helium++ ready
          </message>
  
          <!-- Default Browser Promo -->
@@ -6785,7 +6879,7 @@
          </message>
  
          <!-- Feature Showcase - Google Password Manager -->
-@@ -2638,7 +2638,7 @@
+@@ -2666,7 +2666,7 @@
            Stay safe with Google Password Manager
          </message>
          <message name="IDS_FEATURE_SHOWCASE_PASSWORD_MANAGER_SUBTITLE" desc="Description for the Password Manager page in the Feature Showcase.">
@@ -6794,7 +6888,7 @@
          </message>
  
          <!-- Feature Showcase - Lens Overlay -->
-@@ -2651,32 +2651,32 @@
+@@ -2679,32 +2679,32 @@
  
          <!-- Feature Showcase - Gemini -->
          <message name="IDS_FEATURE_SHOWCASE_GEMINI_TITLE" desc="This is the headline for the Gemini (AI assistant) opt-in screen. It introduces the benefit of AI assistance for productivity. (CHAR LIMIT = 60)">
@@ -6833,7 +6927,7 @@
        </message>
        <message name="IDS_TAILORED_SECURITY_UNCONSENTED_PROMOTION_MESSAGE_DESCRIPTION" desc="Description shown in the message shown when a user changes their account-level tailored security setting encouraging them to enable Enhanced Safe Browsing">
          Enhanced protection does more to block phishing and malware
-@@ -2691,34 +2691,34 @@
+@@ -2719,34 +2719,34 @@
        <!-- Launch On Startup -->
        <if expr="is_win">
          <message name="IDS_SETTINGS_FOREGROUND_LAUNCH_ON_STARTUP_LABEL" desc="Label for settings toggle button that enables or disables opening Chrome on system startup">
@@ -6877,7 +6971,7 @@
        </message>
  
        <!-- GoogleUpdater Strings -->
-@@ -2772,13 +2772,13 @@
+@@ -2800,13 +2800,13 @@
            Canceling...
          </message>
          <message name="IDS_TEXT_RESTART_BROWSER" desc="For when a browser must be restarted to complete the installation.">
@@ -6894,7 +6988,7 @@
          </message>
          <message name="IDS_UPDATER_CLOSE" desc="For close button on the UI post install completion.">
            Close
-@@ -2945,277 +2945,277 @@
+@@ -2973,196 +2973,196 @@
        <!-- Memory Saver Chip strings -->
        <if expr="not is_android">
          <message name="IDS_MEMORY_SAVER_DIALOG_BODY" desc="Body text for a dialog describing that Memory Saver mode will use less memory.">
@@ -7095,6 +7189,13 @@
 +          Show Gemini in Helium++ in system tray
          </message>
        </if>
+ 
+       <!-- GEiC (Gemini Enterprise in Chrome) settings -->
+       <message name="IDS_SETTINGS_GEIC_SECTION_TITLE" desc="Text of the Gemini Enterprise section header on the AI settings page. Also used as the label of the row button leading to the Gemini Enterprise subpage, and as the title of that subpage.">
+-        Gemini Enterprise in Helium
++        Gemini Enterprise in Helium++
+       </message>
+ 
        <if expr="is_macosx">
          <message name="IDS_OMNIBOX_EVERYWHERE_STATUS_ICON_MENU_TOGGLE" desc="In Title Case: Label for the toggle item in the Search in Chrome status tray context menu.">
 -          Open Search with Helium
@@ -7107,9 +7208,9 @@
 +          Open search with Helium++
          </message>
        </if>
-       <message name="IDS_OMNIBOX_EVERYWHERE_STATUS_ICON_TOOLTIP" desc="Tooltip text for the Search in Chrome status tray icon.">
--        Search in Helium
-+        Search in Helium++
+       <message name="IDS_OMNIBOX_EVERYWHERE_STATUS_ICON_TOOLTIP" desc="Tooltip text for the Search with Chrome status tray icon.">
+-        Search with Helium
++        Search with Helium++
        </message>
        <message name="IDS_OMNIBOX_EVERYWHERE_PROFILE_TOOLTIP" desc="Tooltip header for the profile icon in Omnibox Everywhere.">
 -        Helium profile
@@ -7119,8 +7220,22 @@
 -        Search with Helium
 +        Search with Helium++
        </message>
+       <if expr="is_win">
+         <message name="IDS_OMNIBOX_EVERYWHERE_NAME_BETA" desc="Name of the desktop search feature (Omnibox Everywhere) used for window titles and shortcuts in Chrome Beta.">
+-          Search with Helium Beta
++          Search with Helium++ Beta
+         </message>
+         <message name="IDS_OMNIBOX_EVERYWHERE_NAME_DEV" desc="Name of the desktop search feature (Omnibox Everywhere) used for window titles and shortcuts in Chrome Dev.">
+-          Search with Helium Dev
++          Search with Helium++ Dev
+         </message>
+         <message name="IDS_OMNIBOX_EVERYWHERE_NAME_CANARY" desc="Name of the desktop search feature (Omnibox Everywhere) used for window titles and shortcuts in Chrome Canary.">
+-          Search with Helium Canary
++          Search with Helium++ Canary
+         </message>
+       </if>
        <message name="IDS_SETTINGS_OMNIBOX_EVERYWHERE_TITLE" desc="Title of the Omnibox Everywhere section on the search settings page.">
-         Search from desktop
+@@ -3170,94 +3170,94 @@
        </message>
        <if expr="is_macosx">
          <message name="IDS_SETTINGS_OMNIBOX_EVERYWHERE_TOGGLE" desc="Name of the toggle that controls whether Search with Chrome is shown in the Mac menu bar (on Mac only).">
@@ -7153,8 +7268,8 @@
 +        Search with Helium++ from anywhere
        </message>
        <message name="IDS_LOOMNIBOX_FRE_LENS_SECONDARY" desc="Secondary description detailing Google Lens functionality in Loomnibox.">
--        Ask about content outside of Helium, like another app or file you have open
-+        Ask about content outside of Helium++, like another app or file you have open
+-        Ask about content outside of Helium, like other apps or files
++        Ask about content outside of Helium++, like other apps or files
        </message>
        <message name="IDS_LOOMNIBOX_FRE_TO_SEARCH_OR_CUSTOMIZE" desc="Text in the Stage 2 FRE chin following the shortcut dropdown indicating it searches with Chrome or customizes in settings.">
 -        to search with Helium or customize in <ph name="BEGIN_LINK">&lt;a href="#" class="settings-link"&gt;</ph>Settings<ph name="END_LINK">&lt;/a&gt;</ph>
@@ -7183,10 +7298,6 @@
        <message name="IDS_SETTINGS_GLIC_SELECTION_SHORTCUT_SUBLABEL" desc="Sublabel describing the selection shortcut triggering in Gemini.">
 -        To select part of the screen in Gemini in Helium, use keyboard shortcut.
 +        To select part of the screen in Gemini in Helium++, use keyboard shortcut.
-       </message>
-       <message name="IDS_SETTINGS_GLIC_HOTKEY_SCOPE_CHROME" desc="Label for the 'In Chrome' option in the shortcut invocation scope dropdown.">
--        In Helium
-+        In Helium++
        </message>
  
        <!-- Profile Picker Glic version-->
@@ -7242,7 +7353,7 @@
        </message>
        <message name="IDS_DICE_MIGRATION_CONFIRMATION_TOAST_BUTTON" desc="The text on the button of the confirmation toast shown after the user clicks on the accept button on the Dice Migration dialog, that allows the users to control the sync settings or sign out of Chrome.">
          Manage
-@@ -3225,12 +3225,12 @@
+@@ -3267,12 +3267,12 @@
        <if expr="not is_android">
          <if expr="use_titlecase">
            <message name="IDS_PROFILE_MENU_ACCOUNT_SETTINGS_BUTTON" desc="Button in the avatar menu bubble view for opening Chrome account settings.">
@@ -7257,7 +7368,7 @@
            </message>
          </if>
        </if>
-@@ -3251,7 +3251,7 @@
+@@ -3293,7 +3293,7 @@
          </if>
  
          <message name="IDS_DICTATION_ONBOARDING_TITLE" desc="The title string in the onboarding dialog for the dictation feature." translateable="false">
@@ -7266,7 +7377,7 @@
          </message>
          <message name="IDS_DICTATION_ONBOARDING_BULLET_MICROPHONE" desc="The first paragraph in the onboarding dialog describing how the microphone is used." translateable="false">
            Your microphone will be used to capture your voice
-@@ -3264,140 +3264,140 @@
+@@ -3306,140 +3306,140 @@
        <!--Desktop to iOS promo strings-->
        <if expr="not is_android">
          <message name="IDS_IOS_DESKTOP_ESB_PROMO_BUBBLE_DESCRIPTION_REMINDER" desc="The description for the iOS desktop ESB promo bubble with a reminder button.">
@@ -7449,7 +7560,7 @@
          </message>
        </if>
  
-@@ -3406,7 +3406,7 @@
+@@ -3448,7 +3448,7 @@
          Your settings were changed by an unknown app
        </message>
        <message name="IDS_DEFAULT_SEARCH_ENGINE_RESET_NOTIFICATION_BODY" desc="Body text of the notification shown when Chrome resets the default search engine, explaining that a change from outside Chrome was detected.">
@@ -7458,7 +7569,7 @@
        </message>
        <message name="IDS_DEFAULT_SEARCH_ENGINE_RESET_NOTIFICATION_GOT_IT_BUTTON" desc="Label for the 'Got it' button in the default search engine reset notification, which dismisses the UI.">
          Got it
-@@ -3431,16 +3431,16 @@
+@@ -3473,16 +3473,16 @@
  
        <!-- JS optimizations bubble -->
        <message name="IDS_JS_OPTIMIZATION_BUBBLE_BODY_NON_POLICY_BODY" desc="Body text for the JavaScript optimization bubble when disabled for other reasons.">
@@ -7478,7 +7589,7 @@
        </message>
  
         <!-- Contextual Tasks -->
-@@ -3449,10 +3449,10 @@
+@@ -3494,10 +3494,10 @@
        </message>
        <!-- Enterprise device signals disclaimer -->
        <message name="IDS_ENTERPRISE_DEVICE_SIGNALS_DISCLAIMER_TITLE" desc="Title of an enterprise device signals collection disclaimer modal dialog. The dialog is shown on Chrome startup to managed Chrome users who have not previously acknowledged device signals collection.">
@@ -7567,7 +7678,7 @@
    </message>
    <message name="IDS_SETTINGS_IN_SESSION_AUTH_ORIGIN_NAME_PROMPT_LOCATION" desc="Location in text shown in the auth dialog to indicate we are currently authenticating for ChromeOS settings">
      ChromeOS Settings
-@@ -4643,7 +4643,7 @@
+@@ -4633,7 +4633,7 @@
      Block traffic without VPN
    </message>
    <message name="IDS_SETTINGS_INTERNET_NETWORK_ALWAYS_ON_VPN_LOCKDOWN_SUBLABEL" desc="Settings &gt; Internet &gt; VPN: Sublabel for the toggle that enables always-on VPN lockdown.">
@@ -7576,7 +7687,7 @@
    </message>
    <message name="IDS_SETTINGS_INTERNET_NETWORK_ALWAYS_ON_VPN_SERVICE" desc="Settings &gt; Internet &gt; VPN: Label for the dropdown menu determining which VPN client will be automatically started on login.">
      VPN service
-@@ -5178,7 +5178,7 @@
+@@ -5168,7 +5168,7 @@
      Notifications
    </message>
    <message name="IDS_SETTINGS_MULTIDEVICE_PHONE_HUB_TASK_CONTINUATION_SECTION_TITLE" desc="The title of the Phone Hub Task Continuation section on the settings page.">
@@ -7585,7 +7696,7 @@
    </message>
    <message name="IDS_SETTINGS_MULTIDEVICE_PHONE_HUB_APPS_SECTION_TITLE" desc="The title of the Phone Hub Apps section on the settings page.">
      Apps
-@@ -5205,7 +5205,7 @@
+@@ -5195,7 +5195,7 @@
      View, dismiss, and reply to your phone’s notifications
    </message>
    <message name="IDS_SETTINGS_MULTIDEVICE_PHONE_HUB_TASK_CONTINUATION_SUMMARY" desc="Description of for the 'Phone Hub Task Continuation' setting. This feature lets users resume in-app actions and chrome tabs that are open on a connected Android phone from ChromeOS devices.">
@@ -7594,7 +7705,7 @@
    </message>
    <message name="IDS_SETTINGS_MULTIDEVICE_PHONE_HUB_APPS_SUMMARY" desc="Description of for the 'Phone Hub Apps' setting. This feature lets users streaming apps from a Android phone to Chrome OS device.">
      Stream your phone's apps
-@@ -5223,10 +5223,10 @@
+@@ -5213,10 +5213,10 @@
      View your phone's photos, media, notifications, and apps
    </message>
    <message name="IDS_SETTINGS_MULTIDEVICE_PHONE_HUB_TASK_CONTINUATION_DISABLED_SUMMARY" desc="Description of for the 'Phone Hub Task Continuation' setting when Chrome sync is not enabled. This feature lets users resume in-app actions and chrome tabs that are open on a connected Android phone from ChromeOS devices.">
@@ -7607,7 +7718,7 @@
    </message>
    <message name="IDS_SETTINGS_MULTIDEVICE_NOTIFICATION_ACCESS_SETUP_DIALOG_ACK_TITLE" desc="The title of the dialog containing the Phone Hub notification opt-in flow shown when the Phone Hub 'Notifications' toggle is switched on.">
      View notifications from your phone on your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>
-@@ -5298,10 +5298,10 @@
+@@ -5288,10 +5288,10 @@
      Sync Wi-Fi networks with your phone. <ph name="LINK_BEGIN">&lt;a target="_blank" href="$1<ex>https://9oo91e.qjz9zk/</ex>"&gt;</ph>Learn more<ph name="LINK_END">&lt;/a&gt;</ph>
    </message>
    <message name="IDS_SETTINGS_MULTIDEVICE_ENABLE_WIFI_SYNC_V1_SUMMARY" desc="Description for the 'Wifi Sync' section on the settings page when the prerequisite 'Chrome Sync' setting is not activated. This feature lets the user sync wifi network configurations between ChromeOS devices and a connected Android phone. The description contains a link that leads to the toggle where the prerequisite 'Chrome Sync' feature can be turned on and a 'Learn More' link to learn more about the 'Wifi Sync' feature.">
@@ -7620,7 +7731,7 @@
    </message>
    <message name="IDS_SETTINGS_MULTIDEVICE_WIFI_SYNC_LEARN_MORE_LABEL" desc="Accessibility label (used by screen readers, not shown in UI) for a link that leads to a page with more information about the 'Wifi Sync' feature. This feature lets the user sync wifi network configurations between ChromeOS devices and a connected Android phone.">
      Wi-Fi Sync, Learn More
-@@ -5789,7 +5789,7 @@
+@@ -5779,7 +5779,7 @@
      Battery saver
    </message>
    <message name="IDS_SETTINGS_POWER_BATTERY_SAVER_SUBTEXT" desc="In Device Settings &gt; Power, description of the behavior of battery saver mode">
@@ -7629,7 +7740,7 @@
    </message>
  
    <!-- Reset Page (OS settings)-->
-@@ -6450,7 +6450,7 @@
+@@ -6440,7 +6440,7 @@
      More web app settings and permissions
    </message>
    <message name="IDS_OS_SETTINGS_APP_PERMISSIONS_TITLE_CHROME_APP" desc="Label for a link to more settings and permissions for an app with type Chrome app.">
@@ -7638,7 +7749,7 @@
    </message>
    <message name="IDS_OS_SETTINGS_OPEN_IN_APP_TITLE" desc="Label for the intent sharing option to open in a specified app.">
      Open in <ph name="APP_NAME">$1<ex>Calculator</ex></ph> app
-@@ -6535,7 +6535,7 @@
+@@ -6525,7 +6525,7 @@
      Notifications won't pop up on the screen. You can still see notifications by clicking the Do Not Disturb icon on the bottom right of your screen.
    </message>
    <message name="IDS_SETTINGS_APP_NOTIFICATIONS_LINK_TO_BROWSER_SETTINGS_DESCRIPTION" desc="In notifications OS Settings subpage, explanatory text for website notifications link.">
@@ -7647,7 +7758,7 @@
    </message>
    <message name="IDS_SETTINGS_APP_BADGING_TOGGLE_LABEL" desc="The label for the app badging toggle in the App Notifications page of OS Settings.">
      App badging
-@@ -6688,7 +6688,7 @@
+@@ -6678,7 +6678,7 @@
      Send diagnostic and usage data
    </message>
    <message name="IDS_OS_SETTINGS_ENABLE_LOGGING_TOGGLE_DESCRIPTION" desc="The description of the checkbox to enable/disable crash and user metrics logging in ChromeOS for user of the device.">
@@ -7656,7 +7767,7 @@
    </message>
    <message name="IDS_OS_SETTINGS_PRIVACY_TITLE" desc="Name of the privacy settings page.">
      Privacy and security
-@@ -6871,13 +6871,13 @@
+@@ -6861,13 +6861,13 @@
      Websites
    </message>
    <message name="IDS_OS_SETTINGS_PRIVACY_HUB_MANAGE_CAMERA_PERMISSIONS_IN_CHROME_TEXT" desc="The label of the Chrome row in the Websites section of the camera subpage. This row is displayed when camera is allowed.">
@@ -7673,7 +7784,7 @@
    </message>
    <message name="IDS_OS_SETTINGS_PRIVACY_HUB_NO_WEBSITE_CAN_USE_CAMERA_TEXT" desc="The text displayed in the Websites section of the camera subpage when camera is not allowed.">
      Websites are not allowed to use your camera
-@@ -7075,7 +7075,7 @@
+@@ -7065,7 +7065,7 @@
      Google Play Store
    </message>
    <message name="IDS_APP_MANAGEMENT_APP_DETAILS_INSTALL_SOURCE_BROWSER" desc="Text for Chrome browser installation source for Web App">
@@ -7682,7 +7793,7 @@
    </message>
    <message name="IDS_APP_MANAGEMENT_APP_DETAILS_SUBAPP_DATA_SHARING_EXPLANATION" desc="Explanation of data sharing between parent app and sub apps in App Management settings.">
      This app data is shared between "<ph name="PARENT_APP_NAME">$1<ex>Office Suite</ex></ph>" and its installed apps
-@@ -7178,7 +7178,7 @@
+@@ -7168,7 +7168,7 @@
      Android App
    </message>
    <message name="IDS_OS_SETTINGS_APP_DETAILS_TYPE_CHROME" desc="Text to explain that the type of an app is Chrome app">
@@ -7691,7 +7802,7 @@
    </message>
    <message name="IDS_OS_SETTINGS_APP_DETAILS_TYPE_WEB" desc="Text to explain that the type of an app is Web app">
      Web App
-@@ -7190,7 +7190,7 @@
+@@ -7180,7 +7180,7 @@
      Android app installed by your device administrator.
    </message>
    <message name="IDS_OS_SETTINGS_APP_DETAILS_TYPE_CHROME_INSTALL_REASON_POLICY" desc="Explanation text for the chrome app installation reason, describing the type of the app, and that it is installed by the administrator.">
@@ -7789,7 +7900,7 @@
        </message>
      </else>
      </if>
-@@ -1021,12 +1021,12 @@
+@@ -1030,12 +1030,12 @@
    <if expr="_google_chrome">
    <then>
      <message name="IDS_PASSWORD_MANAGER_UI_PASSWORD_CHANGE_TOAST_SIGN_IN_TO_CONTINUE" desc="Text displayed on the password change toast during the password change flow when the user should deal with a second-factor authentication before the flow proceeds.">
@@ -7804,7 +7915,7 @@
      </message>
    </else>
    </if>
-@@ -1092,12 +1092,12 @@
+@@ -1101,12 +1101,12 @@
    <if expr="_google_chrome">
    <then>
      <message name="IDS_PASSWORD_MANAGER_UI_PASSWORD_CHANGE_SETTINGS_DESCRIPTION" desc="The description for the automated password change entry in Password Manager settings.">
@@ -7819,7 +7930,7 @@
      </message>
    </else>
    </if>
-@@ -1107,12 +1107,12 @@
+@@ -1116,12 +1116,12 @@
    <if expr="_google_chrome">
    <then>
      <message name="IDS_PASSWORD_MANAGER_UI_PASSWORD_CHANGE_SETTINGS_WITH_PRIVATE_INFERENCE_DESCRIPTION" desc="The description for the automated password change entry in Password Manager settings.">
@@ -7834,7 +7945,7 @@
      </message>
    </else>
    </if>
-@@ -1130,7 +1130,7 @@
+@@ -1139,7 +1139,7 @@
      </message>
    </if>
    <message name="IDS_PASSWORD_MANAGER_UI_PASSWORD_CHANGE_CHECKUP_BUTTON_ARIA_DESCRIPTION" desc="An accessibility description for the automated password change button in Password Manager checkup.">
@@ -7843,7 +7954,7 @@
    </message>
    <message name="IDS_PASSWORD_MANAGER_UI_PASSWORD_CHANGE_ATTEMPTING_SIGN_IN" desc="Status text on the button when automated password change is attempting to sign the user in.">
      Attempting sign-in...
-@@ -1153,12 +1153,12 @@
+@@ -1162,12 +1162,12 @@
    <if expr="_google_chrome">
    <then>
      <message name="IDS_SETTINGS_PASSWORD_CHANGE_SUBLABEL_WITH_LEARN_MORE" desc="Sublabel for password change entry in settings. The description of the feature beneath the 'Automated password change' feature title. This and the bullets beneath this paragraph represent the full description of the feature. * 'public' does two things: 1) it provides distance between 'Chrome' and 'data breach', because we don’t want users to associate the breach with Chrome (Chrome didn’t have a data leak, 2) and related, it might reassure the user to know that Chrome is using public information to establish these lists of compromised passwords. * 'Google Password Manager can offer…': The user has to agree to have this feature update their password for them each time. So Google Password Manager is ‘offering’ to do something for the user.">
@@ -7858,7 +7969,7 @@
      </message>
    </else>
    </if>
-@@ -1174,12 +1174,12 @@
+@@ -1183,12 +1183,12 @@
    <if expr="_google_chrome">
      <then>
        <message name="IDS_PASSWORD_MANAGER_UI_USER_INTERVENTION_NEEDED_TITLE" desc="Title of a dialog shown when the automated password change stops because the website requires identity verification.">
@@ -7893,7 +8004,7 @@
    </message>
    <message name="IDS_COMPOSEBOX_DRIVE_CONTEXT_MENU_OPTION_VERIFY_PROMO_TITLE" desc="The title in the sign-in promo bubble shown to users when interacting with the Google Drive context menu option in the composebox while sign-in credentials have expired.">
      Verify it's you
-@@ -1049,7 +1049,7 @@
+@@ -1040,7 +1040,7 @@
        Guest mode
      </message>
      <message name="IDS_PROFILE_PICKER_BACK_BUTTON_ARIA_LABEL" desc="Label for a button that navigates user to the previous page from a profile picker subpage">
@@ -9056,7 +9167,7 @@
      </message>
      <message name="IDS_SETTINGS_COLOR_SCHEME_MODE" desc="Text of the label for selecting a color scheme mode for the browser.">
        Mode
-@@ -406,7 +406,7 @@
+@@ -409,7 +409,7 @@
        Google Search AI Mode
      </message>
      <message name="IDS_SETTINGS_SIDE_PANEL_ALIGNMENT_CHROME_PANELS" desc="Label for the default Chrome Panels alignment setting.">
@@ -9065,7 +9176,7 @@
      </message>
      <message name="IDS_SETTINGS_SIDE_PANEL_ALIGNMENT_A11Y_LABEL" is_accessibility_with_no_ui="true" desc="Accessible label for side panel alignment dropdown menus, combining the side panel item name and the side panel position category name for screen readers.">
        <ph name="ITEM_NAME">$1<ex>Google Search AI Mode</ex></ph> <ph name="CATEGORY_NAME">$2<ex>Side panel position</ex></ph>
-@@ -458,13 +458,13 @@
+@@ -461,13 +461,13 @@
        Search settings
      </message>
      <message name="IDS_SETTINGS_SEARCH_NO_RESULTS_HELP" desc="Help text for a search that has no results.">
@@ -9081,7 +9192,7 @@
      </message>
      <message name="IDS_SETTINGS_SUBPAGE_BUTTON" desc="Accessibility description for a button navigating the user from a settings page to one of the settings subpages.">
        Subpage button
-@@ -944,16 +944,16 @@
+@@ -947,16 +947,16 @@
        Edit in Google Account
      </message>
      <message name="IDS_SETTINGS_HOME_AND_WORK_ADDRESS_REMOVE" desc="Label for a context menu item that removes the selected home and work address from Chrome.">
@@ -9102,7 +9213,7 @@
      </message>
      <message name="IDS_SETTINGS_HOME_ADDRESS_REMOVE_CONFIRMATION_DIALOG_NOTICE" desc="Body for the dialog that asks for confirmation to remove the selected home address from Chrome.">
        Your home address can help you get things done across Google services, like more relevant Search results and directions in Google Maps. You can edit or delete your address in your <ph name="BEGIN_LINK">&lt;a href="$1" target="_blank"&gt;</ph>Google Account<ph name="END_LINK">&lt;/a&gt;</ph> <ph name="USERNAME">$2<ex>example@9ma1l.qjz9zk</ex></ph>.
-@@ -1409,7 +1409,7 @@
+@@ -1412,7 +1412,7 @@
            Please check with your network administrator to make sure that the firewall is not blocking downloads from Google servers.
          </message>
          <message name="IDS_SETTINGS_LANGUAGES_DICTIONARY_DOWNLOAD_FAILED_HELP_HELIUM" desc="Error message when spell dictionary download fails more than once possibly due to a network policy or configuration.">
@@ -9111,7 +9222,7 @@
          </message>
        </if>
      </if>
-@@ -1530,10 +1530,10 @@
+@@ -1533,10 +1533,10 @@
        Sites you visit can verify that you're a real person and not a bot
      </message>
      <message name="IDS_SETTINGS_ANTI_ABUSE_WHEN_ON_SECTION_ONE" desc="A description that informs users that Chrome saves a small amount of data when the anti-abuse features are enabled.">
@@ -9124,7 +9235,7 @@
      </message>
      <message name="IDS_SETTINGS_ANTI_ABUSE_WHEN_ON_SECTION_THREE" desc="A description that informs users how their browsing could be helped by the anti-abuse features.">
        Browsing is faster because a site is less likely to ask you to verify you're a real person
-@@ -1593,7 +1593,7 @@
+@@ -1596,7 +1596,7 @@
        Web &amp; App Activity
      </message>
      <message name="IDS_SETTINGS_PRIVACY_GUIDE_COMPLETION_CARD_AI_SETTINGS_LABEL" desc="Text of the AI Innovations sublabel in the completion card of the 'Privacy Guide'.">
@@ -9133,7 +9244,7 @@
      </message>
      <message name="IDS_SETTINGS_PRIVACY_GUIDE_MSBB_CARD_HEADER" desc="Header of the 'make searches and browsing better' card in the 'Privacy Guide'.">
        Choose your search and browsing quality
-@@ -1654,22 +1654,22 @@
+@@ -1657,22 +1657,22 @@
          Sends an obfuscated portion of the URL to Google through a privacy server that hides your IP address
        </message>
        <message name="IDS_SETTINGS_PRIVACY_GUIDE_SAFE_BROWSING_CARD_STANDARD_PROTECTION_PRIVACY_DESCRIPTION1_PROXY" desc="A part of the privacy description of the standard protection section of the safe browsing card in the 'Privacy Guide'.">
@@ -9163,7 +9274,7 @@
      </message>
      <message name="IDS_SETTINGS_HELIUM_CRASH_REPORTING_DISABLED" desc="Crash reporting option that disables prompts and submissions">
        Disabled
-@@ -1680,51 +1680,51 @@
+@@ -1683,51 +1683,51 @@
      <message name="IDS_SETTINGS_HELIUM_CRASH_REPORTING_AUTOMATIC" desc="Crash reporting option that automatically submits reports">
        Send automatically
      </message>
@@ -9227,7 +9338,7 @@
        </message>
      </if>
      <if expr="is_linux">
-@@ -1732,28 +1732,28 @@
+@@ -1735,28 +1735,28 @@
          Allow automatic component updates
        </message>
        <message name="IDS_SETTINGS_HELIUM_SERVICES_UPDATE_DESCRIPTION" desc="Description of the toggle for automatic update downloads">
@@ -9266,7 +9377,7 @@
        Invalid origin
      </message>
  
-@@ -1909,10 +1909,10 @@
+@@ -1912,10 +1912,10 @@
      </message>
      <if expr="_google_chrome">
        <message name="IDS_SETTINGS_SAFEBROWSING_STANDARD_DESC_PROXY" desc="Description for safe browsing standard protection mode">
@@ -9279,7 +9390,7 @@
        </message>
      </if>
      <message name="IDS_SETTINGS_SAFEBROWSING_STANDARD_EXPAND_ACCESSIBILITY_LABEL" desc="Label for the button that toggles showing the detailed description of safe browsing standard protection. Only visible by screen reader software.">
-@@ -1973,7 +1973,7 @@
+@@ -1976,7 +1976,7 @@
        Network and security
      </message>
      <message name="IDS_SETTINGS_NETWORK_AND_SECURITY_DESCRIPTION" desc="Description of the settings row that opens the security settings page">
@@ -9288,7 +9399,7 @@
      </message>
      <message name="IDS_SETTINGS_NETWORK_SECTION_TITLE" desc="Title of the network section on the network and security settings page">
        Network
-@@ -2270,21 +2270,21 @@
+@@ -2273,21 +2273,21 @@
        Delete history, cookies, cache, and more
      </message>
  
@@ -9317,7 +9428,7 @@
      </message>
      <message name="IDS_SETTINGS_NOISE_CUSTOM_DESCRIPTION" desc="General explanation of fingerprinting protection site rules and wildcard behavior.">
        When the general fingerprinting protection feature is enabled, sites listed below follow a custom setting. Inserting "[*.]" before a domain name applies it to the entire domain.
-@@ -2349,10 +2349,10 @@
+@@ -2352,10 +2352,10 @@
        Learn more about resetting settings
      </message>
      <message name="IDS_SETTINGS_RESET_AUTOMATED_DIALOG_V2_TITLE" desc="The title of the dialog informing the user that automated resetting of some settings occurred.">
@@ -9330,7 +9441,7 @@
      </message>
      <message name="IDS_SETTINGS_RESET_PINNED_TABS" desc="A string that is used to describe the pinned tabs setting.">
        Pinned tabs
-@@ -2488,7 +2488,7 @@
+@@ -2494,7 +2494,7 @@
        Site search
      </message>
      <message name="IDS_SETTINGS_SEARCH_ENGINES_SITE_SEARCH_EXPLANATION" desc="Explanation for 'Site Search' section. Used interchangeably with IDS_SETTINGS_SEARCH_ENGINES_SITE_SEARCH_EXPLANATION_STARTER_PACK">
@@ -9339,7 +9450,7 @@
      </message>
      <message name="IDS_SETTINGS_SEARCH_ENGINES_NO_SITES_ADDED" desc="Text shown when the 'Site Search' section is empty">
        No sites added
-@@ -2503,7 +2503,7 @@
+@@ -2509,7 +2509,7 @@
        Extensions
      </message>
      <message name="IDS_SETTINGS_SEARCH_ENGINES_EXTENSION_ENGINES_EXPLANATION" desc="Explanation for a section that displays search engines added by extensions">
@@ -9348,7 +9459,7 @@
      </message>
      <message name="IDS_SETTINGS_SEARCH_ENGINES_NAME" desc="Label for a table column that holds the name of a search engine or site search provider">
        Name
-@@ -3176,7 +3176,7 @@
+@@ -3185,7 +3185,7 @@
      </if>
      <if expr="is_win and _google_chrome">
        <message name="IDS_SETTINGS_SITE_SETTINGS_PROTECTED_CONTENT_IDENTIFIERS_ALLOWED_SUB_LABEL" desc="A subtitle for the ‘Protected Content IDs’ setting, shown if user chooses to allow Protected Content IDs. This text explains that enabling protected content IDs may result in live captioning not working.">
@@ -9357,7 +9468,7 @@
        </message>
      </if>
      <message name="IDS_SETTINGS_SITE_SETTINGS_PROTOCOL_HANDLERS_DESCRIPTION" desc="Description of the protocol handlers content setting.">
-@@ -3396,7 +3396,7 @@
+@@ -3399,7 +3399,7 @@
        Insecure content is blocked by default on secure sites
      </message>
      <message name="IDS_SETTINGS_SITE_SETTINGS_PDF_DOWNLOAD_PDFS" desc="Label for downloading PDF documents instead of automatically opening them in Chrome.">
@@ -9366,7 +9477,7 @@
      </message>
      <message name="IDS_SETTINGS_SITE_SETTINGS_RECENT_ACTIVITY" desc="Label for the section which contains the user's recent permissions changes">
        Recent activity
-@@ -3681,7 +3681,7 @@
+@@ -3684,7 +3684,7 @@
        No sites added
      </message>
      <message name="IDS_SETTINGS_SITE_SETTINGS_BLOCK_AUTOPLAY" desc="A label for a toggle in site settings to block autoplay. If the toggle is on then Chrome will block autoplay by default and use an algorithm to determine which sites should still be able to autoplay. If the toggle is off then autoplay will be enabled for all sites.">
@@ -9375,7 +9486,7 @@
      </message>
      <message name="IDS_SETTINGS_SITE_SETTINGS_EMPTY_ALL_SITES_PAGE" desc="Explanation shown when there are no sites that have appeared yet on the All Sites page.">
        Sites you visit will appear here
-@@ -3977,7 +3977,7 @@
+@@ -3980,7 +3980,7 @@
        Show profile stats
      </message>
      <message name="IDS_SETTINGS_ENCRYPT_WITH_SYNC_PASSPHRASE_LABEL" desc="Label for the radio button which, when selected, causes synced settings to be encrypted with a user-provided password.">
@@ -9384,7 +9495,7 @@
      </message>
      <message name="IDS_SETTINGS_PASSPHRASE_EXPLANATION_TEXT" desc="Message shown when explicit passphrase is selected.">
        Only someone with your passphrase can read your encrypted data. The passphrase is not sent to or stored by Google. If you forget your passphrase or want to change this setting, you'll need to <ph name="BEGIN_LINK">&lt;a href="$1" target="_blank"&gt;<ex>&lt;a href="$1" target="_blank"&gt;</ex></ph>reset sync<ph name="END_LINK">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>.
-@@ -4118,7 +4118,7 @@
+@@ -4121,7 +4121,7 @@
        When you ask questions about your history, you can get answers about specific information from a page you visited
      </message>
      <message name="IDS_SETTINGS_HISTORY_SEARCH_WITH_ANSWERS_CONSIDER_DATA_ENCRYPTED" desc="This is a bullet point in the ‘Things to consider’ column, which describes things users should consider about a feature. This string explains that AI features will save data to the user’s device in order to provide the feature’s respective benefit. The data will be appropriately encrypted for security. The tone should be informative.">
@@ -9393,7 +9504,7 @@
      </message>
      <message name="IDS_SETTINGS_HISTORY_SEARCH_WITH_ANSWERS_CONSIDER_OUTDATED" desc="This is a bullet point in the ‘Things to consider’ column, which describes things users should consider about a feature. This string explains that history search results and answers powered by AI may become outdated since they are dependent on the user's last visit to the page contents.">
        AI-powered history search results and answers may become outdated if site content has changed since your last visit
-@@ -4209,11 +4209,11 @@
+@@ -4212,11 +4212,11 @@
            Enable Process Isolation
          </message>
          <message name="IDS_SETTINGS_SYSTEM_ISOLATION_STATE_SUBLABEL" desc="Sublabel for the Enable process isolation toggle.">
@@ -9407,7 +9518,7 @@
        </message>
        <message name="IDS_SETTINGS_SHORTCUTS_TITLE" desc="Title of the keyboard shortcuts Settings subpage and row.">
          Keyboard shortcuts
-@@ -4258,10 +4258,10 @@
+@@ -4261,10 +4261,10 @@
          Open your computer's proxy settings
        </message>
        <message name="IDS_SETTINGS_SYSTEM_PROXY_SETTINGS_EXTENSION_LABEL" desc="Non-interactive label that describes when Chrome's proxy settings are overwritten by an extension. This is used in place of IDS_SETTINGS_SYSTEM_PROXY_SETTINGS_LABEL above.">
@@ -9420,7 +9531,7 @@
        </message>
        <message name="IDS_SETTINGS_SYSTEM_PROXY_SETTINGS_YOUR_ORGANIZATION_LABEL" desc="Non-interactive label that describes when Chrome's proxy settings are overwritten by the user's organization. This is used in place of IDS_SETTINGS_SYSTEM_PROXY_SETTINGS_LABEL above.">
          Your organization
-@@ -4278,10 +4278,10 @@
+@@ -4281,10 +4281,10 @@
          On-device AI
        </message>
        <message name="IDS_SETTINGS_SYSTEM_FEATURE_ON_DEVICE_AI_ENABLED_SUB_LABEL" desc="This string describes what turning off the toggle implies.">
@@ -9433,7 +9544,7 @@
        </message>
      </if>
  
-@@ -4571,7 +4571,7 @@
+@@ -4574,7 +4574,7 @@
        Enhanced Safe Browsing is on
      </message>
      <message name="IDS_SETTINGS_SAFETY_HUB_SB_ON_ENHANCED_SUBHEADER" desc="Safety Hub settings page (chrome://settings/safetyHub) gives users an overview over their safety status. Safe browsing card in this page shows the current state of Safe browsing setting (chrome://settings/security). This string is the body text of the Safe Browsing card when the current state is Enhanced protection.">
@@ -9442,7 +9553,7 @@
      </message>
      <message name="IDS_SETTINGS_SAFETY_HUB_SB_ON_STANDARD_HEADER" desc="Safety Hub settings page (chrome://settings/safetyHub) gives users an overview over their safety status. Safe browsing card in this page shows the current state of Safe browsing setting (chrome://settings/security). This string is the headline of the Safe Browsing card when the current state is Standard protection.">
        Safe Browsing is on
-@@ -4681,10 +4681,10 @@
+@@ -4684,10 +4684,10 @@
          AI innovations
        </message>
        <message name="IDS_SETTINGS_AI_PAGE_TITLE" desc="This label is on the left Navigation sidebar in Chrome’s settings. It tells the user that they can see settings related to AI (artificial intelligence) in this section. It is a noun phrase that refers to our collection of AI settings. These settings include Help me write and more.">
@@ -9455,7 +9566,7 @@
        </message>
        <message name="IDS_SETTINGS_AI_PAGE_MAIN_MANAGED_LEARN_MORE_ACCESSIBILITY_LABEL" desc="This string is found in a link that takes the user to the AI features and policies help center article when the user taps it. The tone should be informative">
          Learn more about using generative AI at work
-@@ -4707,7 +4707,7 @@
+@@ -4710,7 +4710,7 @@
          Automated Password Change
        </message>
        <message name="IDS_SETTINGS_PASSWORD_CHANGE_SUBLABEL" desc="Sublabel for password change entry in settings. The description of the feature beneath the “Automated password change” feature title. This and the bullets beneath this paragraph represent the full description of the feature. * “public” does two things: 1) it provides distance between “Chrome” and “data breach”, because we don’t want users to associate the breach with Chrome (Chrome didn’t have a data leak, 2) and related, it might reassure the user to know that Chrome is using public information to establish these lists of compromised passwords. * “Google Password Manager can offer…”: The user has to agree to have this feature update their password for them each time. So Google Password Manager is ‘offering’ to do something for the user.">
@@ -9464,7 +9575,7 @@
        </message>
        <message name="IDS_SETTINGS_PASSWORD_CHANGE_DATA_BREACH" desc="Bullet 1 of 2 that appears beneath the “When used” subtitle. This string is repetitive of the feature description, but we want to have a complete description of what happens when the feature is used. * “Google Password Manager asks…”: This part is similar to the general feature description above, but it’s written as if the feature is being used by the user, so we use “asks” and not “can offer”. * “Strong password”: As an existing autofill feature, Google Password Manager can offer to generate and save passwords for the user. These passwords are typically stronger than passwords the user might create on their own">
          If one of your passwords is found in a data breach, Google Password Manager asks if you want it changed to a strong password
-@@ -4763,7 +4763,7 @@
+@@ -4766,7 +4766,7 @@
  
    <!-- Experimental settings strings -->
    <message name="IDS_SETTINGS_AI_PAGE_MAIN_TITLE" desc="This string is the title of a card that sets the context for the ‘AI innovations’ section of Chrome’s settings. Here, the user can see settings related to AI (artificial intelligence) in this section; these settings include Help me write and more. This title is before the ‘Things to consider’ subheading and bullet points. We want users to read this card and understand the considerations that apply to all Chrome’s AI features. The tone should be motivating." formatter_data="android_java">
@@ -9523,7 +9634,7 @@
        Cookies
 --- a/chrome/app/skills_strings.grdp
 +++ b/chrome/app/skills_strings.grdp
-@@ -32,7 +32,7 @@
+@@ -43,7 +43,7 @@
      Manage your custom workflows powered by
    </message>
    <message name="IDS_SKILLS_SIDEBAR_FOOTER_BRANDING" desc="The branding text 'Gemini in Chrome' displayed in the sidebar footer">
@@ -9532,7 +9643,7 @@
    </message>
  
    <!-- chrome://skills error page -->
-@@ -40,10 +40,10 @@
+@@ -51,10 +51,10 @@
      Skills aren't available
    </message>
    <message name="IDS_SKILLS_ERROR_PAGE_DESCRIPTION" desc="Description of the error page that occurs when chrome://skills is not accessible because Glic is not enabled">
@@ -9545,7 +9656,7 @@
    </message>
    <message name="IDS_SKILLS_REMOTE_AUTHORITY_UNREACHABLE_DESCRIPTION" desc="Description of the error page that occurs when the remote guest skills webview cannot load or be reached.">
      We're having trouble connecting to the server. Please try again later.
-@@ -52,7 +52,7 @@
+@@ -63,7 +63,7 @@
      Go to Settings
    </message>
    <message name="IDS_SKILLS_SIGN_IN_TO_CHROME" desc="Label of the button that prompts the user to sign in to Chrome on the Skills error page.">
@@ -9615,7 +9726,7 @@
        </message>
      </then>
      <else>
-@@ -257,10 +257,10 @@
+@@ -254,10 +254,10 @@
      </message>
    </if>
    <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_UPLOAD_EXPLANATION_TOOLTIP" desc="The tooltip hover text that explains why credit card upload to Google Payments is being offered.">
@@ -9628,7 +9739,7 @@
    </message>
    <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_LOADING_THROBBER_ACCESSIBLE_NAME" desc="Accessible name announced by the screenreader for save card bubble in loading state showing a throbber.">
      Saving card info
-@@ -276,24 +276,24 @@
+@@ -273,24 +273,24 @@
      </message>
      <if expr="_google_chrome">
        <message name="IDS_AUTOFILL_SAVE_AND_FILL_DIALOG_EXPLANATION_LOCAL" desc="Explanation text for the Autofill Save and Fill dialog for cards that will be saved locally.">
@@ -9659,7 +9770,7 @@
        </message>
      </if>
      <message name="IDS_AUTOFILL_SAVE_AND_FILL_DIALOG_CARD_NUMBER_LABEL" desc="The label text for the card number textfield.">
-@@ -580,7 +580,7 @@
+@@ -574,7 +574,7 @@
    </if>
    <if expr="is_win">
      <message name="IDS_PAYMENTS_AUTOFILL_FILLING_MANDATORY_REAUTH" desc="Text that appears in the payments autofill mandatory re-authentication popup, asking the user to authenticate using biometric or device unlock before filling.">
@@ -9668,7 +9779,7 @@
      </message>
    </if>
    <if expr="is_ios">
-@@ -598,24 +598,24 @@
+@@ -592,24 +592,24 @@
      </message>
      <if expr="_google_chrome">
        <message name="IDS_PAYMENTS_AUTOFILL_FILLING_MANDATORY_REAUTH" desc="Text that appears in the payments autofill mandatory re-authentication popup as the sublabel, asking the user to authenticate using biometric or device unlock before filling.">
@@ -9699,7 +9810,7 @@
        </message>
      </if>
    </if>
-@@ -774,7 +774,7 @@
+@@ -765,7 +765,7 @@
      You're all set
    </message>
    <message name="IDS_AUTOFILL_MANDATORY_REAUTH_CONFIRMATION_EXPLANATION" desc="Explanation text for the mandatory reauth confirmation prompt that is displayed to the user after opting into mandatory reauth. Mandatory reauth requires the user to unlock their device or pass a biometric auth when autofilling payment method information.">
@@ -9708,7 +9819,7 @@
    </message>
    <message name="IDS_AUTOFILL_MANDATORY_REAUTH_CONFIRMATION_SETTINGS_LINK" desc="A link to the settings page for the mandatory reauth confirmation prompt that is displayed to the user after opting into mandatory reauth. Mandatory reauth requires the user to unlock their device or pass a biometric auth when autofilling payment method information.">
      settings
-@@ -1447,7 +1447,7 @@
+@@ -1444,7 +1444,7 @@
        Check out faster with autofill
      </message>
      <message name="IDS_AUTOFILL_CREATE_FIRST_CREDIT_CARD_SUMMARY" desc="Summary for a call to action settings preference to add a new autofill credit card when the user does not have any cards added." formatter_data="android_java">
@@ -9717,7 +9828,7 @@
      </message>
      <message name="IDS_AUTOFILL_CREATE_FIRST_CREDIT_CARD_BUTTON_TEXT" desc="Button text for a call to action settings preference to add a new autofill credit card when the user does not have any cards added." formatter_data="android_java">
        Add payment method
-@@ -1480,7 +1480,7 @@
+@@ -1483,7 +1483,7 @@
      View autofill settings
    </message>
    <message name="IDS_AUTOFILL_CHURNED_USERS_CONFIRMATION_BUBBLE_DESCRIPTION" desc="Description for the churned users confirmation bubble, which comes after the user has accepted the churned users bubble, letting the user know that autofill is turned on.">
@@ -9726,7 +9837,7 @@
    </message>
    <if expr="not is_android">
      <message name="IDS_AUTOFILL_CHURNED_USERS_CONFIRMATION_BUBBLE_LOADING_THROBBER_ACCESSIBLE_NAME" desc="Accessible name announced by the screenreader for virtual card prompt in loading state showing a throbber." is_accessibility_with_no_ui="true" formatter_data="android_java">
-@@ -1754,10 +1754,10 @@
+@@ -1739,10 +1739,10 @@
      This card is saved in Google Wallet so you can use it across Google products
    </message>
    <message name="IDS_AUTOFILL_SAVE_CARD_CONFIRMATION_FAILURE_DESCRIPTION_TEXT" desc="Description text for confirmation shown after save card upload to the server was unsuccessful.">
@@ -9739,7 +9850,7 @@
    </message>
    <message name="IDS_AUTOFILL_SAVE_IBAN_CONFIRMATION_SUCCESS_DESCRIPTION_TEXT" desc="Description text for confirmation shown after upload save IBAN attempt was successful and it was uploaded to the server.">
      This IBAN is saved in your Google Account so you can use it across Google services.
-@@ -1766,16 +1766,16 @@
+@@ -1751,16 +1751,16 @@
      This IBAN is saved in Google Wallet so you can use it across Google products.
    </message>
    <message name="IDS_AUTOFILL_SAVE_IBAN_CONFIRMATION_FAILURE_DESCRIPTION_TEXT" desc="Description text for confirmation shown after upload save IBAN attempt was failed and and it was not uploaded to the server.">
@@ -9876,7 +9987,7 @@
    </message>
    <message name="IDS_AUTOFILL_GMAIL_OTP_REQUIRED_TITLE" desc="Title of the dialog informing the user that smart features must be turned on in Gmail to use autofill for verification codes from Gmail.">
      To use this feature, first turn on smart features in Gmail
-@@ -485,10 +485,10 @@
+@@ -515,10 +515,10 @@
        Use info saved in your Google Account to autofill passwords, passkeys, addresses, payment methods, and other info
      </message>
      <message name="IDS_AUTOFILL_THIRD_PARTY_FILLING_OPT_IN_DESCRIPTION" desc="Description shown on the option enabling the use of third-party autofill in Chrome." formatter_data="android_java">
@@ -9889,7 +10000,7 @@
      </message>
      <message name="IDS_PAYMENT_METHODS_SETTINGS_LOYALTY_CARDS_TITLE" desc="Title for the payment methods settings page row that links the user to the Google Wallet app." formatter_data="android_java">
        Loyalty cards
-@@ -533,7 +533,7 @@
+@@ -557,7 +557,7 @@
  
    <!-- Wallet Reminder Notice strings -->
    <message name="IDS_AUTOFILL_WALLET_REMINDER_NOTICE_TITLE" desc="Title for the Wallet Reminder Notice prompt explaining that Google Wallet settings apply to info saved from Chrome." formatter_data="android_java">
@@ -9898,7 +10009,7 @@
    </message>
    <message name="IDS_AUTOFILL_WALLET_REMINDER_NOTICE_CONFIRM_BUTTON_LABEL" desc="Button label to acknowledge and dismiss the Wallet Reminder Notice prompt." formatter_data="android_java">
      Got it
-@@ -592,7 +592,7 @@
+@@ -616,7 +616,7 @@
      You can use saved addresses across Google products. This address is saved in your Google Account, <ph name="ACCOUNT">$1<ex>alexpark@9ma1l.qjz9zk</ex></ph>.
    </message>
    <message name="IDS_AUTOFILL_SYNCABLE_PROFILE_MIGRATION_PROMPT_NOTICE" desc="The syncable profile prompt body text.">
@@ -9907,7 +10018,7 @@
    </message>
    <message name="IDS_AUTOFILL_LOCAL_PROFILE_MIGRATION_PROMPT_NOTICE" desc="The local profile prompt body text.">
      This address is currently saved to this device. To use it across Google products, save it in your Google Account, <ph name="ACCOUNT">$1<ex>alexpark@9ma1l.qjz9zk</ex></ph>.
-@@ -669,7 +669,7 @@
+@@ -693,7 +693,7 @@
        You can use saved addresses across Google products. This address will be saved in your Google Account, <ph name="USER_EMAIL">$1<ex>janedoe@9oo91e.qjz9zk</ex></ph>.
      </message>
      <message name="IDS_IOS_AUTOFILL_HOME_WORK_PROFILE_FOOTER" desc="Footer text shown in the settings when home and work profile details are shown">
@@ -9916,7 +10027,7 @@
      </message>
    </if>
    <!-- Autofill Settings Pages -->
-@@ -863,7 +863,7 @@
+@@ -887,7 +887,7 @@
      Another verification is in progress. Try again later.
    </message>
    <message name="IDS_AUTOFILL_AT_MEMORY_SEARCH_AFFORDANCE_TITLE" desc="Title of the AtMemory search trigger affordance." translateable="false">
@@ -9925,7 +10036,7 @@
    </message>
    <message name="IDS_AUTOFILL_AT_MEMORY_SEARCH_AFFORDANCE_SUBTITLE" desc="Descriptor under the query for enhanced autofill. 'Gemini' is a brand name and should match standard branding guidelines across languages.">
      Find and fill with Gemini
-@@ -890,7 +890,7 @@
+@@ -914,7 +914,7 @@
      Couldn't find this info
    </message>
    <message name="IDS_AUTOFILL_AT_MEMORY_UNSUPPORTED_QUERY_DESCRIPTION" desc="A linkout that suggests using Gemini for a broader search or query, as the current recall feature could not handle the request. This text is a verb phrase short for the longer phrase: 'Try submitting your query to the Gemini in Chrome side panel'.">
@@ -9934,7 +10045,7 @@
    </message>
    <message name="IDS_AUTOFILL_AT_MEMORY_PREVIOUSLY_FILLED" desc="Title shown in the AtMemory suggestions above suggestions that was previously filled on this page." translateable="false">
      Previously filled
-@@ -1592,7 +1592,7 @@
+@@ -1644,7 +1644,7 @@
        Info saved to device only
      </message>
      <message name="IDS_AUTOFILL_AI_LOCAL_SAVE_NOTIFICATION_DESCRIPTION" desc="The body text of an informational dialog. The user sees this after a failed attempt to save to Google Wallet. 'Couldn't save...' acknowledges the server failure. 'Saved to Chrome...' confirms the safety of the data (local fallback). 'Chrome will offer...' sets expectations that the system will retry the cloud save the next time this data is accessed.">
@@ -9943,7 +10054,23 @@
      </message>
      <message name="IDS_AUTOFILL_AI_LOCAL_SAVE_NOTIFICATION_DISMISS_BUTTON_LABEL" desc="A button on an informational dialog. Clicking this button dismisses the dialog. The user accepts that the data is saved locally for now.">
        Got it
-@@ -1808,7 +1808,7 @@
+@@ -1677,12 +1677,12 @@
+   </message>
+ 
+   <message name="IDS_AUTOFILL_AI_ENTITY_SUPPRESSION_CONFIRMATION_TITLE" desc="Title of the dialog that asks the user to confirm that an Autofill AI suggestion should no longer be suggested by Chrome.">
+-    Remove from Helium?
++    Remove from Helium++?
+   </message>
+   <message name="IDS_AUTOFILL_AI_ENTITY_SUPPRESSION_CONFIRMATION_BODY" desc="Body text of the dialog that asks the user to confirm that an Autofill AI suggestion should no longer be suggested by Chrome. It explains that only the suggestion disappears, while the data that the suggestion was extracted from (e.g. an email or a photo) is untouched. The plural selector is the number of such sources. [ICU Syntax]">
+     {NUM_SOURCES, plural,
+-     =1 {Helium will stop suggesting this info. Your original source won't be deleted.}
+-     other {Helium will stop suggesting this info. Your original sources won't be deleted.}}
++     =1 {Helium++ will stop suggesting this info. Your original source won't be deleted.}
++     other {Helium++ will stop suggesting this info. Your original sources won't be deleted.}}
+   </message>
+   <message name="IDS_AUTOFILL_AI_ENTITY_SUPPRESSION_CONFIRMATION_ACCEPT_BUTTON" desc="Label of the button that confirms that Chrome should stop suggesting an Autofill AI suggestion.">
+     Remove
+@@ -1876,7 +1876,7 @@
        Info saved to device only
      </message>
      <message name="IDS_AUTOFILL_AI_SAVE_OR_UPDATE_ENTITY_FAILED_WALLET_SAVE_DIALOG_DESCRIPTION" desc="The description text of the dialog shown when an entity (like passport, driver's license, etc) fails to be saved to Google Wallet." formatter_data="android_java">
@@ -9952,13 +10079,14 @@
      </message>
      <message name="IDS_AUTOFILL_AI_SNACK_BAR_CONFIRMATION_BUTTON_LABEL" desc="The confirmation button text of the dialog shown when an entity (like passport, driver's license, etc) fails to be saved to Google Wallet." formatter_data="android_java">
        Got it
-@@ -1834,13 +1834,13 @@
-     <!-- Autofill AI Suppression Dialog Strings (Android) -->
-     <message name="IDS_AUTOFILL_AI_SUPPRESSION_DIALOG_BODY" desc="Description for the modal confirmation dialog on Android.">
-       Suggested by Gemini · <ph name="SRC_LINK">&lt;src_link&gt;</ph>View sources<ph name="END_SRC_LINK">&lt;/src_link&gt;</ph>
+@@ -1903,14 +1903,14 @@
+     <!-- LINT.IfChange(SuppressionDialogTags) -->
+     <message name="IDS_AUTOFILL_AI_SUPPRESSION_DIALOG_BODY" desc="Description for the modal confirmation dialog on Android." translateable="false">
+       From Gemini and connected apps · <ph name="SRC_LINK">&lt;src_link&gt;</ph>View sources<ph name="END_SRC_LINK">&lt;/src_link&gt;</ph>
 -You can remove this suggestion from Helium. Your original source won't be deleted. <ph name="MANAGE_LINK">&lt;manage_link&gt;</ph>Manage enhanced autofill<ph name="END_MANAGE_LINK">&lt;/manage_link&gt;</ph>
 +You can remove this suggestion from Helium++. Your original source won't be deleted. <ph name="MANAGE_LINK">&lt;manage_link&gt;</ph>Manage enhanced autofill<ph name="END_MANAGE_LINK">&lt;/manage_link&gt;</ph>
      </message>
+     <!-- LINT.ThenChange(/chrome/android/features/keyboard_accessory/internal/java/src/org/chromium/chrome/browser/keyboard_accessory/ManualFillingMediator.java:SuppressionDialogTags) -->
      <message name="IDS_AUTOFILL_AI_SUPPRESSION_DIALOG_PRIMARY_BUTTON" desc="Label for the primary acknowledgment button in the Autofill AI suppression dialog on Android.">
        Got it
      </message>
@@ -9966,9 +10094,18 @@
 -      Remove from Helium
 +      Remove from Helium++
      </message>
-   </if>
- 
-@@ -1937,24 +1937,24 @@
+     <message name="IDS_AUTOFILL_AI_ATTRIBUTION_BOTTOM_SHEET_TITLE" desc="Title for the Autofill AI source attribution bottom sheet on Android." formatter_data="android_java">
+       Sources
+@@ -1929,7 +1929,7 @@
+   <!-- Autofill AI Suppression Snackbar Strings (Android) -->
+   <if expr="is_android">
+     <message name="IDS_AUTOFILL_AI_SUPPRESSION_UNDO_SNACKBAR_MESSAGE" desc="Informational message shown in the snackbar after an Autofill AI suggestion has been removed from Chrome on Android.">
+-      Suggestion removed from Helium
++      Suggestion removed from Helium++
+     </message>
+     <message name="IDS_AUTOFILL_AI_SUPPRESSION_UNDO_SNACKBAR_ACTION" meaning="Verb: action button to undo removal of an Autofill AI suggestion" desc="Action button label shown in the snackbar for ~10 seconds allowing the user to undo removal of an Autofill AI suggestion on Android. Keep label concise.">
+       Undo
+@@ -2029,24 +2029,24 @@
    </message>
    <if expr="_google_chrome">
      <message name="IDS_SETTINGS_AUTOFILL_AI_TOGGLE_SUB_LABEL" desc="The description of the setting. By 'understand forms better', we mean that when a user submits a form on a website, and if they're using smarter form understanding, this feature can offer to save the user's submitted info. When Chrome saves that info, we save the submitted values and consider the page context." formatter_data="android_java">
@@ -9999,7 +10136,7 @@
      </message>
    </if>
  
-@@ -1974,7 +1974,7 @@
+@@ -2066,7 +2066,7 @@
      When you make a request for enhanced autofill, your usage data, requests, and page details are shared with Google to improve the autofill experience
    </message>
    <message name="IDS_SETTINGS_SUGGESTIONS_FROM_GEMINI_WHEN_USED_1" desc="Bullet point 1 under When used in the quality logging section.">
@@ -10434,6 +10571,15 @@
    </message>
    <message name="IDS_ENTERPRISE_CONTENT_ANALYSIS_COPY_SCANNING_MESSAGE" desc="Message inserted into the clipboard instead of the intended data while content analysis scanning is ongoing.">
      Based on your organization's policies, the content you copied is being scanned for sensitive information. Pasting may be allowed after the scan is complete.
+@@ -132,7 +132,7 @@
+   </message>
+ 
+   <message name="IDS_ENTERPRISE_PROXY_AUTHN_ERROR_HEADING" desc="Heading in the enterprise proxy error page when sign-in is required by organization policy.">
+-    Your organization requires you to sign in to Helium
++    Your organization requires you to sign in to Helium++
+   </message>
+ 
+   <message name="IDS_ENTERPRISE_PROXY_AUTHN_ERROR_PRIMARY_PARAGRAPH" desc="Description in the enterprise proxy error page when sign-in is required by organization policy.">
 --- a/components/error_page_strings.grdp
 +++ b/components/error_page_strings.grdp
 @@ -27,7 +27,7 @@
@@ -10494,7 +10640,7 @@
    </message>
    <message name="IDS_PIX_PAYMENT_PRODUCT_ICON_CONTENT_DESCRIPTION" desc="Accessibility string for the Google Pay + Pix product icon." formatter_data="android_java">
      Google Pay, Pix
-@@ -144,13 +144,13 @@
+@@ -141,13 +141,13 @@
      Not now
    </message>
    <message name="IDS_PIX_ACCOUNT_LINKING_PROMPT_TITLE" desc="Title for the bottom sheet showing Pix account linking prompt. It asks users to link their Pix accounts to Google Wallet so they can directly pay on Chrome." formatter_data="android_java">
@@ -10510,7 +10656,7 @@
    </message>
    <message name="IDS_PIX_ACCOUNT_LINKING_PROMPT_VALUE_PROP_MESSAGE_3" desc="A message in the bottom sheet showing Pix account linking prompt. The prompt asks users to link their Pix accounts to Google Wallet so they can directly pay on Chrome. The value prop messages communicate unique benefits of Pix account linking. This message informs users that their personal info is protected using encryption." formatter_data="android_java">
      Encryption protects your personal info
-@@ -166,14 +166,14 @@
+@@ -160,14 +160,14 @@
    </message>
    <message name="IDS_PIX_ACCOUNT_LINKING_PROMPT_C_BODY" desc="Body text for the bottom sheet showing Pix account linking prompt (Variation C)." formatter_data="android_java">You won't need to switch apps anymore. Google encryption protects your info and will confirm that it's you before payment happens.</message>
    <message name="IDS_PIX_ACCOUNT_LINKING_PROMPT_EMAIL_INFO_WITH_SETTINGS_LINK" desc="A message in the bottom sheet showing Pix account linking prompt informing the user which account email their Pix account will be linked to, followed by a link to Chrome settings to turn off Pix code detection." formatter_data="android_java">
@@ -10747,7 +10893,7 @@
    Popular, paid, and closed-source password manager. Stores data in Europe. Known for aggressive upselling tactics.
 --- a/components/history_strings.grdp
 +++ b/components/history_strings.grdp
-@@ -196,7 +196,7 @@
+@@ -194,7 +194,7 @@
      Get answers from your history, powered by AI
    </message>
    <message name="IDS_HISTORY_EMBEDDINGS_ANSWERS_PROMO_BODY" desc="On the history page, the body text of the promo for history search powered by AI with answerer." translateable="false">
@@ -10756,7 +10902,7 @@
    </message>
    <message name="IDS_HISTORY_EMBEDDIGNS_PROMO_SETTINGS_LINK_TEXT" desc="On the history page, the text of the link to edit the user's history search setting." translateable="false">
      Manage your history search setting
-@@ -291,7 +291,7 @@
+@@ -289,7 +289,7 @@
      Comparison tables
    </message>
    <message name="IDS_COMPARE_HISTORY_INFO" desc="Info disclaimer text for comparison tables tab in history.">
@@ -10765,8 +10911,8 @@
    </message>
    <message name="IDS_COMPARE_HISTORY_MENU_ARIA_LABEL" desc="Aria label for menu button for a row in tab compare history">
      More actions for comparison table <ph name="COMPARE_SET_NAME"><ex>e-bikes</ex>$1</ph>
-@@ -369,7 +369,7 @@
-     Verification codes
+@@ -376,7 +376,7 @@
+     Website actions
    </message>
    <message name="IDS_HISTORY_CRITICAL_ACTION_APP_MENU_IPH_BODY" desc="Text shown in the IPH bubble attached to the Chrome app menu teaching users where to view Gemini's auto browse actions." translateable="false">
 -    In Helium history, you can see the key actions that Gemini completed while browsing for you
@@ -10844,7 +10990,7 @@
      </message>
      <message name="IDS_IOS_MANAGEMENT_UI_LEARN_MORE_LINK" desc="The clickable text on chrome://management.">
        Learn more
-@@ -460,13 +460,13 @@
+@@ -468,13 +468,13 @@
  
    <!-- Strings related to Chrome Enterprise Connectors -->
    <message name="IDS_MANAGEMENT_THREAT_PROTECTION" desc="Title of the Chrome Enterprise Connectors section of the page" formatter_data="android_java">
@@ -10861,7 +11007,7 @@
    </message>
    <message name="IDS_MANAGEMENT_CONNECTORS_EVENT" desc="Title of a column of the Connectors table showing the event that triggers a Connector" formatter_data="android_java">
      Event
-@@ -496,7 +496,7 @@
+@@ -510,7 +510,7 @@
      URLs and titles of pages you visit are sent to Google Cloud or third parties for analysis, and may be visible to your administrator. For example, they might be scanned to detect unsafe websites or filter websites based on rules set by the administrator.
    </message>
    <message name="IDS_MANAGEMENT_ENTERPRISE_REPORTING_VISIBLE_DATA" desc="Description of the visible data for the Connectors reporting feature" formatter_data="android_java">
@@ -10870,7 +11016,7 @@
    </message>
  
    <!-- Management toolbar button dialog view -->
-@@ -523,10 +523,10 @@
+@@ -537,10 +537,10 @@
      Easily manage how your employees browse the web
    </message>
    <message name="IDS_MANAGEMENT_BANNER_PROMOTION_DESC" desc="The description of the promotion banner on chrome://management page.">
@@ -11006,7 +11152,16 @@
    </message>
    <message name="IDS_ACC_OMNIBOX_PEDAL_LAUNCH_INCOGNITO" desc="Announcement when pedal action button is focused, LAUNCH_INCOGNITO">
      Open Incognito Window button, activate to open a new Incognito window to browse privately
-@@ -59,124 +59,124 @@
+@@ -59,7 +59,7 @@
+     Open a new Isolated window to browse privately
+   </message>
+   <message name="IDS_ACC_OMNIBOX_PEDAL_LAUNCH_ISOLATED_SUFFIX" desc="Suffix for spoken suggestion description with pedal action button, to explain keystroke used to LAUNCH_ISOLATED.">
+-    <ph name="LAUNCH_ISOLATED_FOCUSED_FRIENDLY_MATCH_TEXT">$1<ex>The Helium Projects http://www.ch40m1um.qjz9zk bookmark</ex></ph>, press Tab then Enter to open a new Isolated window to browse privately
++    <ph name="LAUNCH_ISOLATED_FOCUSED_FRIENDLY_MATCH_TEXT">$1<ex>The Helium++ Projects http://www.ch40m1um.qjz9zk bookmark</ex></ph>, press Tab then Enter to open a new Isolated window to browse privately
+   </message>
+   <message name="IDS_ACC_OMNIBOX_PEDAL_LAUNCH_ISOLATED" desc="Announcement when pedal action button is focused, LAUNCH_ISOLATED">
+     Open Isolated Window button, activate to open a new Isolated window to browse privately
+@@ -72,124 +72,124 @@
      Translate this page with Google Translate
    </message>
    <message name="IDS_ACC_OMNIBOX_PEDAL_TRANSLATE_SUFFIX" desc="Suffix for spoken suggestion description with pedal action button, to explain keystroke used to TRANSLATE.">
@@ -11161,7 +11316,7 @@
    </message>
  
    <message name="IDS_OMNIBOX_PEDAL_CREATE_GOOGLE_DOC_HINT" desc="The button text contents to suggest pedal action, CREATE_GOOGLE_DOC">
-@@ -186,7 +186,7 @@
+@@ -199,7 +199,7 @@
      Create a new Google Doc quickly
    </message>
    <message name="IDS_ACC_OMNIBOX_PEDAL_CREATE_GOOGLE_DOC_SUFFIX" desc="Suffix for spoken suggestion description with pedal action button, to explain keystroke used to CREATE_GOOGLE_DOC.">
@@ -11170,7 +11325,7 @@
    </message>
    <message name="IDS_ACC_OMNIBOX_PEDAL_CREATE_GOOGLE_DOC" desc="Announcement when pedal action button is focused, CREATE_GOOGLE_DOC">
      Create doc button, activate to create a new Google Doc quickly
-@@ -199,7 +199,7 @@
+@@ -212,7 +212,7 @@
      Create a new Google Sheet quickly
    </message>
    <message name="IDS_ACC_OMNIBOX_PEDAL_CREATE_GOOGLE_SHEET_SUFFIX" desc="Suffix for spoken suggestion description with pedal action button, to explain keystroke used to CREATE_GOOGLE_SHEET.">
@@ -11179,7 +11334,7 @@
    </message>
    <message name="IDS_ACC_OMNIBOX_PEDAL_CREATE_GOOGLE_SHEET" desc="Announcement when pedal action button is focused, CREATE_GOOGLE_SHEET">
      Create sheet button, activate to create a new Google Sheet quickly
-@@ -212,7 +212,7 @@
+@@ -225,7 +225,7 @@
      Create a new Google presentation in Slides quickly
    </message>
    <message name="IDS_ACC_OMNIBOX_PEDAL_CREATE_GOOGLE_SLIDE_SUFFIX" desc="Suffix for spoken suggestion description with pedal action button, to explain keystroke used to CREATE_GOOGLE_SLIDE.">
@@ -11188,7 +11343,7 @@
    </message>
    <message name="IDS_ACC_OMNIBOX_PEDAL_CREATE_GOOGLE_SLIDE" desc="Announcement when pedal action button is focused, CREATE_GOOGLE_SLIDE">
      Create presentation button, activate to create a new Google presentation in Slides quickly
-@@ -225,7 +225,7 @@
+@@ -238,7 +238,7 @@
      Create a new event in Google Calendar quickly
    </message>
    <message name="IDS_ACC_OMNIBOX_PEDAL_CREATE_GOOGLE_CALENDAR_EVENT_SUFFIX" desc="Suffix for spoken suggestion description with pedal action button, to explain keystroke used to CREATE_GOOGLE_CALENDAR_EVENT.">
@@ -11197,7 +11352,7 @@
    </message>
    <message name="IDS_ACC_OMNIBOX_PEDAL_CREATE_GOOGLE_CALENDAR_EVENT" desc="Announcement when pedal action button is focused, CREATE_GOOGLE_CALENDAR_EVENT">
      Create event button, activate to create a new event in Google Calendar quickly
-@@ -238,7 +238,7 @@
+@@ -251,7 +251,7 @@
      Create a new site in Google Sites quickly
    </message>
    <message name="IDS_ACC_OMNIBOX_PEDAL_CREATE_GOOGLE_SITE_SUFFIX" desc="Suffix for spoken suggestion description with pedal action button, to explain keystroke used to CREATE_GOOGLE_SITE.">
@@ -11206,7 +11361,7 @@
    </message>
    <message name="IDS_ACC_OMNIBOX_PEDAL_CREATE_GOOGLE_SITE" desc="Announcement when pedal action button is focused, CREATE_GOOGLE_SITE">
      Create site button, activate to create a new site in Google Sites quickly
-@@ -251,7 +251,7 @@
+@@ -264,7 +264,7 @@
      Create a new note in Google Keep quickly
    </message>
    <message name="IDS_ACC_OMNIBOX_PEDAL_CREATE_GOOGLE_KEEP_NOTE_SUFFIX" desc="Suffix for spoken suggestion description with pedal action button, to explain keystroke used to CREATE_GOOGLE_KEEP_NOTE.">
@@ -11215,7 +11370,7 @@
    </message>
    <message name="IDS_ACC_OMNIBOX_PEDAL_CREATE_GOOGLE_KEEP_NOTE" desc="Announcement when pedal action button is focused, CREATE_GOOGLE_KEEP_NOTE">
      Create note button, activate to create a new note in Google Keep quickly
-@@ -264,23 +264,23 @@
+@@ -277,23 +277,23 @@
      Create a new form in Google Forms quickly
    </message>
    <message name="IDS_ACC_OMNIBOX_PEDAL_CREATE_GOOGLE_FORM_SUFFIX" desc="Suffix for spoken suggestion description with pedal action button, to explain keystroke used to CREATE_GOOGLE_FORM.">
@@ -11244,7 +11399,7 @@
    </message>
  
    <message name="IDS_OMNIBOX_PEDAL_MANAGE_GOOGLE_ACCOUNT_HINT" desc="The button text contents to suggest pedal action, MANAGE_GOOGLE_ACCOUNT">
-@@ -290,7 +290,7 @@
+@@ -303,7 +303,7 @@
      Manage your info, privacy, and security in your Google Account
    </message>
    <message name="IDS_ACC_OMNIBOX_PEDAL_MANAGE_GOOGLE_ACCOUNT_SUFFIX" desc="Suffix for spoken suggestion description with pedal action button, to explain keystroke used to MANAGE_GOOGLE_ACCOUNT.">
@@ -11253,7 +11408,7 @@
    </message>
    <message name="IDS_ACC_OMNIBOX_PEDAL_MANAGE_GOOGLE_ACCOUNT" desc="Announcement when pedal action button is focused, MANAGE_GOOGLE_ACCOUNT">
      Manage Google Account, activate to manage your info, privacy, and security in your Google Account
-@@ -303,7 +303,7 @@
+@@ -316,7 +316,7 @@
      Change your Google Account password
    </message>
    <message name="IDS_ACC_OMNIBOX_PEDAL_CHANGE_GOOGLE_PASSWORD_SUFFIX" desc="Suffix for spoken suggestion description with pedal action button, to explain keystroke used to CHANGE_GOOGLE_PASSWORD.">
@@ -11262,7 +11417,7 @@
    </message>
    <message name="IDS_ACC_OMNIBOX_PEDAL_CHANGE_GOOGLE_PASSWORD" desc="Announcement when pedal action button is focused, CHANGE_GOOGLE_PASSWORD">
      Change Google password button, activate to change your Google Account password
-@@ -316,23 +316,23 @@
+@@ -329,7 +329,7 @@
      Close all Incognito windows that are currently open
    </message>
    <message name="IDS_ACC_OMNIBOX_PEDAL_CLOSE_INCOGNITO_WINDOWS_SUFFIX" desc="Suffix for spoken suggestion description with pedal action button, to explain keystroke used to CLOSE_INCOGNITO_WINDOWS.">
@@ -11271,6 +11426,15 @@
    </message>
    <message name="IDS_ACC_OMNIBOX_PEDAL_CLOSE_INCOGNITO_WINDOWS" desc="Announcement when pedal action button is focused, CLOSE_INCOGNITO_WINDOWS">
      Close Incognito windows button, activate to close all Incognito windows that are currently open
+@@ -342,23 +342,23 @@
+     Close all Isolated windows that are currently open
+   </message>
+   <message name="IDS_ACC_OMNIBOX_PEDAL_CLOSE_ISOLATED_WINDOWS_SUFFIX" desc="Suffix for spoken suggestion description with pedal action button, to explain keystroke used to CLOSE_ISOLATED_WINDOWS.">
+-    <ph name="CLOSE_ISOLATED_WINDOWS_FOCUSED_FRIENDLY_MATCH_TEXT">$1<ex>The Helium Projects http://www.ch40m1um.qjz9zk bookmark</ex></ph>, Press Tab then Enter to close all Isolated windows that are currently open
++    <ph name="CLOSE_ISOLATED_WINDOWS_FOCUSED_FRIENDLY_MATCH_TEXT">$1<ex>The Helium++ Projects http://www.ch40m1um.qjz9zk bookmark</ex></ph>, Press Tab then Enter to close all Isolated windows that are currently open
+   </message>
+   <message name="IDS_ACC_OMNIBOX_PEDAL_CLOSE_ISOLATED_WINDOWS" desc="Announcement when pedal action button is focused, CLOSE_ISOLATED_WINDOWS">
+     Close Isolated windows button, activate to close all Isolated windows that are currently open
    </message>
  
    <message name="IDS_OMNIBOX_PEDAL_PLAY_CHROME_DINO_GAME_HINT" desc="The button text contents to suggest pedal action, PLAY_CHROME_DINO_GAME">
@@ -11291,7 +11455,7 @@
    </message>
  
    <message name="IDS_OMNIBOX_PEDAL_FIND_MY_PHONE_HINT" desc="The button text contents to suggest pedal action, FIND_MY_PHONE">
-@@ -342,7 +342,7 @@
+@@ -368,7 +368,7 @@
      Find, secure, or erase your device
    </message>
    <message name="IDS_ACC_OMNIBOX_PEDAL_FIND_MY_PHONE_SUFFIX" desc="Suffix for spoken suggestion description with pedal action button, to explain keystroke used to FIND_MY_PHONE.">
@@ -11300,7 +11464,7 @@
    </message>
    <message name="IDS_ACC_OMNIBOX_PEDAL_FIND_MY_PHONE" desc="Announcement when pedal action button is focused, FIND_MY_PHONE">
      Find my device button, activate to visit find your device in the Google Account
-@@ -355,7 +355,7 @@
+@@ -381,7 +381,7 @@
      Manage Google privacy settings in your Google Account
    </message>
    <message name="IDS_ACC_OMNIBOX_PEDAL_MANAGE_GOOGLE_PRIVACY_SUFFIX" desc="Suffix for spoken suggestion description with pedal action button, to explain keystroke used to MANAGE_GOOGLE_PRIVACY.">
@@ -11309,7 +11473,7 @@
    </message>
    <message name="IDS_ACC_OMNIBOX_PEDAL_MANAGE_GOOGLE_PRIVACY" desc="Announcement when pedal action button is focused, MANAGE_GOOGLE_PRIVACY">
      Manage Google Privacy settings button, activate to visit your Google Account privacy settings
-@@ -365,39 +365,39 @@
+@@ -391,39 +391,39 @@
      Manage settings
    </message>
    <message name="IDS_OMNIBOX_PEDAL_MANAGE_CHROME_SETTINGS_SUGGESTION_CONTENTS" desc="The button hover tooltip text to describe pedal action, MANAGE_CHROME_SETTINGS">
@@ -11359,7 +11523,7 @@
    </message>
  
    <message name="IDS_OMNIBOX_PEDAL_SHARE_THIS_PAGE_HINT" desc="The button text contents to suggest pedal action, SHARE_THIS_PAGE">
-@@ -407,7 +407,7 @@
+@@ -433,7 +433,7 @@
      Share this tab by sharing the link, creating a QR code, casting, and more
    </message>
    <message name="IDS_ACC_OMNIBOX_PEDAL_SHARE_THIS_PAGE_SUFFIX" desc="Suffix for spoken suggestion description with pedal action button, to explain keystroke used to SHARE_THIS_PAGE.">
@@ -11368,7 +11532,7 @@
    </message>
    <message name="IDS_ACC_OMNIBOX_PEDAL_SHARE_THIS_PAGE" desc="Announcement when pedal action button is focused, SHARE_THIS_PAGE">
      Share this tab button, activate to share this tab by sharing the link, creating a QR code, casting, and more
-@@ -417,39 +417,39 @@
+@@ -443,39 +443,39 @@
      Manage accessibility settings
    </message>
    <message name="IDS_OMNIBOX_PEDAL_MANAGE_CHROME_ACCESSIBILITY_SUGGESTION_CONTENTS" desc="The button hover tooltip text to describe pedal action, MANAGE_CHROME_ACCESSIBILITY">
@@ -11417,7 +11581,7 @@
    </message>
  
    <message name="IDS_OMNIBOX_PEDAL_CUSTOMIZE_SEARCH_ENGINES_HINT" desc="The button text contents to suggest pedal action, CUSTOMIZE_SEARCH_ENGINES">
-@@ -459,7 +459,7 @@
+@@ -485,7 +485,7 @@
      Manage your default search engine and site search
    </message>
    <message name="IDS_ACC_OMNIBOX_PEDAL_CUSTOMIZE_SEARCH_ENGINES_SUFFIX" desc="Suffix for spoken suggestion description with pedal action button, to explain keystroke used to CUSTOMIZE_SEARCH_ENGINES.">
@@ -11426,7 +11590,7 @@
    </message>
    <message name="IDS_ACC_OMNIBOX_PEDAL_CUSTOMIZE_SEARCH_ENGINES" desc="Announcement when pedal action button is focused, CUSTOMIZE_SEARCH_ENGINES">
      Manage search engines button, activate to manage your default search engine and site search
-@@ -472,23 +472,23 @@
+@@ -498,23 +498,23 @@
      Personalize your accessibility tools in ChromeOS settings
    </message>
    <message name="IDS_ACC_OMNIBOX_PEDAL_MANAGE_CHROMEOS_ACCESSIBILITY_SUFFIX" desc="Suffix for spoken suggestion description with pedal action button, to explain keystroke used to MANAGE_CHROMEOS_ACCESSIBILITY.">
@@ -11455,7 +11619,7 @@
    </message>
  
    <!-- The IDS_ANDROID_OMNIBOX_PEDAL_* strings below are platform-specific
-@@ -506,7 +506,7 @@
+@@ -532,7 +532,7 @@
    <!-- Same as IDS_ACC_OMNIBOX_PEDAL_LAUNCH_INCOGNITO_SUFFIX but
         with "window" changed to "tab". -->
    <message name="IDS_ANDROID_ACC_OMNIBOX_PEDAL_LAUNCH_INCOGNITO_SUFFIX" desc="Suffix for spoken suggestion description with pedal action button, to explain keystroke used to LAUNCH_INCOGNITO.">
@@ -11464,7 +11628,7 @@
    </message>
    <!-- Same as IDS_ACC_OMNIBOX_PEDAL_LAUNCH_INCOGNITO but
         with "window" changed to "tab". -->
-@@ -523,19 +523,19 @@
+@@ -549,19 +549,19 @@
    </message>
    <!-- Same as IDS_OMNIBOX_PEDAL_SET_CHROME_AS_DEFAULT_BROWSER_HINT, but title case instead of sentence case -->
    <message name="IDS_IOS_OMNIBOX_PEDAL_SET_CHROME_AS_DEFAULT_BROWSER_HINT" desc="In Title Case: The button text contents to suggest pedal action, SET_CHROME_AS_DEFAULT_BROWSER">
@@ -11488,7 +11652,7 @@
    </message>
  
    <!-- Same as IDS_OMNIBOX_PEDAL_UPDATE_CREDIT_CARD_HINT, but title case instead of sentence case -->
-@@ -548,7 +548,7 @@
+@@ -574,7 +574,7 @@
    </message>
    <!-- Same as IDS_OMNIBOX_PEDAL_RUN_CHROME_SAFETY_CHECK_HINT but title case instead of sentence case -->
    <message name="IDS_IOS_OMNIBOX_PEDAL_RUN_CHROME_SAFETY_CHECK_HINT" desc="In Title Case: The button text contents to suggest pedal action, RUN_CHROME_SAFETY_CHECK">
@@ -11497,7 +11661,7 @@
    </message>
    <!-- Same as IDS_OMNIBOX_PEDAL_MANAGE_CHROME_SETTINGS_HINT but title case instead of sentence case -->
    <message name="IDS_IOS_OMNIBOX_PEDAL_MANAGE_CHROME_SETTINGS_HINT" desc="In Title Case: The button text contents to suggest pedal action, MANAGE_CHROME_SETTINGS">
-@@ -556,11 +556,11 @@
+@@ -582,11 +582,11 @@
    </message>
    <!-- Same as IDS_OMNIBOX_PEDAL_VIEW_CHROME_HISTORY_HINT but title case instead of sentence case -->
    <message name="IDS_IOS_OMNIBOX_PEDAL_VIEW_CHROME_HISTORY_HINT" desc="In Title Case: The button text contents to suggest pedal action, VIEW_CHROME_HISTORY">
@@ -11548,7 +11712,7 @@
    </message>
  
    <!-- Omnibox Actions in Suggest. -->
-@@ -436,10 +436,10 @@
+@@ -451,10 +451,10 @@
         These are parameterized on the text being completed into the omnibox.
    -->
    <message name="IDS_ACC_AUTOCOMPLETE_HISTORY" desc="Text for screenreaders describing a URL from history.">
@@ -11561,7 +11725,7 @@
    </message>
    <message name="IDS_ACC_AUTOCOMPLETE_SEARCH_HISTORY" desc="Text for screenreaders describing a search from history.">
      <ph name="TEXT">$1<ex>dogs</ex></ph> search from history
-@@ -457,7 +457,7 @@
+@@ -472,7 +472,7 @@
      <ph name="QUERY">$1<ex>weather in los angeles</ex></ph>, answer, <ph name="ANSWER">$2<ex>sunny and 84 degrees</ex></ph>
    </message>
    <message name="IDS_ACC_AUTOCOMPLETE_BOOKMARK" desc="Text for screenreaders describing a URL from a bookmark.">
@@ -11570,7 +11734,7 @@
    </message>
    <message name="IDS_ACC_AUTOCOMPLETE_CLIPBOARD_IMAGE" desc="Text for screenreaders describing an image from a clipboard.">
      Search for clipboard image
-@@ -473,21 +473,21 @@
+@@ -488,21 +488,21 @@
    </message>
    <!-- Supplement accessibility label with item position, e.g. "1 of 3" -->
    <message name="IDS_ACC_AUTOCOMPLETE_N_OF_M" desc="Text for screenreaders describing the current match's position in the list of suggestions.">
@@ -11596,7 +11760,7 @@
    </message>
    <message name="IDS_ACC_KEYWORD_MODE" desc="Announcement when entering keyword search mode.">
      Search <ph name="KEYWORD_SUFFIX">$1<ex>Youtube</ex></ph>
-@@ -508,40 +508,40 @@
+@@ -523,40 +523,40 @@
  
    <!-- Accessibility labels for the omnibox thumbs up feedback button. -->
    <message name="IDS_ACC_THUMBS_UP_SUGGESTION_FOCUSED_PREFIX" desc="Announcement when thumbs up feedback button is focused.">
@@ -11645,7 +11809,7 @@
    </message>
  
    <!-- Site Search/Keyword mode Starter Pack strings. Note: kCurrentDataVersion in template_url_starter_pack_data.cc must also be updated when changing these values. -->
-@@ -628,11 +628,11 @@
+@@ -643,11 +643,11 @@
      Learn more
    </message>
    <message name="IDS_ACC_OMNIBOX_IPH_LINK_SELECTED" desc="Announcement when an IPH Chrome Tip link is selected.">
@@ -11698,7 +11862,7 @@
      </message>
    </if>
    <if expr="use_titlecase">
-@@ -211,7 +211,7 @@
+@@ -220,7 +220,7 @@
      <if expr="is_android">
      <!-- Only used in the dialog shown after tapping "Details" in page info -->
      <message name="IDS_PAGE_INFO_SECURE_IDENTITY_VERIFIED" desc="The text of the identity section when the page is secure and uses a valid certificate">
@@ -11707,7 +11871,7 @@
      </message>
      </if>
  
-@@ -428,16 +428,16 @@
+@@ -437,16 +437,16 @@
        </message>
      </if>
      <message name="IDS_PAGE_INFO_CAMERA_SYSTEM_SETTINGS_DESCRIPTION" desc="The description for the camera permission with a link to system settings.">
@@ -11728,7 +11892,7 @@
      </message>
      <message name="IDS_PAGE_INFO_SETTINGS_OF_A_SYSTEM_LINK" desc="This is the text of the link pointing to settings of a system. This appears under a permission in the Page Info bubble if the permission is blocked on the system level.">
          system settings
-@@ -498,36 +498,36 @@
+@@ -507,36 +507,36 @@
      <!-- Password Protection -->
      <if expr="_google_chrome">
        <message name="IDS_PAGE_INFO_CHANGE_PASSWORD_DETAILS" desc="A short paragraph explaining to the user that they has reuse their google password on current website.">
@@ -11775,7 +11939,7 @@
        </message>
      </if>
  
-@@ -1054,23 +1054,23 @@
+@@ -1063,23 +1063,23 @@
      Your organization has blocked this site because it violates a policy.
    </message>
  
@@ -11839,8 +12003,8 @@
 -    Passkey • your Helium Profile
 +    Passkey • your Helium++ Profile
    </message>
-   <message name="IDS_PASSWORD_MANAGER_PASSKEY_FROM_ICLOUD_KEYCHAIN" desc="Text that appears in the password autofill popup, for the iCloud Keychain authenticator. When the user clicks on this option, Chrome will invoke iCloud Keychain to verify the user's identity. iCloud Keychain is an Apple brand and should be translated the same as it is in Apple devices. If you edit the language code in https://support.apple.com/es-es/HT204085 you can see how Apple translates it in several languages ('Keychain' is usually localized). Refer to Glossary for the meaning of 'passkey'; do not translate it as 'password'.">
-     Passkey • iCloud Keychain
+   <message name="IDS_PASSWORD_MANAGER_PASSKEY_FROM_ICLOUD_KEYCHAIN" desc="Text that appears in the password autofill popup, for the Apple Passwords authenticator. When the user clicks on this option, Chrome will invoke Apple Passwords to verify the user's identity. Apple Passwords is an Apple brand and should be translated the same as it is in Apple devices. If you edit the language code in https://support.apple.com/es-es/104955 you can see how Apple translates it in several languages ('Passwords' is usually localized). Refer to Glossary for the meaning of 'passkey'; do not translate it as 'password'.">
+     Passkey • Apple Passwords
 @@ -158,7 +158,7 @@
    </if>
    <if expr="is_chromeos">
@@ -12006,7 +12170,7 @@
    </message>
    <message name="IDS_POLICY_DEFAULT_SEARCH_DISABLED" desc="The text displayed in the status column when a policy value has been ignored because default search has not been enabled.">
      Ignored because default search is not enabled by policy.
-@@ -802,10 +802,10 @@
+@@ -805,10 +805,10 @@
      This policy cannot be set to "True" and be mandatory, therefore it was changed to recommended.
    </message>
    <message name="IDS_POLICY_IGNORED_CHROME_PROFILE" desc="Text explaining that the policy cannot be set at the Chrome profile level and is therefore ignored.">
@@ -12019,7 +12183,7 @@
    </message>
    <message name="IDS_POLICY_IGNORED_EXTENSION" desc="Text explaining that extension policies are likely ignored by the extension.">
      Likely ignored by the extension.
-@@ -885,13 +885,13 @@
+@@ -888,13 +888,13 @@
      Streamline how your organization manages policies
    </message>
    <message name="IDS_POLICY_BANNER_PROMOTION_DESC" desc="Description for Chrome Enterprise Core (CEC) promotion banner">
@@ -12342,7 +12506,7 @@
    </message>
    <message name="IDS_HTTPS_ONLY_MODE_FOR_INCOGNITO_PRIMARY_PARAGRAPH" desc="Main paragrpah of the HTTPS-Only Mode warning. This warning is shown when the browser tries to upgrade a navigation to a site to HTTPS but the site does not support HTTPS. The user is seeing this warning because they are browsing in Incognito mode.">
      You are seeing this warning because this site does not support HTTPS and you are in Incognito mode. <ph name="BEGIN_LEARN_MORE_LINK">&lt;a href="#" id="learn-more-link"&gt;</ph>Learn more about this warning<ph name="END_LEARN_MORE_LINK">&lt;/a&gt;</ph>
-@@ -553,10 +553,10 @@
+@@ -556,10 +556,10 @@
      Learn more about this warning
    </message>
    <message name="IDS_ABH_PROMPT_SITE_ENGAGEMENT_PRIMARY_PARAGRAPH" desc="Main paragraph shown in the Ask-before-HTTP warning dialog. This warning is shown when the browser tries to upgrade a navigation to a site to HTTPS but the site does not support HTTPS. The user is seeing this warning because they typically visit HTTPS URLs.">
@@ -12355,7 +12519,7 @@
    </message>
    <message name="IDS_ABH_PROMPT_INCOGNITO_PRIMARY_PARAGRAPH" desc="Main paragrpah of the Ask-before-HTTP warning dialog. This warning is shown when the browser tries to upgrade a navigation to a site to HTTPS but the site does not support HTTPS. The user is seeing this warning because they are browsing in Incognito mode.">
      You are seeing this warning because this site does not support HTTPS and you are in Incognito mode. <ph name="LEARN_MORE">$1<ex>Learn more about this warning</ex></ph>
-@@ -596,7 +596,7 @@
+@@ -602,7 +602,7 @@
      Mark as safe
    </message>
    <message name="IDS_SAFE_BROWSING_HATS_CUSTOM_INVITATION" desc="The custom invitation string shown in the Happiness Tracking Survey (HaTS) prompt banner for Safe Browsing warnings (such as red warning interstitials or suspicious site warnings) on Android">
