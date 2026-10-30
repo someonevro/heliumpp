@@ -1,5 +1,5 @@
 # PROJECT_STATUS.md
-Updated 2026-10-29 (session 8 + redesign stage 0, see SESSION 8).
+Updated 2026-10-30 (session 8 end, see SESSION 8).
 
 ## HANDOFF (read this first) - end of session 2, 2026-10-21
 **State:** working Linux desktop browser (Helium, Chromium 155.0.8059.84). Patch series `patches/series` = 56 patches (0001-0057; 0044 was removed on purpose). Last build OK (compile59). Not a git repo, nothing committed or published. Snapshots: `designs/session2-start/` (before this session), `designs/toggle_bar_browser/` (with the sidebar privacy toggle bar, since removed), `designs/session2-end/` (now: patches, scripts, docs).
@@ -160,13 +160,19 @@ Updated 2026-10-29 (session 8 + redesign stage 0, see SESSION 8).
   RELEASED 2026-10-29: commit 9622759 pushed; v0.20.2.2-alpha (Linux AppImage, signed by the owner, signature
   checked against the built-in key, feed shows 0.20.2.2). package_appimage.sh now pins the type2 runtime
   (20251108, sha256) and packages with --network none. Windows CI run 40899399043 started from scratch.
-  RESUME HERE: (3) when run 40899399043 finishes, add the installer to v0.20.2.2-alpha with its SHA-256, update
-  README Windows link;
-  (4) next task proposed: about:blank isolation leak (test_isolated_blank).
-- NEXT: (1) user tests `scripts/run.sh test14 --helium-web-sidebar`; (2) web sidebar M2: drag and drop (tab_drag_api),
-  tab context menu, collapsed sidebar, arrow-key nav, then make it the default; (3) visual polish toward Zephium
-  (study frame/src/styles/*.css, MPL-2.0); (4) new tab page with softened wallpaper; (5) shield blocked counts (uBO);
-  (6) commit + push -> Windows CI full run -> release 0.20.2.2.
+  WINDOWS 0.20.2.2 DONE 2026-10-30: run 40899399043 passed (5 stages, ~25.5 h from scratch); installer
+  (sha256 e27f25d8...af95) + portable zip (67a7ef7e...e12b) added to v0.20.2.2-alpha, notes updated, README links
+  it. NOT run on a real Windows PC.
+  REPO CLEANUP 2026-10-30 (owner): prompt.txt, CLAUDE.md, .claude/, TODO.md, PRODUCT.md (+ designs/*/PRODUCT.md)
+  and .impeccable/ removed from ALL history (git filter-branch) and force-pushed with all 8 tags. They stay on
+  disk, ignored via .git/info/exclude (local, not published). Pre-rewrite backup:
+  build/git-backup/pre-scrub-20261030.bundle. Never `git add` those files again.
+  RESUME HERE: (1) next task proposed: about:blank isolation leak (test_isolated_blank);
+  (2) onboarding additions (sidebar style, performance mode, match wallpaper) await the owner's OK of the plan;
+  (3) open items listed above (resume-run branch check, Bonjourr permissions, updater opt-out, Figtree on
+  Windows, web sidebar parity gaps).
+- NEXT: see RESUME HERE above. Web sidebar parity still missing: drag and drop (tab_drag_api), tab context menu,
+  folder/pinned editing, arrow-key nav, window drag from the top row.
 
 ## SESSION 7 (2026-10-25, after v0.19.4.6) - released as v0.19.4.7-alpha
 - 0108-split-helium-version: HELIUM_PRODUCT_VERSION moved from version_info_values.h (reached ~everything via
