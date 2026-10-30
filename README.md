@@ -15,11 +15,11 @@
 
 ## Download
 
-Latest release: **[Helium++ 0.20.2.2 alpha](https://github.com/someonevro/heliumpp/releases/tag/v0.20.2.2-alpha)** (Windows installer: still 0.19.4.7 until the 0.20.2.2 build finishes)
+Latest release: **[Helium++ 0.20.2.2 alpha](https://github.com/someonevro/heliumpp/releases/tag/v0.20.2.2-alpha)**
 
 | Platform | Download |
 | --- | --- |
-| **Windows** 10/11 x64 | [heliumpp_0.19.4.7_x64-installer.exe](https://github.com/someonevro/heliumpp/releases/download/v0.19.4.7-alpha/heliumpp_0.19.4.7_x64-installer.exe) |
+| **Windows** 10/11 x64 | [heliumpp_0.20.2.2_x64-installer.exe](https://github.com/someonevro/heliumpp/releases/download/v0.20.2.2-alpha/heliumpp_0.20.2.2_x64-installer.exe) |
 | **Linux** x86_64 | [heliumpp-0.20.2.2-x86_64.AppImage](https://github.com/someonevro/heliumpp/releases/download/v0.20.2.2-alpha/heliumpp-0.20.2.2-x86_64.AppImage) |
 
 **Windows:** run the installer. It installs for your user only, into `%LOCALAPPDATA%\heliumpp`, and keeps its data apart from Helium. Windows SmartScreen shows a warning because the installer does not have a paid code-signing certificate yet (this says nothing about the file being unsafe): click **More info**, then **Run anyway**. It does not update itself yet; download new versions from this page. This is the first Windows release, so if something does not work, please [open an issue](https://github.com/someonevro/heliumpp/issues).
