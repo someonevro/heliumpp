@@ -77,7 +77,7 @@ Honest summary of what has been demonstrated, not just coded:
 | macOS, Android, iOS | **Not started** |
 | DRM (Widevine) | **Not tested** |
 
-Much of the new UI has only been checked in headless or virtual-display screenshots. Details are in [`PROJECT_STATUS.md`](PROJECT_STATUS.md) and [`TODO.md`](TODO.md).
+Much of the new UI has only been checked in headless or virtual-display screenshots. Details are in [`PROJECT_STATUS.md`](PROJECT_STATUS.md).
 
 ## Building and running (Linux)
 
@@ -99,11 +99,9 @@ scripts/package_appimage.sh
 
 ## Documentation
 
-- [`PRODUCT.md`](PRODUCT.md): product goals and design direction
 - [`ARCHITECTURE.md`](ARCHITECTURE.md): decisions, alternatives and sources
 - [`PROJECT_STATUS.md`](PROJECT_STATUS.md): current state and next steps
 - [`PLATFORM_SUPPORT.md`](PLATFORM_SUPPORT.md): per-platform compatibility
-- [`TODO.md`](TODO.md): requirement checklist
 
 ## Security
 
