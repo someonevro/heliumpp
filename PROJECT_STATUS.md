@@ -202,13 +202,9 @@ Updated 2026-11-04 (session 9 end; RESUME: see "SESSION 9 RESUME" below RESUME H
   Audit (2026-11-04): updater signature/sha256/downgrade checks OK; sidebar mojom handler validates input; addy key
   stored only encrypted (os_crypt); CI inputs passed via env, workflow_dispatch only; all rm -rf scripts use set -u.
   SESSION 9 RESUME (2026-11-04 ~17:00 UTC, owner shut down the PC):
-  - Linux 0.20.2.3 BUILT (helium --version OK; test_isolated_blank + test_web_sidebar PASS on it) and PACKAGED:
-    build/release/heliumpp-0.20.2.3-x86_64.AppImage, sha256 848462665bbbd5b324c3846787a64fbe4bb25373ea6078e650afcfd743795991.
-    NOT SIGNED yet: build/release/latest.json is still 0.20.2.2. Owner runs:
-    scripts/release_sign.sh sign build/release/heliumpp-0.20.2.3-x86_64.AppImage https://github.com/someonevro/heliumpp/releases/download/v0.20.2.3-alpha
-    then: verify the signature against kUpdatePublicKey, move old latest.json aside first is done by the script? (check),
-    gh release create v0.20.2.3-alpha (AppImage + latest.json, --latest, notes: 0138 isolated about:blank fix, 0139
-    Windows page clicks, Windows build pending), README links, commit + push. Owner approved publishing Linux now.
+  - LINUX 0.20.2.3 RELEASED 2026-11-04: v0.20.2.3-alpha (Latest), AppImage sha256 848462665bbb...795991, latest.json
+    signed by the owner (in a real terminal: the `!` prompt has no TTY for the passphrase) and verified against
+    kUpdatePublicKey. README: Linux links 0.20.2.3, Windows row warns about the 0.20.2.2 click bug.
   - Windows CI run 41861280404 (0.20.2.3) started 15:46 UTC, ~25 h, runs on GitHub even with the PC off. When done:
     download artifacts, check PE + version, add installer + portable zip with SHA-256 to v0.20.2.3-alpha, README.
     Owner approved adding Windows to the release. Then ask the tester to re-check: clicks on websites, NTP Customize

@@ -15,20 +15,20 @@
 
 ## Download
 
-Latest release: **[Helium++ 0.20.2.2 alpha](https://github.com/someonevro/heliumpp/releases/tag/v0.20.2.2-alpha)**
+Latest release: **[Helium++ 0.20.2.3 alpha](https://github.com/someonevro/heliumpp/releases/tag/v0.20.2.3-alpha)**
 
 | Platform | Download |
 | --- | --- |
-| **Windows** 10/11 x64 | [heliumpp_0.20.2.2_x64-installer.exe](https://github.com/someonevro/heliumpp/releases/download/v0.20.2.2-alpha/heliumpp_0.20.2.2_x64-installer.exe) |
-| **Linux** x86_64 | [heliumpp-0.20.2.2-x86_64.AppImage](https://github.com/someonevro/heliumpp/releases/download/v0.20.2.2-alpha/heliumpp-0.20.2.2-x86_64.AppImage) |
+| **Windows** 10/11 x64 | 0.20.2.3 is still building and will be added to the [0.20.2.3 release](https://github.com/someonevro/heliumpp/releases/tag/v0.20.2.3-alpha). The older [0.20.2.2 installer](https://github.com/someonevro/heliumpp/releases/download/v0.20.2.2-alpha/heliumpp_0.20.2.2_x64-installer.exe) has a known bug: clicks on websites do not work. |
+| **Linux** x86_64 | [heliumpp-0.20.2.3-x86_64.AppImage](https://github.com/someonevro/heliumpp/releases/download/v0.20.2.3-alpha/heliumpp-0.20.2.3-x86_64.AppImage) |
 
 **Windows:** run the installer. It installs for your user only, into `%LOCALAPPDATA%\heliumpp`, and keeps its data apart from Helium. Windows SmartScreen shows a warning because the installer does not have a paid code-signing certificate yet (this says nothing about the file being unsafe): click **More info**, then **Run anyway**. It does not update itself yet; download new versions from this page. This is the first Windows release, so if something does not work, please [open an issue](https://github.com/someonevro/heliumpp/issues).
 
 **Linux:**
 
 ```bash
-chmod +x heliumpp-0.20.2.2-x86_64.AppImage
-./heliumpp-0.20.2.2-x86_64.AppImage
+chmod +x heliumpp-0.20.2.3-x86_64.AppImage
+./heliumpp-0.20.2.3-x86_64.AppImage
 ```
 
 > **Data warning for 0.19.4.1 (withdrawn).** Version 0.19.4.1 used real Helium's profile folder (`~/.config/net.imput.helium`). If you also use Helium, it could change Helium's settings: the "High" privacy mode makes cookies and site data get deleted whenever the browser closes, and that setting stays in Helium. From 0.19.4.2 on, Helium++ uses its own folder (`~/.config/heliumpp`) and never touches Helium's data. If you ran 0.19.4.1 next to Helium: back up `~/.config/net.imput.helium`, then in Helium check Settings > Privacy and security > Site settings > Additional content settings > On-device site data, third-party cookies, site permissions and the theme.
@@ -69,7 +69,7 @@ Honest summary of what has been demonstrated, not just coded:
 
 | Area | State |
 | --- | --- |
-| Linux build (Chromium 156.0.8078.73) | Builds and runs; `helium --version` prints `Helium++ 0.20.2.2 (Chromium 156.0.8078.73)` |
+| Linux build (Chromium 156.0.8078.73) | Builds and runs; `helium --version` prints `Helium++ 0.20.2.3 (Chromium 156.0.8078.73)` |
 | Windows x64 build | Compiles and packages on GitHub Actions (`.github/workflows/windows.yml`); installer not code-signed yet; first release, feedback welcome |
 | Privacy modes, performance mode | Automated tests pass (`scripts/test_privacy_mode.sh`, `scripts/test_performance_mode.sh`) |
 | Isolated tabs | Cookie isolation, popups, permissions, disk traces and wipe-on-close tested headlessly. Downloads blocked and kept off disk (tested); password manager off (not tested); clipboard writes are **not** blocked |
