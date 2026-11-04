@@ -1,0 +1,38 @@
+--- a/chrome/browser/ui/views/frame/browser_view.cc
++++ b/chrome/browser/ui/views/frame/browser_view.cc
+@@ -5529,8 +5529,24 @@
+   // If the point's y coordinate is below the top of the topmost view and
+   // otherwise within the bounds of this view, the point is considered to be
+   // within the client area.
++  // Helium: in the sidebar layouts the toolbar is not above the page (with
++  // the web sidebar its top edge is the bottom of the window), so "below the
++  // toolbar top" missed the page: it counted as title bar (HTNOWHERE ->
++  // HTCAPTION on Windows) and clicks on websites never reached the page. The
++  // page area always starts the client area.
++  int client_area_top = GetClientAreaTop();
++  for (views::View* page_part :
++       {static_cast<views::View*>(infobar_container_), contents_container()}) {
++    if (page_part && page_part->GetVisible() && page_part->parent()) {
++      client_area_top =
++          std::min(client_area_top,
++                   views::View::ConvertPointToTarget(
++                       page_part->parent(), this, page_part->origin())
++                       .y());
++    }
++  }
+   gfx::Rect bounds_from_toolbar_top = bounds();
+-  bounds_from_toolbar_top.Inset(gfx::Insets::TLBR(GetClientAreaTop(), 0, 0, 0));
++  bounds_from_toolbar_top.Inset(gfx::Insets::TLBR(client_area_top, 0, 0, 0));
+   if (bounds_from_toolbar_top.Contains(point)) {
+     return HTCLIENT;
+   }
+@@ -5548,7 +5564,8 @@
+   gfx::Rect tabstrip_background_bounds = bounds();
+   gfx::Point toolbar_origin = toolbar_->origin();
+   views::View::ConvertPointToTarget(top_container_, this, &toolbar_origin);
+-  tabstrip_background_bounds.set_height(toolbar_origin.y());
++  tabstrip_background_bounds.set_height(
++      std::min(toolbar_origin.y(), client_area_top));
+   if (tabstrip_background_bounds.Contains(point)) {
+     return HTNOWHERE;
+   }

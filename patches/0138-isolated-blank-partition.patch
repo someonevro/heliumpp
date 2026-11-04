@@ -1,0 +1,91 @@
+--- a/content/browser/browsing_instance.h
++++ b/content/browser/browsing_instance.h
+@@ -132,6 +132,19 @@
+   // tags, this always returns true.
+   bool is_fixed_storage_partition() { return is_fixed_storage_partition_; }
+ 
++  // Helium: the partition of a non-guest fixed-storage-partition
++  // BrowsingInstance. SiteInstances without a site yet (about:blank) report it
++  // instead of the default partition; otherwise the first real navigation
++  // copies the default partition and leaves the fixed one.
++  const std::optional<StoragePartitionConfig>&
++  fixed_storage_partition_config() const {
++    return fixed_storage_partition_config_;
++  }
++  void set_fixed_storage_partition_config(
++      const StoragePartitionConfig& config) {
++    fixed_storage_partition_config_ = config;
++  }
++
+   // Returns whether this BrowsingInstance has registered a SiteInstance for
+   // the site of |site_info|.
+   bool HasSiteInstance(const SiteInfo& site_info);
+@@ -336,6 +349,7 @@
+   // TODO(crbug.com/40943418): We actually always want this behavior. Remove
+   // this bit when we are ready.
+   const bool is_fixed_storage_partition_;
++  std::optional<StoragePartitionConfig> fixed_storage_partition_config_;
+ 
+   // A token uniquely identifying this BrowsingInstance. This is used in case we
+   // need this information available in the renderer process, rather than
+--- a/content/browser/site_info.cc
++++ b/content/browser/site_info.cc
+@@ -459,11 +459,16 @@
+ SiteInfo::~SiteInfo() = default;
+ 
+ SiteInfo::SiteInfo(BrowserContext* browser_context)
++    : SiteInfo(browser_context,
++               StoragePartitionConfig::CreateDefault(browser_context)) {}
++
++SiteInfo::SiteInfo(BrowserContext* browser_context,
++                   const StoragePartitionConfig& storage_partition_config)
+     : SiteInfo(AgentClusterKey(),
+                /*site_url=*/GURL(),
+                /*is_sandboxed*/ false,
+                UrlInfo::kInvalidUniqueSandboxId,
+-               StoragePartitionConfig::CreateDefault(browser_context),
++               storage_partition_config,
+                WebExposedIsolationInfo::CreateNonIsolated(),
+                WebExposedIsolationLevel::kNotIsolated,
+                /*is_guest=*/false,
+--- a/content/browser/site_info.h
++++ b/content/browser/site_info.h
+@@ -188,6 +188,10 @@
+   // Initializes |storage_partition_config_| with a value appropriate for
+   // |browser_context|.
+   explicit SiteInfo(BrowserContext* browser_context);
++  // Helium: same, but with a given StoragePartitionConfig (unassigned
++  // SiteInstances of a fixed-storage-partition BrowsingInstance).
++  SiteInfo(BrowserContext* browser_context,
++           const StoragePartitionConfig& storage_partition_config);
+ 
+   // The SiteInfo constructor should take in all values needed for comparing two
+   // SiteInfos, to help ensure all creation sites are updated accordingly when
+--- a/content/browser/site_instance_impl.cc
++++ b/content/browser/site_instance_impl.cc
+@@ -109,7 +109,12 @@
+     : id_(g_site_instance_id_generator.GenerateNextId()),
+       browsing_instance_(browsing_instance),
+       can_associate_with_spare_process_(true),
+-      site_info_(browsing_instance->isolation_context().browser_context()),
++      site_info_(
++          browsing_instance->fixed_storage_partition_config()
++              ? SiteInfo(browsing_instance->isolation_context().browser_context(),
++                         *browsing_instance->fixed_storage_partition_config())
++              : SiteInfo(
++                    browsing_instance->isolation_context().browser_context())),
+       has_site_(false),
+       process_reuse_policy_(ProcessReusePolicy::kDefault),
+       is_for_service_worker_(false),
+@@ -165,6 +170,11 @@
+                            url_info.web_exposed_isolation_info.value_or(
+                                WebExposedIsolationInfo::CreateNonIsolated()),
+                            is_guest, is_fenced, is_fixed_storage_partition));
++  if (is_fixed_storage_partition && !is_guest &&
++      url_info.storage_partition_config) {
++    instance->set_fixed_storage_partition_config(
++        *url_info.storage_partition_config);
++  }
+ 
+   // Note: The |allow_default_instance| value used here MUST match the value
+   // used in DoesSiteForURLMatch().

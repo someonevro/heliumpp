@@ -1,5 +1,5 @@
 # PROJECT_STATUS.md
-Updated 2026-10-30 (session 8 end, see SESSION 8).
+Updated 2026-11-04 (session 9, see SESSION 9 under RESUME HERE).
 
 ## HANDOFF (read this first) - end of session 2, 2026-10-21
 **State:** working Linux desktop browser (Helium, Chromium 155.0.8059.84). Patch series `patches/series` = 56 patches (0001-0057; 0044 was removed on purpose). Last build OK (compile59). Not a git repo, nothing committed or published. Snapshots: `designs/session2-start/` (before this session), `designs/toggle_bar_browser/` (with the sidebar privacy toggle bar, since removed), `designs/session2-end/` (now: patches, scripts, docs).
@@ -171,7 +171,40 @@ Updated 2026-10-30 (session 8 end, see SESSION 8).
   (2) onboarding additions (sidebar style, performance mode, match wallpaper) await the owner's OK of the plan;
   (3) open items listed above (resume-run branch check, Bonjourr permissions, updater opt-out, Figtree on
   Windows, web sidebar parity gaps).
-- NEXT: see RESUME HERE above. Web sidebar parity still missing: drag and drop (tab_drag_api), tab context menu,
+- SESSION 9 (2026-11-04): about:blank isolation leak FIXED (patch 0138-isolated-blank-partition).
+  Cause (Chromium content/): a SiteInstance with no site yet (about:blank, or GURL() for a noopener popup in
+  web_contents_impl.cc) held a default SiteInfo = DEFAULT storage partition. The fixed-partition logic
+  (navigation_request.cc ~4705, render_frame_host_manager.cc ~4100) copies the current instance's partition, so the
+  first real URL landed in shared storage. Fix: BrowsingInstance keeps the partition of a non-guest fixed-partition
+  instance (set in SiteInstanceImpl::CreateForUrlInfo); unassigned SiteInstances use SiteInfo(ctx, that config).
+  Guests and normal tabs unchanged.
+  TESTED: compile OK (18m40s, 331 steps); test_isolated_blank 3/3 ok (about:blank no longer leaks); full regression
+  29/29 PASS (build/audit/regression-0138.txt). Docker was reinstalled by the owner (builder image survived).
+  Not yet tested: a noopener about:blank popup the user types into (should be covered by the same fix).
+  Owner pasted a priority list (privacy/isolation, reliability, reproducible builds + clean-checkout series check +
+  CI regression tests, sidebar UX parity, performance measurements, visual polish): work it in batches of 1-2 with a
+  test each, privacy first. Windows 156 already built/released (not run on real Windows).
+  New scripts/test_isolated_noopener_blank.py (noopener about:blank popup, then a URL loaded in it): PASS on 0138
+  and also on the saved 0122 build, so that path never leaked (Chrome's navigator assigns the site); kept as a guard.
+  Note: a tab created by CDP Target.createTarget while an isolated tab is active inherits isolation (0051), tests
+  must not use it as the "normal" tab.
+  WINDOWS TESTER REPORTS (0.20.2.2): "customize button doesn't work", "resets config every time", "can't click on
+  websites". ROOT CAUSE of the clicks (verified on Linux with a temporary log): BrowserView::NonClientHitTest treats
+  everything above the toolbar's top as possible title bar; with the web sidebar the toolbar top is the window bottom
+  (y=799 in a 799 px window), so the whole page returned HTNOWHERE -> HTCAPTION in BrowserFrameViewWin: on Windows
+  every click on a page started a window drag. Linux is unaffected (X11/Wayland deliver clicks to the page's own
+  window). Fix = patch 0139-windows-page-clicks: client area starts at min(toolbar top, infobar top, page top);
+  measured after the fix: client top 0 (infobar) / 52 (page). The NTP customize button is a page control, so it
+  very likely had the same cause. "Resets config" NOT explained: Windows tracked-pref protection only covers
+  homepage/startup/search/pinned tabs; likely also clicks (Settings/onboarding are pages) - needs the tester's
+  details. NOT verified on Windows: needs a Windows CI run (~25 h, owner approval) and the tester.
+  Regression after 0139: 29/30, test_forget_site failed once (example.com tabs never loaded) and PASSED on rerun.
+  Audit (2026-11-04): updater signature/sha256/downgrade checks OK; sidebar mojom handler validates input; addy key
+  stored only encrypted (os_crypt); CI inputs passed via env, workflow_dispatch only; all rm -rf scripts use set -u.
+  Owner considered moving ~/Projects to a SATA SSD, then decided to keep it on the NVMe (2026-11-04).
+  NEXT: Windows CI build with 0138+0139 (owner approval), tester re-checks the 3 reports; then a regression runner script (scripts/run_regression.sh) so the
+  29-test loop is one command; then a clean-checkout series check (prepare_source.sh into a fresh dir, apply all).
+- NEXT: see SESSION 9 above, then RESUME HERE above. Web sidebar parity still missing: drag and drop (tab_drag_api), tab context menu,
   folder/pinned editing, arrow-key nav, window drag from the top row.
 
 ## SESSION 7 (2026-10-25, after v0.19.4.6) - released as v0.19.4.7-alpha

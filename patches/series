@@ -128,3 +128,5 @@
 0135-web-sidebar-default.patch
 0136-security-review-fixes.patch
 0137-sidebar-isolated-marker.patch
+0138-isolated-blank-partition.patch
+0139-windows-page-clicks.patch
