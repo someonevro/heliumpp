@@ -1,5 +1,5 @@
 # PROJECT_STATUS.md
-Updated 2026-11-04 (session 9, see SESSION 9 under RESUME HERE).
+Updated 2026-11-04 (session 9 end; RESUME: see "SESSION 9 RESUME" below RESUME HERE).
 
 ## HANDOFF (read this first) - end of session 2, 2026-10-21
 **State:** working Linux desktop browser (Helium, Chromium 155.0.8059.84). Patch series `patches/series` = 56 patches (0001-0057; 0044 was removed on purpose). Last build OK (compile59). Not a git repo, nothing committed or published. Snapshots: `designs/session2-start/` (before this session), `designs/toggle_bar_browser/` (with the sidebar privacy toggle bar, since removed), `designs/session2-end/` (now: patches, scripts, docs).
@@ -201,6 +201,19 @@ Updated 2026-11-04 (session 9, see SESSION 9 under RESUME HERE).
   Regression after 0139: 29/30, test_forget_site failed once (example.com tabs never loaded) and PASSED on rerun.
   Audit (2026-11-04): updater signature/sha256/downgrade checks OK; sidebar mojom handler validates input; addy key
   stored only encrypted (os_crypt); CI inputs passed via env, workflow_dispatch only; all rm -rf scripts use set -u.
+  SESSION 9 RESUME (2026-11-04 ~17:00 UTC, owner shut down the PC):
+  - Linux 0.20.2.3 BUILT (helium --version OK; test_isolated_blank + test_web_sidebar PASS on it) and PACKAGED:
+    build/release/heliumpp-0.20.2.3-x86_64.AppImage, sha256 848462665bbbd5b324c3846787a64fbe4bb25373ea6078e650afcfd743795991.
+    NOT SIGNED yet: build/release/latest.json is still 0.20.2.2. Owner runs:
+    scripts/release_sign.sh sign build/release/heliumpp-0.20.2.3-x86_64.AppImage https://github.com/someonevro/heliumpp/releases/download/v0.20.2.3-alpha
+    then: verify the signature against kUpdatePublicKey, move old latest.json aside first is done by the script? (check),
+    gh release create v0.20.2.3-alpha (AppImage + latest.json, --latest, notes: 0138 isolated about:blank fix, 0139
+    Windows page clicks, Windows build pending), README links, commit + push. Owner approved publishing Linux now.
+  - Windows CI run 41861280404 (0.20.2.3) started 15:46 UTC, ~25 h, runs on GitHub even with the PC off. When done:
+    download artifacts, check PE + version, add installer + portable zip with SHA-256 to v0.20.2.3-alpha, README.
+    Owner approved adding Windows to the release. Then ask the tester to re-check: clicks on websites, NTP Customize
+    button, "resets config" (ask what resets; installer or portable).
+  - A background compile was once killed at exactly 10 min with no error (harness limit?); rerun resumed fine.
   Owner considered moving ~/Projects to a SATA SSD, then decided to keep it on the NVMe (2026-11-04).
   COMMITTED 670e16f + pushed (owner OK 2026-11-04). Owner: "once all the bugs are fixed update my github; Windows
   is basically unusable". Version bumped to 0.20.2.3 (patch 0140) so the fixed build is distinguishable; CI run
