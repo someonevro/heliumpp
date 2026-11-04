@@ -202,7 +202,10 @@ Updated 2026-11-04 (session 9, see SESSION 9 under RESUME HERE).
   Audit (2026-11-04): updater signature/sha256/downgrade checks OK; sidebar mojom handler validates input; addy key
   stored only encrypted (os_crypt); CI inputs passed via env, workflow_dispatch only; all rm -rf scripts use set -u.
   Owner considered moving ~/Projects to a SATA SSD, then decided to keep it on the NVMe (2026-11-04).
-  NEXT: Windows CI build with 0138+0139 (owner approval), tester re-checks the 3 reports; then a regression runner script (scripts/run_regression.sh) so the
+  COMMITTED 670e16f + pushed (owner OK 2026-11-04). Owner: "once all the bugs are fixed update my github; Windows
+  is basically unusable". Version bumped to 0.20.2.3 (patch 0140) so the fixed build is distinguishable; CI run
+  41857672647 (still 0.20.2.2) cancelled and restarted with 0140.
+  NEXT: when run 41857672647 finishes: check artifacts, ask the owner before uploading to a release, tester re-checks the 3 reports; then a regression runner script (scripts/run_regression.sh) so the
   29-test loop is one command; then a clean-checkout series check (prepare_source.sh into a fresh dir, apply all).
 - NEXT: see SESSION 9 above, then RESUME HERE above. Web sidebar parity still missing: drag and drop (tab_drag_api), tab context menu,
   folder/pinned editing, arrow-key nav, window drag from the top row.
