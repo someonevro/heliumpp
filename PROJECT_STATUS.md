@@ -1,5 +1,5 @@
 # PROJECT_STATUS.md
-Updated 2026-11-04 (session 9 end; RESUME: see "SESSION 9 RESUME" below RESUME HERE).
+Updated 2026-11-21 (session 10; session 9 end; RESUME: see "SESSION 9 RESUME" below RESUME HERE).
 
 ## HANDOFF (read this first) - end of session 2, 2026-10-21
 **State:** working Linux desktop browser (Helium, Chromium 155.0.8059.84). Patch series `patches/series` = 56 patches (0001-0057; 0044 was removed on purpose). Last build OK (compile59). Not a git repo, nothing committed or published. Snapshots: `designs/session2-start/` (before this session), `designs/toggle_bar_browser/` (with the sidebar privacy toggle bar, since removed), `designs/session2-end/` (now: patches, scripts, docs).
@@ -9,6 +9,13 @@ Updated 2026-11-04 (session 9 end; RESUME: see "SESSION 9 RESUME" below RESUME H
 **Biggest unverified items:** menu entry and Ctrl+Alt+N never clicked in a real window by me; DNS page never seen and DoH never observed in use; performance mode saving not measured; the user must click-test the homepage switches; horizontal layout untouched by the new features; downloads from isolated tabs hit the real disk and are not blocked; password-save prompts and clipboard writes in isolated tabs not blocked; about:blank popup case in isolated tabs untested (possible fallback to shared storage); the 56-patch series has never been replayed on a pristine tree.
 **Next (user's list):** (1) isolated mode: fix/test the about:blank popup hole, block or redirect downloads, password manager, clipboard write; (2) item 4 general speed outside performance mode (measure first); (3) restyle: horizontal layout, menus/popups, Settings and onboarding pages; (4) wallpaper image behind the new tab page and privacy chip (dropped: weather, tracker counter unless uBO stats readable); (5) red hover tint on window close; (6) DNS: visual check and a real-use test; (7) update CLAUDE.md (still says six presets; the product uses three modes) and ARCHITECTURE.md/PLATFORM_SUPPORT.md with this session's decisions; (8) run the series on a pristine tree.
 **User preferences seen this session:** wants to review changes before big edits when asked ("show me what changes"); wants honest "not verified" notes; decides between options quickly (picked option 1 even with the URL-hiding trade-off, later reverted it); likes the new tab page and drop-down window bar; wants the browser to stop looking like stock Helium.
+
+- SESSION 10 (2026-11-21): Windows tester report: native caption buttons stretched into a tall strip (web sidebar moves
+  the toolbar to the window bottom, so BrowserFrameViewWin sized them from it). Patch 0141-windows-hide-native-caption-buttons
+  hides the native buttons when the web sidebar + vertical tabs are on (sidebar's own dots remain). NOT compiled (Windows-only
+  file; first compile = next Windows CI run, ~25 h, needs owner OK). Unverified: window drag on Windows without native
+  title bar, snap layouts lost. SAVED STATE before the overhaul: build/saved/0.20.2.3-pre-overhaul (binary + source tar).
+  Overhaul planning started (brainstorming); nothing built yet.
 
 ## SESSION 8 (2026-10-26..29) - Windows build released, Chromium 156 upgrade in progress
 - WINDOWS CI WORKS (free `windows-2025` runners): fixes were symbol_level=0 (C: filled at 15k/79k steps), build
