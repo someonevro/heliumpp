@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Screenshot of the browser in a private nested KWin (virtual output, its own D-Bus session), so
 # KWin effects such as blur behind the acrylic window can be checked without touching the desktop.
-# Usage: scripts/shot_kwin.sh <out.png> [browser args...]   ACRYLIC_PREF=false turns acrylic off.
+# Usage: scripts/shot_kwin.sh <out.png> [browser args...]   ACRYLIC_PREF=true turns acrylic on.
 # A picture viewer shows a wallpaper image behind the window (BACKDROP=<image>). PREFS=<file> replaces the
 # seeded Preferences. SCHEME=light|dark|system (default system), COLLAPSED=true, WIN=<w,h> (window, default
 # 1100,750) inside a 1400x900 output (OUT=<w>x<h>), MATCH=1 colours the browser from BACKDROP (--match-wallpaper).
 # SEED=1 adds three workspaces (scripts/shot_seed_workspaces.json); PROBE=<script.py> runs it with the remote
 # debugging port as argument once the browser is up (e.g. scripts/shot_probe_workspace.py switches to "Work").
+# CLASSIC=true seeds Settings > Appearance > Classic look; ACRYLIC_PREF=true the acrylic window (default false); CORNERS=false square corners.
 # EXTRA_PREFS='"key":value,...' adds top-level entries to the seeded Preferences (e.g. new tab shortcuts).
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; b="$root/build"
@@ -22,7 +23,7 @@ prof="$b/profile-kwin"; rm -rf "$prof"; mkdir -p "$prof/Default"
 # PREFS=<file>: use that Preferences file instead (e.g. with workspaces set up).
 if [ -n "${PREFS:-}" ]; then cp "$PREFS" "$prof/Default/Preferences"; else
 cat > "$prof/Default/Preferences" <<J
-{${EXTRA_PREFS:+$EXTRA_PREFS,}"helium":{$seed"browser":{"layout":${LAYOUT:-2},"native_frame_materials":${ACRYLIC_PREF:-true},"zen_mode":false},"completed_onboarding":true,"privacy_mode":"medium","services":{"schema_version":1,"user_consented":true}},"browser":{"theme":{"color_scheme2":$scheme}},"vertical_tabs":{"collapsed_state":${COLLAPSED:-false},"uncollapsed_width":${SIDEBAR_W:-232}}}
+{${EXTRA_PREFS:+$EXTRA_PREFS,}"helium":{$seed"theme":{"classic_look":${CLASSIC:-false}},"browser":{"layout":${LAYOUT:-2},"rounded_window_corners":${CORNERS:-true},"native_frame_materials":${ACRYLIC_PREF:-false},"zen_mode":false},"completed_onboarding":true,"privacy_mode":"medium","services":{"schema_version":1,"user_consented":true}},"browser":{"theme":{"color_scheme2":$scheme}},"vertical_tabs":{"collapsed_state":${COLLAPSED:-false},"uncollapsed_width":${SIDEBAR_W:-232}}}
 J
 fi
 session="$b/kwin-session.sh"

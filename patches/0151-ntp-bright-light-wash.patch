@@ -1,0 +1,13 @@
+--- a/chrome/browser/resources/new_tab_page/app.css
++++ b/chrome/browser/resources/new_tab_page/app.css
+@@ -619,8 +619,8 @@
+ @media (prefers-color-scheme: light) {
+   #wall:not([data-reduced])::after {
+     background: linear-gradient(180deg,
+-        color-mix(in oklab, var(--color-sys-primary) 8%, rgb(255 255 255 / 0.22)),
+-        color-mix(in oklab, var(--color-sys-primary) 8%, rgb(255 255 255 / 0.45)));
++        color-mix(in oklab, var(--color-sys-primary) 6%, rgb(255 255 255 / 0.62)),
++        color-mix(in oklab, var(--color-sys-primary) 6%, rgb(255 255 255 / 0.78)));
+   }
+ 
+   #content,

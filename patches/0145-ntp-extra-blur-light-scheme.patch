@@ -1,0 +1,39 @@
+--- a/chrome/browser/resources/new_tab_page/app.css
++++ b/chrome/browser/resources/new_tab_page/app.css
+@@ -574,8 +574,8 @@
+       color-mix(in oklab, var(--color-sys-primary) 22%, black));
+   background-position: center;
+   background-size: cover;
+-  filter: blur(18px) saturate(1.15);
+-  inset: -40px;
++  filter: blur(64px) saturate(1.25);
++  inset: -140px;
+   pointer-events: none;
+   position: fixed;
+ }
+@@ -614,6 +614,25 @@
+   --wall-glass-edge: rgb(255 255 255 / 0.5);
+ }
+ 
++/* Light scheme: a light wash over the blurred wallpaper, whatever its own
++   brightness, so the page sits with the light sidebar instead of going black. */
++@media (prefers-color-scheme: light) {
++  #wall:not([data-reduced])::after {
++    background: linear-gradient(180deg,
++        color-mix(in oklab, var(--color-sys-primary) 8%, rgb(255 255 255 / 0.22)),
++        color-mix(in oklab, var(--color-sys-primary) 8%, rgb(255 255 255 / 0.45)));
++  }
++
++  #content,
++  #foot {
++    --wall-ink: color-mix(in oklab, var(--color-sys-primary) 22%, black);
++    --wall-ink-shadow: 0 1px 10px rgb(255 255 255 / 0.4);
++    --wall-glass: color-mix(in oklab, var(--color-sys-primary) 8%, rgb(255 255 255 / 0.55));
++    --wall-glass-hover: color-mix(in oklab, var(--color-sys-primary) 8%, rgb(255 255 255 / 0.7));
++    --wall-glass-edge: rgb(255 255 255 / 0.5);
++  }
++}
++
+ #hero {
+   color: var(--wall-ink);
+   margin-top: -40px;

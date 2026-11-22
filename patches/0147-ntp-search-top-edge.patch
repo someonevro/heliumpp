@@ -1,0 +1,49 @@
+--- a/chrome/browser/resources/new_tab_page/app.css
++++ b/chrome/browser/resources/new_tab_page/app.css
+@@ -283,10 +283,10 @@
+   --ntp-customize-button-background: var(--wall-glass);
+   --ntp-customize-button-hover: var(--wall-glass-hover);
+   --ntp-customize-button-foreground: var(--wall-ink);
+-  --ntp-customize-button-radius: var(--hp-radius-control);
+-  --ntp-customize-button-size: 36px;
+-  bottom: 18px;
++  --ntp-customize-button-radius: 50%;
++  --ntp-customize-button-size: 34px;
+   position: fixed;
++  top: 12px;
+ }
+ 
+ :host-context([dir='ltr']) #customizeButtons {
+@@ -663,21 +663,25 @@
+   align-items: center;
+   background: light-dark(rgb(255 255 255 / 0.86),
+       color-mix(in oklab, var(--color-sys-surface) 78%, transparent));
+-  border-radius: 16px;
+-  box-shadow: 0 0 0 1px light-dark(transparent, rgb(255 255 255 / 0.08)) inset,
+-      0 10px 30px -10px rgb(0 0 0 / 0.45);
++  /* Hangs from the page's top edge: flat top, rounded bottom. */
++  border-radius: 0 0 18px 18px;
++  box-shadow: 0 0 0 1px light-dark(transparent, rgb(255 255 255 / 0.08)) inset;
+   color: var(--color-sys-on-surface);
+   display: flex;
+   gap: 10px;
+-  height: 52px;
+-  margin-top: 34px;
++  height: 50px;
++  left: 50%;
++  margin: 0;
+   padding: 0 8px 0 18px;
++  position: fixed;
+   text-align: start;
++  top: 0;
++  transform: translateX(-50%);
++  width: min(640px, 62vw);
+ }
+ 
+ #searchForm:focus-within {
+-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--hp-focus) 55%, transparent) inset,
+-      0 10px 30px -10px rgb(0 0 0 / 0.45);
++  box-shadow: 0 0 0 1px color-mix(in srgb, var(--hp-focus) 55%, transparent) inset;
+ }
+ 
+ #searchForm .i {

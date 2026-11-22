@@ -1,0 +1,444 @@
+--- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
++++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+@@ -237,6 +237,10 @@
+       settings_api::PrefType::kBoolean;
+   (*s_allowlist)[::prefs::kHeliumNativeFrameMaterials] =
+       settings_api::PrefType::kBoolean;
++  (*s_allowlist)[::prefs::kHeliumRoundedWindowCorners] =
++      settings_api::PrefType::kBoolean;
++  (*s_allowlist)[::prefs::kHeliumClassicLook] =
++      settings_api::PrefType::kBoolean;
+ 
+   // Miscellaneous
+   (*s_allowlist)[::embedder_support::kAlternateErrorPagesEnabled] =
+--- a/chrome/browser/resources/heliumpp_sidebar/app.css
++++ b/chrome/browser/resources/heliumpp_sidebar/app.css
+@@ -673,3 +673,100 @@
+   animation: none !important;
+   transition: none !important;
+ }
++
++/* Settings > Appearance > Classic look: the design before 2026-11 (window
++   dots on the left, compact rows with an ellipsis, a "New tab" row below the
++   tabs). Everything else is shared with the default look. */
++:host([classic]) .nav {
++  margin: 0;
++}
++
++.dots {
++  display: flex;
++  gap: 7px;
++  margin-inline-end: auto;
++}
++
++.dot {
++  background: color-mix(in srgb, var(--hp-ink) 22%, transparent);
++  border-radius: 50%;
++  color: transparent;
++  display: grid;
++  height: 12px;
++  place-items: center;
++  width: 12px;
++}
++
++.dot.close {
++  background: var(--hp-danger);
++}
++
++.dot .i {
++  height: 8px;
++  stroke-width: 2.6;
++  width: 8px;
++}
++
++.dots:hover .dot {
++  color: color-mix(in srgb, black 60%, transparent);
++}
++
++:host([classic]) .scroll {
++  margin-top: var(--hp-space-2);
++}
++
++:host([classic]) .tab {
++  border-radius: var(--hp-radius-tab);
++  font-weight: inherit;
++  gap: 9px;
++  height: var(--hp-row);
++  letter-spacing: normal;
++  padding: 0 4px 0 9px;
++}
++
++:host([classic]) .tab[aria-selected='true'] {
++  background: var(--hp-selected);
++  box-shadow: 0 1px 2px var(--hp-shade-near), 0 0 0 1px var(--hp-edge) inset;
++  font-weight: inherit;
++}
++
++:host([classic]) .t {
++  mask-image: none;
++  text-overflow: ellipsis;
++}
++
++.newtab-row {
++  align-items: center;
++  border-radius: var(--hp-radius-tab);
++  color: var(--hp-ink-2);
++  display: flex;
++  gap: 9px;
++  height: var(--hp-row);
++  margin-top: 2px;
++  padding: 0 9px;
++  width: 100%;
++}
++
++.newtab-row:hover {
++  background: var(--hp-hover);
++  color: var(--hp-ink);
++}
++
++.newtab-row kbd {
++  color: var(--hp-ink-3);
++  font: 500 var(--hp-text-xs) var(--hp-font);
++  margin-inline-start: auto;
++}
++
++@container (max-width: 120px) {
++  .dots,
++  .newtab-row span,
++  .newtab-row kbd {
++    display: none;
++  }
++
++  .newtab-row {
++    justify-content: center;
++    padding: 0;
++  }
++}
+--- a/chrome/browser/resources/heliumpp_sidebar/app.html.ts
++++ b/chrome/browser/resources/heliumpp_sidebar/app.html.ts
+@@ -10,6 +10,27 @@
+ export function getHtml(this: HeliumSidebarAppElement) {
+   // clang-format off
+   return html`
++${this.state_?.classicLook ? html`
++<header class="row1">
++  <div class="dots" role="group" aria-label="Window">
++    <button class="dot close" aria-label="Close window" title="Close"
++        @click="${this.onCloseWindowClick_}">${ICONS.close}</button>
++    <button class="dot" aria-label="Minimize" title="Minimize"
++        @click="${this.onMinimizeClick_}">${ICONS.minus}</button>
++    <button class="dot" aria-label="Maximize" title="Maximize"
++        @click="${this.onMaximizeClick_}">${ICONS.plus}</button>
++  </div>
++  <button class="icon-btn" aria-label="Toggle sidebar" title="Toggle sidebar"
++      @click="${this.onToggleSidebarClick_}">${ICONS.sidebar}</button>
++  <div class="nav" role="group" aria-label="Navigation">
++    <button class="icon-btn" aria-label="Back" title="Back"
++        @click="${this.onBackClick_}">${ICONS.back}</button>
++    <button class="icon-btn" aria-label="Forward" title="Forward"
++        @click="${this.onForwardClick_}">${ICONS.forward}</button>
++    <button class="icon-btn" aria-label="Reload" title="Reload"
++        @click="${this.onReloadClick_}">${ICONS.reload}</button>
++  </div>
++</header>` : html`
+ <header class="row1">
+   <button class="icon-btn" aria-label="Toggle sidebar" title="Toggle sidebar"
+       @click="${this.onToggleSidebarClick_}">${ICONS.sidebar}</button>
+@@ -29,7 +50,7 @@
+     <button class="icon-btn close" aria-label="Close window" title="Close"
+         @click="${this.onCloseWindowClick_}">${ICONS.close}</button>
+   </div>
+-</header>
++</header>`}
+ 
+ <nav class="spaces" aria-label="Workspaces"
+     style="--count: ${this.workspaces_().length || 1}; --active: ${this.activeIndex_()}; --add-w: 28px">
+@@ -56,11 +77,12 @@
+       </button>`)}
+   </div>` : nothing}
+ 
++${!this.state_?.classicLook ? html`
+ <div class="spacebar">
+   <span class="space-name">${this.workspaces_()[this.activeIndex_()]?.name || 'Tabs'}</span>
+   <button class="icon-btn newtab" aria-label="New tab" title="New tab (Ctrl+T)"
+       @click="${this.onNewTabClick_}">${ICONS.plus}</button>
+-</div>
++</div>` : nothing}
+ 
+ <div class="scroll" role="tablist" aria-label="Tabs">
+   ${this.rows_.map(row => row.folder ? html`
+@@ -105,6 +127,10 @@
+         ${ICONS.close}
+       </button>
+     </div>`)}
++  ${this.state_?.classicLook ? html`
++    <button class="newtab newtab-row" @click="${this.onNewTabClick_}">
++      ${ICONS.plus}<span>New tab</span><kbd>Ctrl T</kbd>
++    </button>` : nothing}
+ </div>
+ 
+ ${this.shieldOpen_ ? html`
+--- a/chrome/browser/resources/heliumpp_sidebar/app.ts
++++ b/chrome/browser/resources/heliumpp_sidebar/app.ts
+@@ -108,6 +108,8 @@
+   override updated(changedProperties: PropertyValues<this>) {
+     super.updated(changedProperties);
+     this.toggleAttribute('reduced', this.isPerformanceMode_());
++    // Settings > Appearance > Classic look (app.css :host([classic])).
++    this.toggleAttribute('classic', !!this.state_?.classicLook);
+   }
+ 
+   private reportAddressSlot_() {
+--- a/chrome/browser/resources/new_tab_page/app.css
++++ b/chrome/browser/resources/new_tab_page/app.css
+@@ -900,3 +900,30 @@
+   animation: none !important;
+   transition: none !important;
+ }
++
++/* Settings > Appearance > Classic look: the search field back in the middle
++   under the clock, the customize button at the bottom, a lighter blur. */
++:host([classic]) #wall:not([data-reduced]) {
++  filter: blur(18px) saturate(1.15);
++  inset: -40px;
++}
++
++:host([classic]) #searchForm {
++  border-radius: 16px;
++  box-shadow: 0 0 0 1px light-dark(transparent, rgb(255 255 255 / 0.08)) inset,
++      0 10px 30px -10px rgb(0 0 0 / 0.45);
++  height: 52px;
++  left: auto;
++  margin-top: 34px;
++  position: static;
++  top: auto;
++  transform: none;
++  width: auto;
++}
++
++:host([classic]) #customizeButtons {
++  --ntp-customize-button-radius: var(--hp-radius-control);
++  --ntp-customize-button-size: 36px;
++  bottom: 18px;
++  top: auto;
++}
+--- a/chrome/browser/resources/new_tab_page/app.ts
++++ b/chrome/browser/resources/new_tab_page/app.ts
+@@ -562,6 +562,8 @@
+   }
+ 
+   override connectedCallback() {
++    // Settings > Appearance > Classic look (app.css :host([classic])).
++    this.toggleAttribute('classic', loadTimeData.getBoolean('heliumClassicLook'));
+     super.connectedCallback();
+     this.refreshState_();
+     this.clockTimer_ = setInterval(() => {
+--- a/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts
++++ b/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts
+@@ -91,6 +91,17 @@
+         label="Acrylic window"
+         sub-label="The sidebar and toolbar let your wallpaper show through. Blurred where the desktop supports it (Hyprland); plain see-through elsewhere.">
+     </settings-toggle-button>
++    <settings-toggle-button class="hr"
++        ?hidden="${!this.showNativeFrameMaterialsOption_}"
++        pref-key="helium.browser.rounded_window_corners"
++        label="Rounded window corners"
++        sub-label="Rounds all four corners of the window. Off: square corners.">
++    </settings-toggle-button>
++    <settings-toggle-button class="hr"
++        pref-key="helium.theme.classic_look"
++        label="Classic look"
++        sub-label="The earlier design: window dots, compact tab rows and the search field in the middle of the new tab page. Open windows update; new tab pages update when reopened.">
++    </settings-toggle-button>
+     <settings-toggle-button class="hr" elide-label
+         ?hidden="${!this.pageVisibility_.homeButton}"
+         pref-key="browser.show_home_button"
+--- a/chrome/browser/ui/browser_ui_prefs.cc
++++ b/chrome/browser/ui/browser_ui_prefs.cc
+@@ -136,6 +136,8 @@
+   registry->RegisterBooleanPref(prefs::kHeliumRoundedFrame, true);
+ 
+   registry->RegisterBooleanPref(prefs::kHeliumNativeFrameMaterials, false);
++  registry->RegisterBooleanPref(prefs::kHeliumRoundedWindowCorners, true);
++  registry->RegisterBooleanPref(prefs::kHeliumClassicLook, false);
+ 
+   registry->RegisterBooleanPref(prefs::kHeliumCenteredLocationBar, false);
+ 
+--- a/chrome/browser/ui/ui_features.cc
++++ b/chrome/browser/ui/ui_features.cc
+@@ -41,13 +41,9 @@
+ BASE_FEATURE(kHeliumHidePageActions, base::FEATURE_DISABLED_BY_DEFAULT);
+ 
+ bool HeliumNativeFrameAvailable() {
+-  // Acrylic glass is off on every platform for now (2026-10-29, owner's
+-  // decision): the window paints opaque and the Settings / onboarding switches
+-  // are hidden. The code stays for a later redesign of the effect; notes in
+-  // designs/acrylic-notes.md. Remove this return to bring it back.
+-  if ((true)) {
+-    return false;
+-  }
++  // Acrylic glass is an option again (2026-11-22, owner): off by default
++  // (helium.browser.native_frame_materials = false), switched on in
++  // Settings > Appearance. Notes in designs/acrylic-notes.md.
+ #if BUILDFLAG(IS_MAC)
+   return base::FeatureList::IsEnabled(kHeliumNativeFrameMaterials);
+ #elif BUILDFLAG(IS_LINUX)
+--- a/chrome/browser/ui/views/frame/browser_frame_view_linux.cc
++++ b/chrome/browser/ui/views/frame/browser_frame_view_linux.cc
+@@ -8,6 +8,10 @@
+ #include "chrome/browser/ui/views/chrome_layout_provider.h"
+ #include "chrome/browser/ui/views/frame/browser_native_widget_aura_linux.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
++#include "base/functional/bind.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/common/pref_names.h"
++#include "components/prefs/pref_service.h"
+ #include "ui/base/hit_test.h"
+ #include "ui/compositor/layer.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+@@ -39,6 +43,16 @@
+     window_button_order_observation_.Observe(linux_ui);
+     OnWindowButtonOrderingChange();
+   }
++  if (browser_view && browser_view->GetProfile()) {
++    corner_pref_.Init(browser_view->GetProfile()->GetPrefs());
++    corner_pref_.Add(prefs::kHeliumRoundedWindowCorners,
++                     base::BindRepeating(
++                         [](BrowserFrameViewLinux* view) {
++                           view->InvalidateLayout();
++                           view->SchedulePaint();
++                         },
++                         base::Unretained(this)));
++  }
+ }
+ 
+ BrowserFrameViewLinux::~BrowserFrameViewLinux() = default;
+@@ -156,6 +170,12 @@
+       !views::Widget::IsWindowCompositingSupported()) {
+     return 0;
+   }
++  if (const BrowserView* browser_view = GetBrowserView();
++      browser_view && browser_view->GetProfile() &&
++      !browser_view->GetProfile()->GetPrefs()->GetBoolean(
++          prefs::kHeliumRoundedWindowCorners)) {
++    return 0;
++  }
+   // All four corners, 12 px like the rows and fields inside (Chromium rounds
+   // only the top two, by its own metric).
+   return 12.0f;
+--- a/chrome/browser/ui/views/frame/browser_frame_view_linux.h
++++ b/chrome/browser/ui/views/frame/browser_frame_view_linux.h
+@@ -8,6 +8,7 @@
+ #include "base/memory/raw_ptr.h"
+ #include "chrome/browser/ui/views/frame/browser_frame_view_layout_linux.h"
+ #include "chrome/browser/ui/views/frame/opaque_browser_frame_view.h"
++#include "components/prefs/pref_change_registrar.h"
+ #include "ui/base/metadata/metadata_header_macros.h"
+ #include "ui/linux/window_button_order_observer.h"
+ 
+@@ -74,6 +75,9 @@
+ 
+   base::ScopedObservation<ui::LinuxUi, ui::WindowButtonOrderObserver>
+       window_button_order_observation_{this};
++
++  // Settings > Appearance > Rounded window corners.
++  PrefChangeRegistrar corner_pref_;
+ };
+ 
+ #endif  // CHROME_BROWSER_UI_VIEWS_FRAME_BROWSER_FRAME_VIEW_LINUX_H_
+--- a/chrome/browser/ui/views/location_bar/location_bar_view.cc
++++ b/chrome/browser/ui/views/location_bar/location_bar_view.cc
+@@ -97,6 +97,7 @@
+ #include "chrome/browser/ui/webui/omnibox_popup/omnibox_popup_ui.h"
+ #include "chrome/browser/web_applications/link_capturing_features.h"
+ #include "chrome/common/chrome_features.h"
++#include "chrome/common/pref_names.h"
+ #include "chrome/grit/generated_resources.h"
+ #include "chrome/grit/omnibox_popup_resources.h"
+ #include "components/commerce/core/commerce_feature_list.h"
+@@ -279,7 +280,8 @@
+ 
+           // The web sidebar's pill shows focus by brightening instead (see
+           // RefreshBackground); a hard ring around it looked like an error.
+-          if (v->sidebar_style_ && HeliumSidebarWebView::IsEnabled()) {
++          if (v->sidebar_style_ && HeliumSidebarWebView::IsEnabled() &&
++              !v->profile_->GetPrefs()->GetBoolean(prefs::kHeliumClassicLook)) {
+             return false;
+           }
+ 
+@@ -1621,7 +1623,8 @@
+   // Web sidebar: a soft see-through white pill over the sidebar, a little
+   // brighter while focused or hovered.
+   if (sidebar_style_ && HeliumSidebarWebView::IsEnabled() && !high_contrast &&
+-      !input_in_progress) {
++      !input_in_progress &&
++      !profile_->GetPrefs()->GetBoolean(prefs::kHeliumClassicLook)) {
+     const bool dark = color_utils::IsDark(normal);
+     const bool lit = is_caret_visible || opacity > 0.5;
+     background_color_ = SkColorSetA(
+--- a/chrome/browser/ui/webui/heliumpp_sidebar/heliumpp_sidebar.mojom
++++ b/chrome/browser/ui/webui/heliumpp_sidebar/heliumpp_sidebar.mojom
+@@ -22,6 +22,8 @@
+   // shows it ("12", "1k"); "" when the badge is empty or uBlock Origin is
+   // not running.
+   string blocked;
++  // Settings > Appearance > Classic look (helium.theme.classic_look).
++  bool classic_look;
+ };
+ 
+ enum Command {
+--- a/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_page_handler.cc
++++ b/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_page_handler.cc
+@@ -17,6 +17,7 @@
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/browser_commands.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/common/pref_names.h"
+ #include "components/tabs/public/tab_interface.h"
+ #include "components/helium_services/extension_ids.h"
+ #include "components/prefs/pref_service.h"
+@@ -48,6 +49,7 @@
+   registrar_.Add(helium_workspaces::kActiveWorkspacePref, send);
+   registrar_.Add(kPrivacyModePref, send);
+   registrar_.Add(helium_privacy_mode::kPerformanceModePref, send);
++  registrar_.Add(prefs::kHeliumClassicLook, send);
+   active_tab_subscription_ = browser_->RegisterActiveTabDidChange(
+       base::BindRepeating(&SidebarPageHandler::OnActiveTabChanged,
+                           base::Unretained(this)));
+@@ -132,6 +134,8 @@
+   state->performance_mode =
+       helium_privacy_mode::IsPerformanceMode(browser_->GetProfile());
+   state->blocked = last_blocked_ = BlockedBadge();
++  state->classic_look =
++      browser_->GetProfile()->GetPrefs()->GetBoolean(prefs::kHeliumClassicLook);
+   return state;
+ }
+ 
+--- a/chrome/browser/ui/webui/new_tab_page/new_tab_page_ui.cc
++++ b/chrome/browser/ui/webui/new_tab_page/new_tab_page_ui.cc
+@@ -240,6 +240,8 @@
+                     helium_theme::WallpaperThumbnail(profile));
+   source->AddInteger("heliumWallpaperLuma",
+                      helium_theme::WallpaperLuma(profile));
++  source->AddBoolean("heliumClassicLook",
++                     profile->GetPrefs()->GetBoolean(prefs::kHeliumClassicLook));
+ 
+   GURL threads_url = google_base_url.Resolve("/search");
+   threads_url = net::AppendQueryParameter(threads_url, "udm", kAIMDisplayMode);
+--- a/chrome/common/pref_names.h
++++ b/chrome/common/pref_names.h
+@@ -627,6 +627,14 @@
+ inline constexpr char kHeliumNativeFrameMaterials[] =
+     "helium.browser.native_frame_materials";
+ 
++// Helium++: round all four window corners (Linux; default true).
++inline constexpr char kHeliumRoundedWindowCorners[] =
++    "helium.browser.rounded_window_corners";
++
++// Helium++: the pre-2026-11 look (window dots, compact rows, search in the
++// middle of the new tab page) instead of the default one. Default false.
++inline constexpr char kHeliumClassicLook[] = "helium.theme.classic_look";
++
+ // An enum (HeliumLayoutType) pref that controls the browser layout.
+ inline constexpr char kHeliumLayout[] = "helium.browser.layout";
+ 

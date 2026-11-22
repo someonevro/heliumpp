@@ -17,6 +17,33 @@ Updated 2026-11-21 (session 10; session 9 end; RESUME: see "SESSION 9 RESUME" be
   title bar, snap layouts lost. SAVED STATE before the overhaul: build/saved/0.20.2.3-pre-overhaul (binary + source tar).
   Overhaul planning started (brainstorming); nothing built yet.
 
+  2026-11-22 owner sent a Zephium screenshot: "make it look exactly like this" (layout/style only; no Zephium wordmark/art).
+  Owner choices: acrylic ON (0143 reverses 0134), NTP = own wallpaper extremely blurred ("extension of the desktop"), skip
+  the "Due today" task chip. Written, NOT compiled yet: 0142 address placeholder stays visible when focused, 0143 acrylic
+  back, 0144 sidebar top row = plain icons (toggle | nav | min/max/close, close red on hover; collapsed rail keeps window
+  controls stacked), 0145 NTP blur 64px + light-scheme wash. Baseline shots: build/audit/overhaul-baseline/. Windows under
+  Wine: scripts/shot_wine.sh (build/winrun); Figtree missing from the Windows package (fonts/ not packaged).
+  2026-11-22: 0146 Zephium row metrics + space heading, 0147 NTP search hangs from the top edge + round customize
+  button top-right, 0148 address field soft pill (no focus ring in the web sidebar), 0149 acrylic OFF again (owner:
+  opaque, tinted by the wallpaper scheme). COMPILED OK (0142-0145, then 0146-0149, link ~17 min each).
+  TESTED: test_web_sidebar PASS (1 SKIP), test_ntp PASS. Shots: build/audit/zephium-r1/. Seen: light scheme over a dark
+  wallpaper gives a muddy grey page (light wash 22-45% too weak).
+  0150 window corners 12 px on all four sides (BrowserFrameViewLinux), 0151 brighter light-mode NTP wash, 0152 browser
+  view clipped to the rounded window shape (a rounded layer on BrowserView; inner views painted square corners over the
+  frame). Diagnosis: in nested KWin tiled=0 custom=1 compositing=1 shadow=1, so the frame was already rounded on top.
+  COMPILED OK; test_web_sidebar + test_ntp PASS; shots build/audit/zephium-r3/ show round corners. NOT checked:
+  maximize (corners must go square), Hyprland/GNOME/X11, a performance cost of the extra layer, Windows (DWM rounds).
+  0153-look-settings (owner: "current look as default, previous ones as options"): Settings > Appearance now has
+  "Classic look" (helium.theme.classic_look, default false: window dots, compact rows, bottom New tab row, NTP search
+  in the middle, old address field), "Rounded window corners" (helium.browser.rounded_window_corners, default true,
+  Linux/macOS only) and "Acrylic window" again (HeliumNativeFrameAvailable true on Linux; pref default false).
+  COMPILED OK; scripts/test_look_settings.py 9/9 PASS; test_web_sidebar, test_ntp, test_performance_toggle PASS.
+  Shots build/audit/look-settings/ (default, classic, square). shot_kwin.sh: acrylic default now false, CLASSIC=,
+  CORNERS= switches. NOT checked: switching Classic live in an open window (state is pushed; omnibox pill updates on
+  next hover/focus), acrylic re-enabled on screen, Windows (0153 compiles there only in CI).
+  Still to do for the screenshot match: workspace segments with icons, "Space" heading + "+", address pill style (native
+  omnibox, C++), footer profile button + "drag a tab to keep it" essentials zone, NTP search pill at card top + gear.
+
 ## SESSION 8 (2026-10-26..29) - Windows build released, Chromium 156 upgrade in progress
 - WINDOWS CI WORKS (free `windows-2025` runners): fixes were symbol_level=0 (C: filled at 15k/79k steps), build
   tree at a real `D:\helium-windows` (junction broke siso), hand-off zip check, resume from an earlier run's

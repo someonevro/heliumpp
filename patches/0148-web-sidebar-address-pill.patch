@@ -1,0 +1,50 @@
+--- a/chrome/browser/ui/views/location_bar/location_bar_view.cc
++++ b/chrome/browser/ui/views/location_bar/location_bar_view.cc
+@@ -142,6 +142,7 @@
+ #include "ui/compositor/layer.h"
+ #include "ui/compositor/paint_recorder.h"
+ #include "ui/events/event.h"
++#include "ui/gfx/color_utils.h"
+ #include "ui/gfx/animation/slide_animation.h"
+ #include "ui/gfx/canvas.h"
+ #include "ui/gfx/geometry/skia_conversions.h"
+@@ -182,7 +183,7 @@
+ namespace {
+ 
+ // Corner radius of the sidebar-style bar (DESIGN.md: controls 10).
+-constexpr int kSidebarRadius = 10;
++constexpr int kSidebarRadius = 12;
+ 
+ int IncrementalMinimumWidth(const views::View* view) {
+   return (view && view->GetVisible()) ? view->GetMinimumSize().width() : 0;
+@@ -276,6 +277,12 @@
+             return false;
+           }
+ 
++          // The web sidebar's pill shows focus by brightening instead (see
++          // RefreshBackground); a hard ring around it looked like an error.
++          if (v->sidebar_style_ && HeliumSidebarWebView::IsEnabled()) {
++            return false;
++          }
++
+           // Show focus ring when the Omnibox is visibly focused and the popup
+           // is closed.
+           return v->GetOmniboxController()->edit_model()->is_caret_visible() &&
+@@ -1611,6 +1618,17 @@
+     border_color = color_provider->GetColor(kColorLocationBarBorderOnMismatch);
+   }
+ 
++  // Web sidebar: a soft see-through white pill over the sidebar, a little
++  // brighter while focused or hovered.
++  if (sidebar_style_ && HeliumSidebarWebView::IsEnabled() && !high_contrast &&
++      !input_in_progress) {
++    const bool dark = color_utils::IsDark(normal);
++    const bool lit = is_caret_visible || opacity > 0.5;
++    background_color_ = SkColorSetA(
++        SK_ColorWHITE, dark ? (lit ? 0x26 : 0x14) : (lit ? 0xD9 : 0x99));
++    border_color = SK_ColorTRANSPARENT;
++  }
++
+   if (is_popup_mode_) {
+     SetBackground(views::CreateSolidBackground(background_color_));
+   } else if (sidebar_style_ && border_color == SK_ColorTRANSPARENT) {

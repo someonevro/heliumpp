@@ -1,0 +1,71 @@
+--- a/chrome/browser/ui/views/frame/browser_frame_view_linux.cc
++++ b/chrome/browser/ui/views/frame/browser_frame_view_linux.cc
+@@ -4,12 +4,12 @@
+ 
+ #include "chrome/browser/ui/views/frame/browser_frame_view_linux.h"
+ 
+-#include "base/logging.h"
+ #include "base/notreached.h"
+ #include "chrome/browser/ui/views/chrome_layout_provider.h"
+ #include "chrome/browser/ui/views/frame/browser_native_widget_aura_linux.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "ui/base/hit_test.h"
++#include "ui/compositor/layer.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+ #include "ui/gfx/geometry/insets_f.h"
+ #include "ui/gfx/geometry/rect_f.h"
+@@ -125,21 +125,33 @@
+   return frame_component;
+ }
+ 
++void BrowserFrameViewLinux::Layout(PassKey) {
++  LayoutSuperclass<OpaqueBrowserFrameView>(this);
++  // The frame paints rounded corners, but the browser's own views (sidebar,
++  // page card, top container) paint square ones over it. Clip them all to the
++  // window's shape with one rounded layer on the browser view.
++  BrowserView* const browser_view = GetBrowserView();
++  if (!browser_view) {
++    return;
++  }
++  const gfx::RoundedCornersF corners = GetWindowRoundedCorners();
++  if (!browser_view->layer()) {
++    if (corners.IsEmpty()) {
++      return;
++    }
++    browser_view->SetPaintToLayer();
++    browser_view->layer()->SetFillsBoundsOpaquely(false);
++  }
++  browser_view->layer()->SetRoundedCornerRadius(corners);
++  browser_view->layer()->SetIsFastRoundedCorner(true);
++}
++
+ float BrowserFrameViewLinux::GetRestoredCornerRadiusDip() const {
+ #if BUILDFLAG(IS_LINUX)
+   const bool tiled = browser_widget()->tiled();
+ #else
+   const bool tiled = false;
+ #endif
+-  // TEMP diagnosis (remove once seen): why corners stay square in nested KWin.
+-  static bool logged = false;
+-  if (!logged) {
+-    logged = true;
+-    LOG(WARNING) << "heliumpp corners: tiled=" << tiled
+-                 << " custom=" << UseCustomFrame() << " compositing="
+-                 << views::Widget::IsWindowCompositingSupported()
+-                 << " shadow=" << ShouldDrawRestoredFrameShadow();
+-  }
+   if (tiled || !UseCustomFrame() ||
+       !views::Widget::IsWindowCompositingSupported()) {
+     return 0;
+--- a/chrome/browser/ui/views/frame/browser_frame_view_linux.h
++++ b/chrome/browser/ui/views/frame/browser_frame_view_linux.h
+@@ -44,6 +44,9 @@
+   BoundsAndMargins GetCaptionButtonBounds() const override;
+   gfx::RoundedCornersF GetWindowRoundedCorners() const override;
+ 
++  // views::View:
++  void Layout(PassKey) override;
++
+   // Gets the shadow metrics (radius, offset, and number of shadows).  This will
+   // always return shadow values, even if shadows are not actually drawn.
+   // `active` indicates if the shadow will be drawn on a focused browser window.

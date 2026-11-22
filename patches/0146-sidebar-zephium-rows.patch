@@ -1,0 +1,141 @@
+--- a/chrome/browser/resources/heliumpp_sidebar/app.css
++++ b/chrome/browser/resources/heliumpp_sidebar/app.css
+@@ -218,7 +218,7 @@
+ .scroll {
+   flex: 1;
+   margin-inline-end: -4px;
+-  margin-top: var(--hp-space-2);
++  margin-top: 2px;
+   min-height: 0;
+   overflow: auto;
+   padding-inline-end: 4px;
+@@ -227,13 +227,15 @@
+ 
+ .tab {
+   align-items: center;
+-  border-radius: var(--hp-radius-tab);
++  border-radius: 12px;
+   color: var(--hp-ink-2);
+   cursor: default;
+   display: flex;
+-  gap: 9px;
+-  height: var(--hp-row);
+-  padding: 0 4px 0 9px;
++  font-weight: 500;
++  gap: 10px;
++  height: 36px;
++  letter-spacing: -0.005em;
++  padding: 0 4px 0 10px;
+   position: relative;
+   transition: background var(--hp-fast) var(--hp-ease);
+ }
+@@ -243,10 +245,12 @@
+   color: var(--hp-ink);
+ }
+ 
++/* Only the current tab is lit: a soft fill and a hairline rim, no shadow. */
+ .tab[aria-selected='true'] {
+-  background: var(--hp-selected);
+-  box-shadow: 0 1px 2px var(--hp-shade-near), 0 0 0 1px var(--hp-edge) inset;
++  background: light-dark(rgb(255 255 255 / 0.72), rgb(255 255 255 / 0.075));
++  box-shadow: inset 0 0 0 1px light-dark(rgb(0 0 0 / 0.04), rgb(255 255 255 / 0.06));
+   color: var(--hp-ink);
++  font-weight: 550;
+ }
+ 
+ .fav {
+@@ -256,11 +260,12 @@
+   width: 16px;
+ }
+ 
++/* Long titles dissolve into the row's edge instead of an ellipsis. */
+ .t {
+   flex: 1;
++  mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent);
+   min-width: 0;
+   overflow: hidden;
+-  text-overflow: ellipsis;
+   white-space: nowrap;
+ }
+ 
+@@ -345,27 +350,30 @@
+   padding-inline-start: var(--hp-space-2);
+ }
+ 
+-.newtab {
++/* Heading above the tab list: the workspace's name and a new-tab button. */
++.spacebar {
+   align-items: center;
+-  border-radius: var(--hp-radius-tab);
+-  color: var(--hp-ink-2);
+   display: flex;
+-  gap: 9px;
+-  height: var(--hp-row);
+-  margin-top: 2px;
+-  padding: 0 9px;
+-  width: 100%;
++  height: 30px;
++  margin-top: var(--hp-space-2);
++  padding-inline: 10px 0;
+ }
+ 
+-.newtab:hover {
+-  background: var(--hp-hover);
+-  color: var(--hp-ink);
++.space-name {
++  color: var(--hp-ink-2);
++  flex: 1;
++  font-weight: 600;
++  letter-spacing: -0.01em;
++  min-width: 0;
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
+ }
+ 
+-.newtab kbd {
+-  color: var(--hp-ink-3);
+-  font: 500 var(--hp-text-xs) var(--hp-font);
+-  margin-inline-start: auto;
++.spacebar .newtab {
++  border-radius: 50%;
++  height: 30px;
++  width: 30px;
+ }
+ 
+ /* Footer. */
+@@ -588,8 +596,7 @@
+   .x,
+   .count,
+   .chev,
+-  .newtab span,
+-  .newtab kbd,
++  .space-name,
+   .shield b,
+   .shield .unit,
+   .foot .icon-btn,
+--- a/chrome/browser/resources/heliumpp_sidebar/app.html.ts
++++ b/chrome/browser/resources/heliumpp_sidebar/app.html.ts
+@@ -56,6 +56,12 @@
+       </button>`)}
+   </div>` : nothing}
+ 
++<div class="spacebar">
++  <span class="space-name">${this.workspaces_()[this.activeIndex_()]?.name || 'Tabs'}</span>
++  <button class="icon-btn newtab" aria-label="New tab" title="New tab (Ctrl+T)"
++      @click="${this.onNewTabClick_}">${ICONS.plus}</button>
++</div>
++
+ <div class="scroll" role="tablist" aria-label="Tabs">
+   ${this.rows_.map(row => row.folder ? html`
+     <div class="folder" style="--c: ${row.color}">
+@@ -99,9 +105,6 @@
+         ${ICONS.close}
+       </button>
+     </div>`)}
+-  <button class="newtab" @click="${this.onNewTabClick_}">
+-    ${ICONS.plus}<span>New tab</span><kbd>Ctrl T</kbd>
+-  </button>
+ </div>
+ 
+ ${this.shieldOpen_ ? html`

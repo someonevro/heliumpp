@@ -1,0 +1,53 @@
+--- a/chrome/browser/ui/views/frame/browser_frame_view_linux.cc
++++ b/chrome/browser/ui/views/frame/browser_frame_view_linux.cc
+@@ -4,6 +4,7 @@
+ 
+ #include "chrome/browser/ui/views/frame/browser_frame_view_linux.h"
+ 
++#include "base/logging.h"
+ #include "base/notreached.h"
+ #include "chrome/browser/ui/views/chrome_layout_provider.h"
+ #include "chrome/browser/ui/views/frame/browser_native_widget_aura_linux.h"
+@@ -58,7 +59,7 @@
+   float radius = GetRestoredCornerRadiusDip();
+   return views::GetRestoredClipRegion(
+       gfx::RectF(GetLocalBounds()), border,
+-      gfx::RoundedCornersF(radius, radius, 0, 0));
++      gfx::RoundedCornersF(radius));
+ }
+ 
+ // static
+@@ -130,12 +131,22 @@
+ #else
+   const bool tiled = false;
+ #endif
++  // TEMP diagnosis (remove once seen): why corners stay square in nested KWin.
++  static bool logged = false;
++  if (!logged) {
++    logged = true;
++    LOG(WARNING) << "heliumpp corners: tiled=" << tiled
++                 << " custom=" << UseCustomFrame() << " compositing="
++                 << views::Widget::IsWindowCompositingSupported()
++                 << " shadow=" << ShouldDrawRestoredFrameShadow();
++  }
+   if (tiled || !UseCustomFrame() ||
+       !views::Widget::IsWindowCompositingSupported()) {
+     return 0;
+   }
+-  return ChromeLayoutProvider::Get()->GetCornerRadiusMetric(
+-      views::Emphasis::kHigh);
++  // All four corners, 12 px like the rows and fields inside (Chromium rounds
++  // only the top two, by its own metric).
++  return 12.0f;
+ }
+ 
+ int BrowserFrameViewLinux::GetTranslucentTopAreaHeight() const {
+@@ -208,7 +219,7 @@
+   if (auto* const widget = GetWidget();
+       widget && !widget->IsFullscreen() && !widget->IsMaximized()) {
+     const float radius_dip = GetRestoredCornerRadiusDip();
+-    return gfx::RoundedCornersF(radius_dip, radius_dip, 0, 0);
++    return gfx::RoundedCornersF(radius_dip);
+   }
+   return gfx::RoundedCornersF();
+ }
