@@ -1,0 +1,68 @@
+--- a/chrome/browser/resources/heliumpp_sidebar/app.css
++++ b/chrome/browser/resources/heliumpp_sidebar/app.css
+@@ -770,3 +770,65 @@
+     padding: 0;
+   }
+ }
++
++/* Default look (not Classic): workspace switcher and footer as in the Zephium
++   reference. A wider, quieter track with a lifted white segment; every
++   segment keeps a colour dot (muted when inactive). The footer drops its
++   divider, the buttons turn round and the shield becomes a soft pill. */
++:host(:not([classic])) .spaces {
++  background: light-dark(rgb(0 0 0 / 0.045), rgb(255 255 255 / 0.05));
++  border-radius: 12px;
++  margin: var(--hp-space-2) 0 6px;
++}
++
++:host(:not([classic])) .spaces .hl {
++  background: light-dark(rgb(255 255 255 / 0.95), rgb(255 255 255 / 0.11));
++  border-radius: 9px;
++  box-shadow: 0 1px 3px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.3)),
++      inset 0 0 0 1px light-dark(rgb(0 0 0 / 0.03), rgb(255 255 255 / 0.06));
++}
++
++:host(:not([classic])) .spaces button {
++  font-weight: 500;
++  height: 28px;
++  letter-spacing: -0.01em;
++}
++
++:host(:not([classic])) .spaces button[aria-pressed='true'] {
++  font-weight: 600;
++}
++
++:host(:not([classic])) .spaces button:not(.add)::before {
++  background: color-mix(in srgb, var(--hp-ink) 30%, transparent);
++  border-radius: 50%;
++  content: '';
++  flex: none;
++  height: 6px;
++  width: 6px;
++}
++
++:host(:not([classic])) .spaces button[aria-pressed='true']::before {
++  background: var(--hp-accent);
++}
++
++:host(:not([classic])) .foot {
++  border-top: 0;
++  gap: 4px;
++}
++
++:host(:not([classic])) .foot .icon-btn {
++  border-radius: 50%;
++  height: 30px;
++  width: 30px;
++}
++
++:host(:not([classic])) .shield {
++  background: light-dark(rgb(255 255 255 / 0.7), rgb(255 255 255 / 0.07));
++  border-radius: 15px;
++  box-shadow: inset 0 0 0 1px light-dark(rgb(0 0 0 / 0.04), rgb(255 255 255 / 0.06));
++  padding: 0 12px 0 10px;
++}
++
++:host(:not([classic])) .shield:hover {
++  background: light-dark(rgb(255 255 255 / 0.9), rgb(255 255 255 / 0.11));
++}
