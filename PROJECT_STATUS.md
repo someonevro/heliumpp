@@ -44,9 +44,12 @@ Updated 2026-11-21 (session 10; session 9 end; RESUME: see "SESSION 9 RESUME" be
   0154 workspace switcher + footer (default look only), 0155 Figtree in the Windows installer (chrome.release) +
   windows/apply_ours.py copies shared/fonts/figtree to out/Default/fonts + make_packages.py adds fonts/ to the portable
   zip (zip step self-checked on the 0.20.2.3 zip; Wine shows Figtree once fonts/ sits next to chrome.exe).
-  PUSHED 2026-11-22 (owner: "commit and start the windows build"): main ff02ae4..1e523c6. Windows CI run 44994913055
-  started 06:42 UTC from scratch (old build tree artifact gone), ~25 h, contains 0141-0155. Version is still 0.20.2.3
-  (no bump). When done: check artifacts (PE, fonts/ in zip), run under scripts/shot_wine.sh, ask before any release.
+  PUSHED 2026-11-22 (owner: "commit and start the windows build"): main ff02ae4..1e523c6. Run 44994913055 cancelled for the
+  version bump: 0156-version-0.20.2.4 (3028648, pushed). Windows CI run 44995111326 started ~06:46 UTC from scratch
+  (old build tree artifact gone), ~25 h, contains 0141-0156. When done: check artifacts (PE, fonts/ in zip), run under scripts/shot_wine.sh, ask before any release.
+  Linux 0.20.2.4 compiled (53 min, version bump rebuilt 4562 steps); `helium --version` = Helium++ 0.20.2.4.
+  NEW scripts/run_regression.sh [label] (retries a failure once, keeps both results). Full run on 0.20.2.4:
+  32/32 PASS first try, build/audit/regression-0156.txt (test_update.sh 455 s; total ~25 min).
   Still to do for the screenshot match: workspace segments with icons, "Space" heading + "+", address pill style (native
   omnibox, C++), footer profile button + "drag a tab to keep it" essentials zone, NTP search pill at card top + gear.
 
