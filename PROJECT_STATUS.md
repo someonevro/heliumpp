@@ -41,6 +41,12 @@ Updated 2026-11-21 (session 10; session 9 end; RESUME: see "SESSION 9 RESUME" be
   Shots build/audit/look-settings/ (default, classic, square). shot_kwin.sh: acrylic default now false, CLASSIC=,
   CORNERS= switches. NOT checked: switching Classic live in an open window (state is pushed; omnibox pill updates on
   next hover/focus), acrylic re-enabled on screen, Windows (0153 compiles there only in CI).
+  0154 workspace switcher + footer (default look only), 0155 Figtree in the Windows installer (chrome.release) +
+  windows/apply_ours.py copies shared/fonts/figtree to out/Default/fonts + make_packages.py adds fonts/ to the portable
+  zip (zip step self-checked on the 0.20.2.3 zip; Wine shows Figtree once fonts/ sits next to chrome.exe).
+  PUSHED 2026-11-22 (owner: "commit and start the windows build"): main ff02ae4..1e523c6. Windows CI run 44994913055
+  started 06:42 UTC from scratch (old build tree artifact gone), ~25 h, contains 0141-0155. Version is still 0.20.2.3
+  (no bump). When done: check artifacts (PE, fonts/ in zip), run under scripts/shot_wine.sh, ask before any release.
   Still to do for the screenshot match: workspace segments with icons, "Space" heading + "+", address pill style (native
   omnibox, C++), footer profile button + "drag a tab to keep it" essentials zone, NTP search pill at card top + gear.
 
