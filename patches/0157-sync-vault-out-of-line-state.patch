@@ -1,0 +1,28 @@
+--- a/components/sync/engine/sync_vault/sync_vault_store.cc
++++ b/components/sync/engine/sync_vault/sync_vault_store.cc
+@@ -167,6 +167,10 @@
+       head_revision_(std::move(head_revision)),
+       store_token_(store_token) {}
+ 
++SyncVaultState::SyncVaultState(SyncVaultState&&) = default;
++SyncVaultState& SyncVaultState::operator=(SyncVaultState&&) = default;
++SyncVaultState::~SyncVaultState() = default;
++
+ // static
+ SyncVaultStore::CreateResult SyncVaultStore::Create(
+     std::unique_ptr<SyncVaultTransport> transport,
+--- a/components/sync/engine/sync_vault/sync_vault_store.h
++++ b/components/sync/engine/sync_vault/sync_vault_store.h
+@@ -53,9 +53,9 @@
+  public:
+   SyncVaultState(const SyncVaultState&) = delete;
+   SyncVaultState& operator=(const SyncVaultState&) = delete;
+-  SyncVaultState(SyncVaultState&&) = default;
+-  SyncVaultState& operator=(SyncVaultState&&) = default;
+-  ~SyncVaultState() = default;
++  SyncVaultState(SyncVaultState&&);
++  SyncVaultState& operator=(SyncVaultState&&);
++  ~SyncVaultState();
+ 
+   const std::vector<uint8_t>& data() const { return data_; }
+   size_t state_size() const { return data_.size(); }
