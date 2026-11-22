@@ -3,6 +3,7 @@
 # Usage: python make_packages.py <helium-windows dir> <output dir>
 import shutil
 import sys
+import zipfile
 from pathlib import Path
 
 root = Path(sys.argv[1]).resolve()
@@ -16,6 +17,14 @@ version = '.'.join(v['HELIUM_' + k] for k in ('MAJOR', 'MINOR', 'PATCH', 'PLATFO
 cpu = package.get_target_cpu(outputs)
 dest.mkdir(parents=True, exist_ok=True)
 shutil.copy2(outputs / 'mini_installer.exe', dest / f'heliumpp_{version}_{cpu}-installer.exe')
-package.filescfg.create_archive(package.portable_files(outputs), tuple(), outputs,
-                                dest / f'heliumpp_{version}_{cpu}-windows.zip', None)
+portable = dest / f'heliumpp_{version}_{cpu}-windows.zip'
+package.filescfg.create_archive(package.portable_files(outputs), tuple(), outputs, portable, None)
+# The UI font (patch 0125) is not in FILES.cfg: add <top dir>/fonts/* next to chrome.exe.
+fonts = sorted((outputs / 'fonts').glob('*'))
+if not fonts:
+    sys.exit(f'{outputs / "fonts"} is empty: apply_ours.py did not copy the UI font')
+with zipfile.ZipFile(portable, 'a', zipfile.ZIP_DEFLATED) as z:
+    top = next(n.split('/')[0] for n in z.namelist() if n.endswith('chrome.exe'))
+    for f in fonts:
+        z.write(f, f'{top}/fonts/{f.name}')
 print(*sorted(p.name for p in dest.iterdir()), sep='\n')

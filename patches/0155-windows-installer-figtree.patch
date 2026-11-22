@@ -1,0 +1,13 @@
+--- a/chrome/installer/mini_installer/chrome.release
++++ b/chrome/installer/mini_installer/chrome.release
+@@ -8,6 +8,10 @@
+ #
+ chrome.exe: %(ChromeDir)s\
+ chrome_proxy.exe: %(ChromeDir)s\
++# Helium++ UI font (SIL OFL 1.1), loaded from <chrome.exe dir>\fonts.
++fonts\Figtree-Variable.ttf: %(ChromeDir)s\fonts
++fonts\Figtree-VariableItalic.ttf: %(ChromeDir)s\fonts
++fonts\OFL.txt: %(ChromeDir)s\fonts
+ #
+ # Chrome version dir assembly manifest.
+ # The name of this file must match the name of the version dir, so we cannot

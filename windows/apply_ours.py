@@ -22,6 +22,12 @@ def apply(source_tree, patch_bin_path):
     shutil.copy2(_HPP / 'shared/presets.json', onboarding / 'lib/presets.json')
     shutil.copy2(_HPP / 'shared/design/tokens.css',
                  source_tree / 'ui/webui/resources/css/heliumpp_tokens.css')
+    # UI font (patch 0125 loads it from <chrome.exe dir>/fonts): next to the build output, where
+    # mini_installer's chrome.release (patch 0155) and make_packages.py pick it up.
+    fonts = source_tree / 'out/Default/fonts'
+    fonts.mkdir(parents=True, exist_ok=True)
+    for f in (_HPP / 'shared/fonts/figtree').iterdir():
+        shutil.copy2(f, fonts)
     previews = onboarding / 'assets/ntp-previews'
     previews.mkdir(parents=True, exist_ok=True)
     for f in (_HPP / 'shared/ntp-previews').glob('*.webp'):
