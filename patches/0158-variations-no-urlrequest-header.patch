@@ -1,0 +1,13 @@
+--- a/components/variations/net/variations_http_headers.cc
++++ b/components/variations/net/variations_http_headers.cc
+@@ -32,6 +32,10 @@
+ 
+ namespace variations {
+ 
++// Helium++: ungoogled-chromium dropped this definition but net::URLRequest
++// callers still reference it; Windows links them. The header is never sent.
++const char kClientDataHeader[] = "X-Client-Data";
++
+ namespace {
+ 
+ // The result of checking whether a request to a URL should have variations
