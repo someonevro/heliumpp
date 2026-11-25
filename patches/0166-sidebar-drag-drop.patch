@@ -1,0 +1,237 @@
+--- a/chrome/browser/resources/heliumpp_sidebar/app.css
++++ b/chrome/browser/resources/heliumpp_sidebar/app.css
+@@ -837,3 +837,29 @@
+ :host(:not([classic])) .shield:hover {
+   background: light-dark(rgb(255 255 255 / 0.9), rgb(255 255 255 / 0.11));
+ }
++
++/* Drag and drop: where the dragged tab will land. */
++.tab[data-drop='before'] {
++  box-shadow: inset 0 2px 0 var(--hp-accent);
++}
++
++.tab[data-drop='after'] {
++  box-shadow: inset 0 -2px 0 var(--hp-accent);
++}
++
++.tile[data-drop='before'] {
++  box-shadow: inset 2px 0 0 var(--hp-accent);
++}
++
++.tile[data-drop='after'] {
++  box-shadow: inset -2px 0 0 var(--hp-accent);
++}
++
++.head[data-drop='before'] {
++  box-shadow: inset 0 2px 0 var(--hp-accent);
++}
++
++.head[data-drop='into'] {
++  outline: 2px solid var(--hp-accent);
++  outline-offset: -2px;
++}
+--- a/chrome/browser/resources/heliumpp_sidebar/app.html.ts
++++ b/chrome/browser/resources/heliumpp_sidebar/app.html.ts
+@@ -72,7 +72,8 @@
+       <button class="tile" role="tab" aria-selected="${tab.isActive}"
+           title="${this.tabTitle_(tab)}" aria-label="${this.tabTitle_(tab)}"
+           data-id="${tab.id}" ?data-isolated="${this.isIsolated_(tab)}"
+-          @click="${this.onTabClick_}" @auxclick="${this.onTabAuxclick_}" @contextmenu="${this.onTabContextmenu_}">
++          @click="${this.onTabClick_}" @auxclick="${this.onTabAuxclick_}" @contextmenu="${this.onTabContextmenu_}" draggable="true" @dragstart="${this.onDragstart_}"
++          @dragend="${this.onDragend_}" @dragover="${this.onDragover_}" @drop="${this.onDrop_}">
+         <img class="fav" src="${this.favicon_(tab)}" alt="">
+       </button>`)}
+   </div>` : nothing}
+@@ -85,11 +86,13 @@
+ </div>` : nothing}
+ 
+ <div class="scroll" role="tablist" aria-label="Tabs"
+-    @keydown="${this.onListKeydown_}">
++    @keydown="${this.onListKeydown_}" @dragover="${this.onDragover_}"
++    @drop="${this.onDrop_}">
+   ${this.rows_.map(row => row.folder ? html`
+     <div class="folder" style="--c: ${row.color}">
+       <button class="head" aria-expanded="${!row.folder.group.data.isCollapsed}"
+-          data-id="${row.folder.group.id}" @click="${this.onFolderClick_}">
++          data-id="${row.folder.group.id}" @click="${this.onFolderClick_}"
++          @dragover="${this.onDragover_}" @drop="${this.onDrop_}">
+         <span class="chev">${ICONS.chevron}</span>
+         <span class="swatch"></span>
+         <span class="t">${row.folder.group.data.title || 'Folder'}</span>
+@@ -103,7 +106,8 @@
+                 aria-label="${this.tabTitle_(tab)}"
+                 data-id="${tab.id}" ?data-isolated="${this.isIsolated_(tab)}"
+                 @click="${this.onTabClick_}"
+-                @auxclick="${this.onTabAuxclick_}" @contextmenu="${this.onTabContextmenu_}"
++                @auxclick="${this.onTabAuxclick_}" @contextmenu="${this.onTabContextmenu_}" draggable="true" @dragstart="${this.onDragstart_}"
++          @dragend="${this.onDragend_}" @dragover="${this.onDragover_}" @drop="${this.onDrop_}"
+                 @keydown="${this.onTabKeydown_}">
+               <img class="fav" src="${this.favicon_(tab)}" alt="">
+               <span class="t">${tab.title || tab.url}</span>
+@@ -118,7 +122,8 @@
+     <div class="tab" role="tab" tabindex="0" aria-selected="${row.tab!.isActive}"
+         title="${this.tabTitle_(row.tab!)}" aria-label="${this.tabTitle_(row.tab!)}"
+         data-id="${row.tab!.id}" ?data-isolated="${this.isIsolated_(row.tab!)}"
+-        @click="${this.onTabClick_}" @auxclick="${this.onTabAuxclick_}" @contextmenu="${this.onTabContextmenu_}"
++        @click="${this.onTabClick_}" @auxclick="${this.onTabAuxclick_}" @contextmenu="${this.onTabContextmenu_}" draggable="true" @dragstart="${this.onDragstart_}"
++          @dragend="${this.onDragend_}" @dragover="${this.onDragover_}" @drop="${this.onDrop_}"
+         @keydown="${this.onTabKeydown_}">
+       <img class="fav" src="${this.favicon_(row.tab!)}" alt="">
+       <span class="t">${row.tab!.title || row.tab!.url}</span>
+--- a/chrome/browser/resources/heliumpp_sidebar/app.ts
++++ b/chrome/browser/resources/heliumpp_sidebar/app.ts
+@@ -417,6 +417,154 @@
+         this.idOf_(e).split(':')[0]!, Math.round(x), Math.round(y));
+   }
+ 
++  // Drag and drop (tab rows, essentials tiles, folder heads, the list's empty
++  // end). A drop becomes one MoveNode call, so pinning, unpinning and folder
++  // changes follow the tab strip's own rules.
++  private dragId_ = '';
++  private dropEl_: HTMLElement|null = null;
++
++  protected onDragstart_(e: DragEvent) {
++    this.dragId_ = this.idOf_(e);
++    e.dataTransfer!.effectAllowed = 'move';
++    e.dataTransfer!.setData('text/plain', '');
++  }
++
++  protected onDragend_() {
++    this.dragId_ = '';
++    this.markDrop_(null, '');
++  }
++
++  private markDrop_(el: HTMLElement|null, where: string) {
++    if (this.dropEl_ && this.dropEl_ !== el) {
++      delete this.dropEl_.dataset['drop'];
++    }
++    this.dropEl_ = el;
++    if (el) {
++      el.dataset['drop'] = where;
++    }
++  }
++
++  // Before / after a row or tile, or into a folder (lower part of its head).
++  private dropWhere_(e: DragEvent, el: HTMLElement): string {
++    const r = el.getBoundingClientRect();
++    if (el.classList.contains('scroll')) {
++      return 'end';
++    }
++    if (el.classList.contains('tile')) {
++      return e.clientX < r.left + r.width / 2 ? 'before' : 'after';
++    }
++    if (el.classList.contains('head')) {
++      return e.clientY < r.top + r.height / 3 ? 'before' : 'into';
++    }
++    return e.clientY < r.top + r.height / 2 ? 'before' : 'after';
++  }
++
++  protected onDragover_(e: DragEvent) {
++    if (!this.dragId_) {
++      return;
++    }
++    e.preventDefault();
++    e.stopPropagation();
++    const el = e.currentTarget as HTMLElement;
++    const where = this.dropWhere_(e, el);
++    this.markDrop_(where === 'end' ? null : el, where);
++  }
++
++  protected onDrop_(e: DragEvent) {
++    const dragged = this.dragId_;
++    if (!dragged) {
++      return;
++    }
++    e.preventDefault();
++    e.stopPropagation();
++    const el = e.currentTarget as HTMLElement;
++    const position =
++        this.dropPosition_(dragged, el.dataset['id'] || '', this.dropWhere_(e, el));
++    this.onDragend_();
++    if (position) {
++      this.proxy_.tabs.moveNode(dragged, position);
++    }
++  }
++
++  // Ids from the window down to `id`.
++  private pathTo_(id: string): string[] {
++    const path: string[] = [];
++    for (let hit = this.find_(id); hit;
++         hit = hit.parent ?
++             this.find_(HeliumSidebarAppElement.idOf_(hit.parent) || '') :
++             null) {
++      path.unshift(HeliumSidebarAppElement.idOf_(hit.node) || '');
++    }
++    return path;
++  }
++
++  // The MoveNode position for dropping tab `dragged` at `where` of `target`.
++  // The service counts in tabs: from the start (pinned), from the first
++  // unpinned tab (list) or from the folder's first tab (folder); the result is
++  // the tab's index once it has moved.
++  private dropPosition_(dragged: string, target: string, where: string):
++      Position|null {
++    const root = this.root_;
++    if (!root) {
++      return null;
++    }
++    const tabIds = (c: Container): string[] => c.children.flatMap(
++        ch => ch.data.tab ? [ch.data.tab.id] : tabIds(ch));
++    const sections = (c: Container): Container[] =>
++        c.data.pinnedTabs || c.data.unpinnedTabs ? [c] :
++                                                   c.children.flatMap(sections);
++    const all = tabIds(root);
++    const rest = all.filter(id => id !== dragged);  // order after the move
++    const pinnedSection = sections(root).find(c => c.data.pinnedTabs);
++    const unpinnedSection = sections(root).find(c => c.data.unpinnedTabs);
++    const pinnedLeft = pinnedSection ?
++        tabIds(pinnedSection).filter(id => id !== dragged).length : 0;
++    let parent: Container|undefined;
++    let insertAt: number;
++    if (where === 'end') {
++      parent = unpinnedSection;
++      insertAt = rest.length;
++    } else {
++      const hit = this.find_(target);
++      if (!hit?.parent || target === dragged) {
++        return null;
++      }
++      if (hit.node.data.tabGroup) {
++        const inFolder = tabIds(hit.node).filter(id => id !== dragged);
++        if (!inFolder.length) {
++          return null;
++        }
++        parent = where === 'into' ? hit.node : hit.parent;
++        insertAt = where === 'into' ? rest.indexOf(inFolder.at(-1)!) + 1 :
++                                      rest.indexOf(inFolder[0]!);
++      } else {
++        parent = hit.parent;
++        insertAt = rest.indexOf(target) + (where === 'after' ? 1 : 0);
++      }
++    }
++    if (!parent) {
++      return null;
++    }
++    let index: number;
++    if (parent.data.pinnedTabs) {
++      index = insertAt;
++    } else if (parent.data.unpinnedTabs) {
++      index = insertAt - pinnedLeft;
++    } else if (parent.data.tabGroup) {
++      // shortcut: a tab dropped at the very front of the folder right below
++      // it lands second (the service counts from the folder's current start),
++      // fine until folder fronts matter.
++      index = Math.max(0, insertAt - all.indexOf(tabIds(parent)[0]!));
++    } else {
++      return null;  // split views: not a drop target
++    }
++    if (index < 0) {
++      return null;
++    }
++    const parentId = HeliumSidebarAppElement.idOf_(parent) || '';
++    return {path: {components: this.pathTo_(parentId)}, index};
++  }
++
+   protected onTabKeydown_(e: KeyboardEvent) {
+     if (e.key === 'Enter' || e.key === ' ') {
+       e.preventDefault();

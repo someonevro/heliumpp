@@ -61,7 +61,14 @@ Updated 2026-11-21 (session 10; session 9 end; RESUME: see "SESSION 9 RESUME" be
   0165-sidebar-tab-menu: right click (or menu key) on a web-sidebar tab row opens Chromium's own tab context menu
   (TabMenuModel + TabContextMenuController, as the native vertical strip). Page sends ShowTabMenu(tab id, x, y); handler
   accepts only a tab of its window and 0..10000 coords. test_web_sidebar.py: right click + "d" (XTest) duplicates a tab:
-  PASS, whole test PASS. NOT committed; not in the running Windows build. Menu look on a real desktop not checked.
+  PASS, whole test PASS. committed + pushed 6d7c2fa; not in the running Windows build. Menu look on a real desktop not checked.
+  0166-sidebar-drag-drop: drag tab rows / essentials tiles onto rows (before/after), folder heads (top third: before
+  the folder, rest: into it) or the list's empty end; one tabs_api MoveNode per drop (index converted to the service's
+  tab counting: pinned absolute, list from first unpinned tab, folder from its first tab). Page-only (TS/CSS).
+  scripts/test_sidebar_dnd.py (real XTest drags, Xvfb :92): reorder before/after/end + order after a fresh snapshot:
+  PASS; test_web_sidebar.py still PASS. Untested: folder and pinned drops (no folder/pin in the test), dragging whole
+  folders (not supported). Known: a tab dropped at the very front of the folder right below it lands second.
+  Committed.
 
 - SESSION 10 (2026-11-21): Windows tester report: native caption buttons stretched into a tall strip (web sidebar moves
   the toolbar to the window bottom, so BrowserFrameViewWin sized them from it). Patch 0141-windows-hide-native-caption-buttons
