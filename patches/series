@@ -149,3 +149,9 @@
 0156-version-0.20.2.4.patch
 0157-sync-vault-out-of-line-state.patch
 0158-variations-no-urlrequest-header.patch
+0159-sidebar-window-drag.patch
+0160-sidebar-drag-band.patch
+0161-isolated-clipboard-no-history.patch
+0162-windows-canvas-noise-unsafe-buffers.patch
+0163-isolated-browser-copies-no-history.patch
+0164-sidebar-arrow-keys.patch

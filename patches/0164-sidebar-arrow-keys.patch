@@ -1,0 +1,41 @@
+--- a/chrome/browser/resources/heliumpp_sidebar/app.html.ts
++++ b/chrome/browser/resources/heliumpp_sidebar/app.html.ts
+@@ -84,7 +84,8 @@
+       @click="${this.onNewTabClick_}">${ICONS.plus}</button>
+ </div>` : nothing}
+ 
+-<div class="scroll" role="tablist" aria-label="Tabs">
++<div class="scroll" role="tablist" aria-label="Tabs"
++    @keydown="${this.onListKeydown_}">
+   ${this.rows_.map(row => row.folder ? html`
+     <div class="folder" style="--c: ${row.color}">
+       <button class="head" aria-expanded="${!row.folder.group.data.isCollapsed}"
+--- a/chrome/browser/resources/heliumpp_sidebar/app.ts
++++ b/chrome/browser/resources/heliumpp_sidebar/app.ts
+@@ -412,6 +412,26 @@
+     }
+   }
+ 
++  // Arrow keys move focus between tab rows and folder headers (in the order
++  // shown); Enter/Space then activates (onTabKeydown_).
++  protected onListKeydown_(e: KeyboardEvent) {
++    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
++      return;
++    }
++    const items = [...this.shadowRoot.querySelectorAll<HTMLElement>(
++        '.scroll .tab, .scroll .folder > .head')];
++    const i = items.indexOf(this.shadowRoot.activeElement as HTMLElement);
++    if (i < 0) {
++      return;
++    }
++    e.preventDefault();
++    const last = items.length - 1;
++    const next = e.key === 'Home' ? 0 :
++        e.key === 'End'           ? last :
++        Math.min(last, Math.max(0, i + (e.key === 'ArrowDown' ? 1 : -1)));
++    items[next]!.focus();
++  }
++
+   protected onCloseClick_(e: Event) {
+     e.stopPropagation();
+     this.proxy_.tabs.closeNodes([this.idOf_(e)]);

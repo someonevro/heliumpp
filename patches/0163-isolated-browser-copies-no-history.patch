@@ -1,0 +1,97 @@
+--- a/chrome/browser/renderer_context_menu/render_view_context_menu.cc
++++ b/chrome/browser/renderer_context_menu/render_view_context_menu.cc
+@@ -240,6 +240,8 @@
+ #include "content/public/browser/page.h"
+ #include "content/public/browser/picture_in_picture_window_controller.h"
+ #include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/storage_partition.h"
++#include "content/public/browser/storage_partition_config.h"
+ #include "content/public/browser/render_process_host.h"
+ #include "content/public/browser/render_view_host.h"
+ #include "content/public/browser/render_widget_host_view.h"
+@@ -1255,6 +1257,21 @@
+                                   nullptr, nullptr, nullptr);
+ }
+ 
++namespace {
++// Helium++: copies made from incognito or isolated tabs (partition domain
++// "heliumisolated") stay out of clipboard history, like the page's own copies.
++void MaybeMarkOffTheRecord(content::WebContents* contents,
++                           ui::ScopedClipboardWriter& scw) {
++  if (!contents || contents->GetBrowserContext()->IsOffTheRecord() ||
++      contents->GetPrimaryMainFrame()
++              ->GetStoragePartition()
++              ->GetConfig()
++              .partition_domain() == "heliumisolated") {
++    scw.MarkAsOffTheRecord();
++  }
++}
++}  // namespace
++
+ void RenderViewContextMenu::WriteURLToClipboard(const GURL& url, int id) {
+   if (!url.is_valid()) {
+     return;
+@@ -1265,6 +1282,7 @@
+       CreateDataEndpoint(/*notify_if_restricted=*/true));
+   scw.SetDataSourceURL(main_frame_url_, current_url_);
+   scw.WriteText(FormatURLForClipboard(url));
++  MaybeMarkOffTheRecord(source_web_contents_, scw);
+ 
+ #if !BUILDFLAG(IS_ANDROID)
+   if (id == IDC_CONTENT_CONTEXT_COPYLINKLOCATION &&
+@@ -5288,6 +5306,7 @@
+       CreateDataEndpoint(/*notify_if_restricted=*/true));
+   scw.SetDataSourceURL(main_frame_url_, current_url_);
+   scw.WriteText(params_.link_text);
++  MaybeMarkOffTheRecord(source_web_contents_, scw);
+ }
+ 
+ void RenderViewContextMenu::ExecCopyImageAt() {
+--- a/chrome/browser/ui/views/omnibox/omnibox_view_views.cc
++++ b/chrome/browser/ui/views/omnibox/omnibox_view_views.cc
+@@ -97,6 +97,9 @@
+ #include "content/public/browser/navigation_controller.h"
+ #include "content/public/browser/navigation_entry.h"
+ #include "content/public/browser/navigation_handle.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/storage_partition.h"
++#include "content/public/browser/storage_partition_config.h"
+ #include "content/public/browser/web_contents.h"
+ #include "extensions/common/constants.h"
+ #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+@@ -2411,11 +2414,23 @@
+   AddOmniboxSpecificItems(menu_contents);
+ }
+ 
++namespace {
++// Helium++: an isolated tab's address stays out of clipboard history.
++bool IsIsolated(content::WebContents* contents) {
++  return contents && contents->GetPrimaryMainFrame()
++                             ->GetStoragePartition()
++                             ->GetConfig()
++                             .partition_domain() == "heliumisolated";
++}
++}  // namespace
++
+ std::unique_ptr<ui::ScopedClipboardWriter>
+ OmniboxViewViews::CreateClipboardWriter() {
+   auto writer = std::make_unique<ui::ScopedClipboardWriter>(
+       ui::ClipboardBuffer::kCopyPaste);
+-  if (!ShouldDoLearning()) {
++  if (!ShouldDoLearning() ||
++      IsIsolated(location_bar_view_ ? location_bar_view_->GetWebContents()
++                                    : nullptr)) {
+     writer->MarkAsOffTheRecord();
+   }
+   return writer;
+@@ -2429,7 +2444,9 @@
+       HandleCutOrCopyAdjustments(ui::ClipboardBuffer::kSelection, &text);
+       ui::ScopedClipboardWriter writer(ui::ClipboardBuffer::kSelection);
+       writer.WriteText(text);
+-      if (!ShouldDoLearning()) {
++      if (!ShouldDoLearning() ||
++      IsIsolated(location_bar_view_ ? location_bar_view_->GetWebContents()
++                                    : nullptr)) {
+         writer.MarkAsOffTheRecord();
+       }
+     }

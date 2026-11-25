@@ -1,0 +1,37 @@
+--- a/third_party/blink/renderer/core/helium_noise/canvas_noising_helper.cc
++++ b/third_party/blink/renderer/core/helium_noise/canvas_noising_helper.cc
+@@ -18,6 +18,7 @@
+ #include <vector>
+ 
+ #include "base/check_op.h"
++#include "base/compiler_specific.h"
+ #include "base/containers/span.h"
+ #include "base/memory/scoped_refptr.h"
+ #include "base/numerics/byte_conversions.h"
+@@ -524,16 +525,22 @@
+     case kRGBA_F16_SkColorType: {
+       CHECK_EQ(pixels.size(),
+                CheckedPixelStorageSize(width, height, sizeof(SkHalf)));
+-      auto half_pixels = base::span(reinterpret_cast<SkHalf*>(pixels.data()),
+-                                    pixels.size() / sizeof(SkHalf));
++      // SAFETY: the same bytes viewed as SkHalf; the length is derived from
++      // `pixels.size()`, so the view never reaches past the buffer.
++      // (Windows CI builds with -Wunsafe-buffer-usage as an error.)
++      auto half_pixels = UNSAFE_BUFFERS(
++          base::span(reinterpret_cast<SkHalf*>(pixels.data()),
++                     pixels.size() / sizeof(SkHalf)));
+ 
+       HeliumNoiseHalfFloatPixels(token_hash, half_pixels, width, height,
+                                  x_offset, y_offset);
+       return true;
+     }
+     case kRGBA_F32_SkColorType: {
+-      auto float_pixels = base::span(reinterpret_cast<float*>(pixels.data()),
+-                                     pixels.size() / sizeof(float));
++      // SAFETY: as above, length derived from `pixels.size()`.
++      auto float_pixels = UNSAFE_BUFFERS(
++          base::span(reinterpret_cast<float*>(pixels.data()),
++                     pixels.size() / sizeof(float)));
+       HeliumNoiseFloatPixels(token_hash, float_pixels, width, height, x_offset,
+                              y_offset);
+       return true;

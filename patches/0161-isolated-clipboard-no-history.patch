@@ -1,0 +1,32 @@
+--- a/content/browser/renderer_host/clipboard_host_impl.cc
++++ b/content/browser/renderer_host/clipboard_host_impl.cc
+@@ -1008,7 +1008,11 @@
+   // A worker can terminate mid-write, leaving no browser context to ask. Treat
+   // that as off the record, since persisting is the answer we cannot take back.
+   BrowserContext* browser_context = context_->GetBrowserContext();
+-  if (!browser_context || browser_context->IsOffTheRecord()) {
++  // Helium++: isolated tabs (partition domain "heliumisolated") keep nothing
++  // on disk, so clipboard history managers must not record their copies either.
++  StoragePartitionImpl* partition = context_->GetStoragePartition();
++  if (!browser_context || browser_context->IsOffTheRecord() || !partition ||
++      partition->GetConfig().partition_domain() == "heliumisolated") {
+     clipboard_writer_->MarkAsOffTheRecord();
+   }
+   ResetClipboardWriter();
+--- a/ui/base/clipboard/clipboard_ozone.cc
++++ b/ui/base/clipboard/clipboard_ozone.cc
+@@ -707,6 +707,14 @@
+   for (const auto& raw_object : raw_objects) {
+     DispatchPortableRepresentation(raw_object);
+   }
++  // Helium++: Linux had no way to say "keep out of clipboard history".
++  // Clipboard managers (Klipper, CopyQ) skip data offered with this KDE hint.
++  if (privacy_types & Clipboard::PrivacyTypes::kNoLocalClipboardHistory) {
++    constexpr std::string_view kSecret = "secret";
++    async_clipboard_ozone_->InsertData(
++        std::vector<uint8_t>(kSecret.begin(), kSecret.end()),
++        {"x-kde-passwordManagerHint"});
++  }
+   async_clipboard_ozone_->OfferData(buffer);
+ 
+   WritePortableTextRepresentation(buffer, objects);

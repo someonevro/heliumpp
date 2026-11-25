@@ -10,6 +10,55 @@ Updated 2026-11-21 (session 10; session 9 end; RESUME: see "SESSION 9 RESUME" be
 **Next (user's list):** (1) isolated mode: fix/test the about:blank popup hole, block or redirect downloads, password manager, clipboard write; (2) item 4 general speed outside performance mode (measure first); (3) restyle: horizontal layout, menus/popups, Settings and onboarding pages; (4) wallpaper image behind the new tab page and privacy chip (dropped: weather, tracker counter unless uBO stats readable); (5) red hover tint on window close; (6) DNS: visual check and a real-use test; (7) update CLAUDE.md (still says six presets; the product uses three modes) and ARCHITECTURE.md/PLATFORM_SUPPORT.md with this session's decisions; (8) run the series on a pristine tree.
 **User preferences seen this session:** wants to review changes before big edits when asked ("show me what changes"); wants honest "not verified" notes; decides between options quickly (picked option 1 even with the URL-hiding trade-off, later reverted it); likes the new tab page and drop-down window bar; wants the browser to stop looking like stock Helium.
 
+- SESSION 11 (2026-11-24): Windows CI run 45022012681 failed linking services_network_network_service.dll:
+  undefined variations::kClientDataHeader (ungoogled drops its definition; network_context.cc calls the
+  net::URLRequest overload under ENABLE_REPORTING). 0158 restores the one-line definition (header still never
+  sent). Linux compile OK; committed 607014e + pushed (owner OK). Windows run 45387619184 started 2026-11-24
+  11:48Z, resumed from 45022012681's saved tree + 0158; ETA ~2026-11-25 05:00Z. NOT verified until it finishes.
+  0159-sidebar-window-drag: the web sidebar page reports its top row + the buttons in it (mojom SetCaptionRegion);
+  HeliumSidebarWebView::IsPositionInWindowCaption -> VerticalTabStripRegionView -> frame HTCAPTION, so the empty
+  part of the row drags the window (native move: Wayland/X11/Windows snap, double-click maximize).
+  COMPILED OK (Linux, -j 4). TESTED: new scripts/test_sidebar_drag.py PASS (Xvfb + stand-in EWMH WM; XTest press
+  + drag: row gap sends _NET_WM_MOVERESIZE move, Reload button / tab list / page do not); test_web_sidebar PASS.
+  Note: Linux caption moves start only after the drag threshold (press alone does nothing).
+  NOT checked: real KWin/GNOME/Wayland drag by hand, Windows (next CI run), classic look and collapsed rail.
+  Design gap: at 232 px the row is nearly full of buttons (only an 8 px gap + row padding to grab).
+  0160-sidebar-drag-band (owner chose "taller top row"): 8 px empty band above the row's buttons (default look only;
+  classic unchanged) and the drag region now starts at the page's top edge, full width (~16 px band + gutters).
+  TESTED: test_sidebar_drag PASS incl. new band check; test_web_sidebar PASS; shot build/audit/drag-band/.
+  0161-isolated-clipboard-no-history: copies from isolated tabs (partition "heliumisolated") are marked off the
+  record like incognito (ClipboardHostImpl); Linux ClipboardOzone now honours kNoLocalClipboardHistory by offering
+  x-kde-passwordManagerHint=secret (Klipper/CopyQ skip it; also applies to incognito copies on Linux, which before
+  went to clipboard history). Copy itself still works. Windows/macOS already honour the flag natively.
+  TESTED: new scripts/test_isolated_clipboard.py PASS (Xvfb, real X CLIPBOARD read via Xlib: normal copy no hint,
+  isolated copy has hint=secret, both hold their text); test_isolated_tabs 13/13, test_isolated_downloads,
+  test_isolated_blank PASS. NOT covered: browser-side copies from an isolated tab (context menu "Copy link
+  address", address bar copy) go through other writers; GNOME clipboard extensions that ignore the KDE hint;
+  Windows (next CI). Isolated-tab password manager off since 0071 but still UNTESTED (autofilled values are hidden
+  from page JS until user interaction; needs a seeded Login Data + UI-level check).
+  Windows run 45387619184 FAILED after ~2 h (resume from 45022012681 worked: 34985 steps left):
+  helium_noise/canvas_noising_helper.cc(527,535) -Wunsafe-buffer-usage as error (Helium's reinterpret_cast spans;
+  Linux never warns: no Chromium clang plugin there). Unexplained: the 2026-11-04 Windows run compiled this file OK.
+  0162-windows-canvas-noise-unsafe-buffers wraps both in UNSAFE_BUFFERS (lengths come from pixels.size()). Linux
+  compile OK. Saved tree of 45022012681 (build-artifact-x86_64, 10 GB) expires 2026-11-26 18:01Z; after that a
+  Windows run starts from scratch (~23 h).
+  Commit + push of 0159-0162 was refused by the Claude Code permission check (auto mode) while the owner was away;
+  nothing pushed, so no new Windows run. The owner must push (or allow it) and start the run before 2026-11-26 18:01Z.
+  0163-isolated-browser-copies-no-history: browser-made copies from isolated tabs also skip clipboard history:
+  page context menu "Copy link address"/"Copy link text" (RenderViewContextMenu; now also incognito, which upstream
+  never marked) and the address bar (OmniboxViewViews, copy + X selection). TESTED: test_isolated_clipboard.py
+  extended with real X input (Ctrl+L Ctrl+C; right-click link + "e"): normal no hint, isolated hint, all PASS.
+  0164-sidebar-arrow-keys: ArrowUp/Down/Home/End move focus between tab rows and folder headers (Enter/Space then
+  activates, existing). TESTED: 3 new checks in test_web_sidebar.py PASS.
+  Password manager test BLOCKED: in a test profile with credentials_enable_service=true, chrome://password-manager-
+  internals still logs "Saving disabled / DROP the password" for a NORMAL tab, so isolated vs normal cannot be
+  compared yet. IsIsolatedWebContents is correct (partition check). The internals log never shows "SSL errors
+  present", so IsFillingEnabled returns before it: likely GetProfilePasswordStore() null in the test profile
+  (--password-store=basic, Xvfb), else opaque origin / pref off at runtime. Next: check the store. Probe: build/audit/pw_probe.py norm|iso.
+  REGRESSION 2026-11-24 (build with 0159-0164): scripts/run_regression.sh 0164 -> 0 failed, no flaky reruns
+  (build/audit/regression-0164.txt).
+  NOT committed yet (0159-0164 + test_sidebar_drag.py + test_isolated_clipboard.py + test_web_sidebar.py edits).
+
 - SESSION 10 (2026-11-21): Windows tester report: native caption buttons stretched into a tall strip (web sidebar moves
   the toolbar to the window bottom, so BrowserFrameViewWin sized them from it). Patch 0141-windows-hide-native-caption-buttons
   hides the native buttons when the web sidebar + vertical tabs are on (sidebar's own dots remain). NOT compiled (Windows-only

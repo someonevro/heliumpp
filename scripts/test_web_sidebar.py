@@ -95,6 +95,20 @@ try:
     ev(f"{root}.querySelector(\".scroll .tab[data-id]\").click()")  # first row: "a"
     check("clicking a row activates it", wait(lambda: active() == "a"), active())
 
+    # Arrow keys move focus along the list (0164); real key events sent to the sidebar page.
+    def press(k, code):
+        for t in ("keyDown", "keyUp"):
+            ws.call("Input.dispatchKeyEvent", {"type": t, "key": k, "code": k, "windowsVirtualKeyCode": code}, s)
+    ids = lambda: ev(f"[...{root}.querySelectorAll('.scroll .tab')].map(e => e.dataset.id)") or []
+    focused = lambda: ev(f"{root}.activeElement?.dataset.id")
+    ev(f"{root}.querySelector('.scroll .tab').focus()")
+    press("ArrowDown", 40)
+    check("Arrow Down focuses the next tab row", focused() == ids()[1], (focused(), ids()))
+    press("ArrowUp", 38)
+    check("Arrow Up focuses the previous tab row", focused() == ids()[0], (focused(), ids()))
+    press("End", 35)
+    check("End focuses the last tab row", focused() == ids()[-1], (focused(), ids()))
+
     # Navigate tab "a" to /b with the page itself, then use the sidebar's back / forward / reload.
     a = next(t for t in pages() if t["url"] == U("a"))
     ps = ws.call("Target.attachToTarget", {"targetId": a["targetId"], "flatten": True})["result"]["sessionId"]

@@ -1,0 +1,357 @@
+--- a/chrome/browser/resources/heliumpp_sidebar/app.ts
++++ b/chrome/browser/resources/heliumpp_sidebar/app.ts
+@@ -96,7 +96,13 @@
+   }
+ 
+   // Tells the browser where to lay the native address bar.
+-  private slotObserver_ = new ResizeObserver(() => this.reportAddressSlot_());
++  private slotObserver_ = new ResizeObserver(() => {
++    this.reportAddressSlot_();
++    this.reportCaptionRegion_();
++  });
++  // Last caption region sent, so re-renders only message the browser when the
++  // top row actually moved.
++  private lastCaption_ = '';
+ 
+   override firstUpdated() {
+     const slot = this.shadowRoot.querySelector('#addressSlot')!;
+@@ -110,6 +116,29 @@
+     this.toggleAttribute('reduced', this.isPerformanceMode_());
+     // Settings > Appearance > Classic look (app.css :host([classic])).
+     this.toggleAttribute('classic', !!this.state_?.classicLook);
++    this.reportCaptionRegion_();
++  }
++
++  // The top row drags the window like a title bar, except on its buttons.
++  private reportCaptionRegion_() {
++    const row = this.shadowRoot.querySelector<HTMLElement>('header.row1');
++    const toRect = (e: Element) => {
++      const r = e.getBoundingClientRect();
++      return {
++        x: Math.max(0, Math.round(r.x)),
++        y: Math.max(0, Math.round(r.y)),
++        width: Math.round(r.width),
++        height: Math.round(r.height),
++      };
++    };
++    const rowRect = row ? toRect(row) : {x: 0, y: 0, width: 0, height: 0};
++    const buttons = row ? [...row.querySelectorAll('button')].map(toRect) : [];
++    const key = JSON.stringify([rowRect, buttons]);
++    if (key === this.lastCaption_) {
++      return;
++    }
++    this.lastCaption_ = key;
++    this.proxy_.handler.setCaptionRegion(rowRect, buttons);
+   }
+ 
+   private reportAddressSlot_() {
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+@@ -352,6 +352,14 @@
+     return bottom_button_container_->IsPositionInWindowCaption(point_in_child);
+   }
+ 
++  // Helium++: the web sidebar's top row (outside its buttons) is title bar.
++  if (web_sidebar_ && web_sidebar_->GetVisible() &&
++      IsHitInView(web_sidebar_, point)) {
++    gfx::Point point_in_child = point;
++    views::View::ConvertPointToTarget(this, web_sidebar_, &point_in_child);
++    return web_sidebar_->IsPositionInWindowCaption(point_in_child);
++  }
++
+   // For any of the other children, absorb the click as non window caption.
+   for (views::View* child : children()) {
+     if (child == content_area_view_) {
+--- a/chrome/browser/ui/views/tabs/vertical/helium_sidebar_web_view.cc
++++ b/chrome/browser/ui/views/tabs/vertical/helium_sidebar_web_view.cc
+@@ -33,17 +33,19 @@
+   // See-through, so the window's glass or frame colour shows behind the page.
+   contents_wrapper_->web_contents()->SetPageBaseBackgroundColor(
+       SK_ColorTRANSPARENT);
+-  heliumpp_sidebar::SetAddressSlotCallback(
++  heliumpp_sidebar::SetHostCallbacks(
+       contents_wrapper_->web_contents(),
+       base::BindRepeating(&HeliumSidebarWebView::OnAddressSlot,
++                          weak_factory_.GetWeakPtr()),
++      base::BindRepeating(&HeliumSidebarWebView::OnCaptionRegion,
+                           weak_factory_.GetWeakPtr()));
+   SetWebContents(contents_wrapper_->web_contents());
+   contents_wrapper_->web_contents()->WasShown();
+ }
+ 
+ HeliumSidebarWebView::~HeliumSidebarWebView() {
+-  heliumpp_sidebar::SetAddressSlotCallback(contents_wrapper_->web_contents(),
+-                                           {});
++  heliumpp_sidebar::SetHostCallbacks(contents_wrapper_->web_contents(), {},
++                                     {});
+   contents_wrapper_->web_contents()->WasHidden();
+   contents_wrapper_->SetHost(nullptr);
+ }
+@@ -81,6 +83,29 @@
+   InvalidateLayout();
+ }
+ 
++void HeliumSidebarWebView::OnCaptionRegion(
++    const gfx::Rect& row,
++    const std::vector<gfx::Rect>& buttons) {
++  caption_row_ = row;
++  caption_buttons_ = buttons;
++}
++
++bool HeliumSidebarWebView::IsPositionInWindowCaption(
++    const gfx::Point& point) const {
++  // Page pixels are DIPs here: the page is not zoomed.
++  if (!caption_row_.Contains(point)) {
++    return false;
++  }
++  for (const gfx::Rect& button : caption_buttons_) {
++    if (button.Contains(point)) {
++      return false;
++    }
++  }
++  // The native address bar lies over the page; it is never title bar.
++  return !(address_bar_ && address_bar_->GetVisible() &&
++           address_bar_->bounds().Contains(point));
++}
++
+ void HeliumSidebarWebView::Layout(PassKey) {
+   LayoutSuperclass<views::WebView>(this);
+   if (address_bar_) {
+--- a/chrome/browser/ui/views/tabs/vertical/helium_sidebar_web_view.h
++++ b/chrome/browser/ui/views/tabs/vertical/helium_sidebar_web_view.h
+@@ -6,6 +6,7 @@
+ #define CHROME_BROWSER_UI_VIEWS_TABS_VERTICAL_HELIUM_SIDEBAR_WEB_VIEW_H_
+ 
+ #include <memory>
++#include <vector>
+ 
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/weak_ptr.h"
+@@ -39,6 +40,11 @@
+   std::unique_ptr<views::View> TakeAddressBar();
+   views::View* address_bar() { return address_bar_; }
+ 
++  // True on the empty part of the sidebar's top row (not on its buttons): the
++  // frame treats it as title bar, so it drags, double-click maximizes, etc.
++  // `point` is in this view's coordinates.
++  bool IsPositionInWindowCaption(const gfx::Point& point) const;
++
+   // views::View:
+   void Layout(PassKey) override;
+ 
+@@ -50,10 +56,14 @@
+ 
+  private:
+   void OnAddressSlot(const gfx::Rect& slot);
++  void OnCaptionRegion(const gfx::Rect& row,
++                       const std::vector<gfx::Rect>& buttons);
+ 
+   raw_ptr<BrowserWindowInterface> browser_;
+   raw_ptr<views::View> address_bar_ = nullptr;
+   gfx::Rect address_slot_;
++  gfx::Rect caption_row_;
++  std::vector<gfx::Rect> caption_buttons_;
+   std::unique_ptr<WebUIContentsWrapperT<heliumpp_sidebar::SidebarUI>>
+       contents_wrapper_;
+   // Browser shortcuts (Ctrl+T, ...) typed while the sidebar has focus.
+--- a/chrome/browser/ui/webui/heliumpp_sidebar/heliumpp_sidebar.mojom
++++ b/chrome/browser/ui/webui/heliumpp_sidebar/heliumpp_sidebar.mojom
+@@ -7,6 +7,13 @@
+ // the privacy level and performance mode, and browser commands.
+ module heliumpp_sidebar.mojom;
+ 
++struct Rect {
++  int32 x;
++  int32 y;
++  int32 width;
++  int32 height;
++};
++
+ struct Workspace {
+   string id;
+   string name;
+@@ -62,6 +69,9 @@
+   // Where the page leaves room for the native address bar, in page pixels
+   // (zero height: no room, the bar is hidden).
+   SetAddressSlot(int32 x, int32 y, int32 width, int32 height);
++  // The top row, in page pixels: its empty parts drag the window like a title
++  // bar; `buttons` are the controls inside it, which stay clickable.
++  SetCaptionRegion(Rect row, array<Rect> buttons);
+   // Ids (TabHandle values, the id part of a tab's NodeId) of this window's
+   // isolated tabs, which the list marks.
+   GetIsolatedTabs() => (array<string> tab_ids);
+--- a/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_page_handler.cc
++++ b/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_page_handler.cc
+@@ -37,11 +37,15 @@
+     mojo::PendingRemote<mojom::Page> page,
+     mojo::PendingReceiver<mojom::PageHandler> receiver,
+     BrowserWindowInterface* browser,
+-    base::RepeatingCallback<void(const gfx::Rect&)> on_address_slot)
++    base::RepeatingCallback<void(const gfx::Rect&)> on_address_slot,
++    base::RepeatingCallback<void(const gfx::Rect&,
++                                 const std::vector<gfx::Rect>&)>
++        on_caption_region)
+     : page_(std::move(page)),
+       receiver_(this, std::move(receiver)),
+       browser_(browser),
+-      on_address_slot_(std::move(on_address_slot)) {
++      on_address_slot_(std::move(on_address_slot)),
++      on_caption_region_(std::move(on_caption_region)) {
+   registrar_.Init(browser_->GetProfile()->GetPrefs());
+   const auto send = base::BindRepeating(&SidebarPageHandler::SendState,
+                                         base::Unretained(this));
+@@ -231,4 +235,32 @@
+   on_address_slot_.Run(gfx::Rect(x, y, width, height));
+ }
+ 
++void SidebarPageHandler::SetCaptionRegion(
++    mojom::RectPtr row,
++    std::vector<mojom::RectPtr> buttons) {
++  // Page input: sane sizes only, and a handful of buttons; anything else is
++  // dropped (the row then stops dragging until the next valid report).
++  constexpr int32_t kMax = 10000;
++  constexpr size_t kMaxButtons = 32;
++  const auto valid = [](const mojom::RectPtr& r) {
++    return r && r->x >= 0 && r->y >= 0 && r->width >= 0 && r->height >= 0 &&
++           r->x <= kMax && r->y <= kMax && r->width <= kMax &&
++           r->height <= kMax;
++  };
++  if (!valid(row) || buttons.size() > kMaxButtons) {
++    on_caption_region_.Run(gfx::Rect(), {});
++    return;
++  }
++  std::vector<gfx::Rect> holes;
++  for (const auto& b : buttons) {
++    if (!valid(b)) {
++      on_caption_region_.Run(gfx::Rect(), {});
++      return;
++    }
++    holes.emplace_back(b->x, b->y, b->width, b->height);
++  }
++  on_caption_region_.Run(gfx::Rect(row->x, row->y, row->width, row->height),
++                         holes);
++}
++
+ }  // namespace heliumpp_sidebar
+--- a/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_page_handler.h
++++ b/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_page_handler.h
+@@ -6,6 +6,7 @@
+ #define CHROME_BROWSER_UI_WEBUI_HELIUMPP_SIDEBAR_SIDEBAR_PAGE_HANDLER_H_
+ 
+ #include <string>
++#include <vector>
+ 
+ #include "base/callback_list.h"
+ #include "base/functional/callback.h"
+@@ -30,7 +31,9 @@
+                      mojo::PendingReceiver<mojom::PageHandler> receiver,
+                      BrowserWindowInterface* browser,
+                      base::RepeatingCallback<void(const gfx::Rect&)>
+-                         on_address_slot);
++                         on_address_slot,
++                     base::RepeatingCallback<void(const gfx::Rect&, const std::vector<gfx::Rect>&)>
++                         on_caption_region);
+   SidebarPageHandler(const SidebarPageHandler&) = delete;
+   SidebarPageHandler& operator=(const SidebarPageHandler&) = delete;
+   ~SidebarPageHandler() override;
+@@ -46,6 +49,8 @@
+                       int32_t y,
+                       int32_t width,
+                       int32_t height) override;
++  void SetCaptionRegion(mojom::RectPtr row,
++                        std::vector<mojom::RectPtr> buttons) override;
+   void GetIsolatedTabs(GetIsolatedTabsCallback callback) override;
+ 
+   // extensions::ExtensionActionDispatcher::Observer:
+@@ -67,6 +72,8 @@
+   raw_ptr<BrowserWindowInterface> browser_;
+   PrefChangeRegistrar registrar_;
+   base::RepeatingCallback<void(const gfx::Rect&)> on_address_slot_;
++  base::RepeatingCallback<void(const gfx::Rect&, const std::vector<gfx::Rect>&)>
++      on_caption_region_;
+   // The badge last sent, so uBlock Origin's frequent updates only reach the
+   // page when the number changes.
+   std::string last_blocked_;
+--- a/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_ui.cc
++++ b/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_ui.cc
+@@ -31,10 +31,13 @@
+     : public content::WebContentsUserData<AddressSlotHolder> {
+  public:
+   AddressSlotHolder(content::WebContents* contents,
+-                    AddressSlotCallback callback)
++                    AddressSlotCallback callback,
++                    CaptionRegionCallback caption_region)
+       : content::WebContentsUserData<AddressSlotHolder>(*contents),
+-        callback(std::move(callback)) {}
++        callback(std::move(callback)),
++        caption_region(std::move(caption_region)) {}
+   AddressSlotCallback callback;
++  CaptionRegionCallback caption_region;
+   WEB_CONTENTS_USER_DATA_KEY_DECL();
+ };
+ 
+@@ -47,13 +50,23 @@
+   }
+ }
+ 
++void RunCaptionRegionCallback(content::WebContents* contents,
++                              const gfx::Rect& row,
++                              const std::vector<gfx::Rect>& buttons) {
++  if (auto* holder = AddressSlotHolder::FromWebContents(contents)) {
++    holder->caption_region.Run(row, buttons);
++  }
++}
++
+ }  // namespace
+ 
+-void SetAddressSlotCallback(content::WebContents* contents,
+-                            AddressSlotCallback callback) {
++void SetHostCallbacks(content::WebContents* contents,
++                      AddressSlotCallback address_slot,
++                      CaptionRegionCallback caption_region) {
+   contents->RemoveUserData(AddressSlotHolder::UserDataKey());
+-  if (callback) {
+-    AddressSlotHolder::CreateForWebContents(contents, std::move(callback));
++  if (address_slot && caption_region) {
++    AddressSlotHolder::CreateForWebContents(contents, std::move(address_slot),
++                                            std::move(caption_region));
+   }
+ }
+ 
+@@ -115,6 +128,8 @@
+   page_handler_ = std::make_unique<SidebarPageHandler>(
+       std::move(page), std::move(handler), browser,
+       base::BindRepeating(&RunAddressSlotCallback,
++                          base::Unretained(web_ui()->GetWebContents())),
++      base::BindRepeating(&RunCaptionRegionCallback,
+                           base::Unretained(web_ui()->GetWebContents())));
+ }
+ 
+--- a/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_ui.h
++++ b/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_ui.h
+@@ -7,6 +7,7 @@
+ 
+ #include <memory>
+ #include <string_view>
++#include <vector>
+ 
+ #include "base/functional/callback.h"
+ 
+@@ -30,8 +31,15 @@
+ // Receives the room the page leaves for the native address bar (page pixels;
+ // empty: no room). The view hosting the page sets it on the page's contents.
+ using AddressSlotCallback = base::RepeatingCallback<void(const gfx::Rect&)>;
+-void SetAddressSlotCallback(content::WebContents* contents,
+-                            AddressSlotCallback callback);
++// Receives the top row (page pixels) and the buttons inside it; the rest of
++// the row drags the window.
++using CaptionRegionCallback =
++    base::RepeatingCallback<void(const gfx::Rect& row,
++                                 const std::vector<gfx::Rect>& buttons)>;
++// Null callbacks detach the host.
++void SetHostCallbacks(content::WebContents* contents,
++                      AddressSlotCallback address_slot,
++                      CaptionRegionCallback caption_region);
+ 
+ class SidebarUIConfig : public DefaultTopChromeWebUIConfig<SidebarUI> {
+  public:

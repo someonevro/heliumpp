@@ -1,0 +1,30 @@
+--- a/chrome/browser/resources/heliumpp_sidebar/app.css
++++ b/chrome/browser/resources/heliumpp_sidebar/app.css
+@@ -78,6 +78,11 @@
+   padding-inline: var(--hp-space-1) 0;
+ }
+ 
++/* Empty band above the buttons: it drags the window (0159/0160). */
++:host(:not([classic])) .row1 {
++  padding-block-start: var(--hp-space-2);
++}
++
+ .nav {
+   display: flex;
+   gap: 2px;
+--- a/chrome/browser/resources/heliumpp_sidebar/app.ts
++++ b/chrome/browser/resources/heliumpp_sidebar/app.ts
+@@ -131,7 +131,12 @@
+         height: Math.round(r.height),
+       };
+     };
+-    const rowRect = row ? toRect(row) : {x: 0, y: 0, width: 0, height: 0};
++    // From the window's top edge across the full width, so the padding around
++    // the row drags too.
++    const r = row ? toRect(row) : null;
++    const rowRect = r ? {x: 0, y: 0, width: Math.round(innerWidth),
++                         height: r.y + r.height} :
++                        {x: 0, y: 0, width: 0, height: 0};
+     const buttons = row ? [...row.querySelectorAll('button')].map(toRect) : [];
+     const key = JSON.stringify([rowRect, buttons]);
+     if (key === this.lastCaption_) {
