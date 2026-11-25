@@ -1,0 +1,22 @@
+--- a/content/browser/helium_noise/noise_token_data.cc
++++ b/content/browser/helium_noise/noise_token_data.cc
+@@ -54,6 +54,9 @@
+ }
+ }  // namespace
+ 
++// Out of line: chromium-style (enforced on Windows) wants it for this class.
++HeliumNoiseTokenData::~HeliumNoiseTokenData() = default;
++
+ HeliumNoiseTokenData::HeliumNoiseTokenData() {
+   session_tokens_[blink::HeliumNoiseFeature::kCanvas] =
+       blink::HeliumNoiseToken(base::RandUint64());
+--- a/content/browser/helium_noise/noise_token_data.h
++++ b/content/browser/helium_noise/noise_token_data.h
+@@ -28,6 +28,7 @@
+     : public base::SupportsUserData::Data {
+  public:
+   HeliumNoiseTokenData();
++  ~HeliumNoiseTokenData() override;
+ 
+   // Gets a map of BrowserContext-associated & feature-specific noise tokens
+   // computed with the main frame's origin. If the origin is opaque, a random

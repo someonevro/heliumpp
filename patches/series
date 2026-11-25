@@ -157,3 +157,4 @@
 0164-sidebar-arrow-keys.patch
 0165-sidebar-tab-menu.patch
 0166-sidebar-drag-drop.patch
+0167-windows-noise-token-dtor.patch
