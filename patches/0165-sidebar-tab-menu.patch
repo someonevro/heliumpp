@@ -1,0 +1,392 @@
+--- a/chrome/browser/resources/heliumpp_sidebar/app.html.ts
++++ b/chrome/browser/resources/heliumpp_sidebar/app.html.ts
+@@ -72,7 +72,7 @@
+       <button class="tile" role="tab" aria-selected="${tab.isActive}"
+           title="${this.tabTitle_(tab)}" aria-label="${this.tabTitle_(tab)}"
+           data-id="${tab.id}" ?data-isolated="${this.isIsolated_(tab)}"
+-          @click="${this.onTabClick_}" @auxclick="${this.onTabAuxclick_}">
++          @click="${this.onTabClick_}" @auxclick="${this.onTabAuxclick_}" @contextmenu="${this.onTabContextmenu_}">
+         <img class="fav" src="${this.favicon_(tab)}" alt="">
+       </button>`)}
+   </div>` : nothing}
+@@ -103,7 +103,7 @@
+                 aria-label="${this.tabTitle_(tab)}"
+                 data-id="${tab.id}" ?data-isolated="${this.isIsolated_(tab)}"
+                 @click="${this.onTabClick_}"
+-                @auxclick="${this.onTabAuxclick_}"
++                @auxclick="${this.onTabAuxclick_}" @contextmenu="${this.onTabContextmenu_}"
+                 @keydown="${this.onTabKeydown_}">
+               <img class="fav" src="${this.favicon_(tab)}" alt="">
+               <span class="t">${tab.title || tab.url}</span>
+@@ -118,7 +118,7 @@
+     <div class="tab" role="tab" tabindex="0" aria-selected="${row.tab!.isActive}"
+         title="${this.tabTitle_(row.tab!)}" aria-label="${this.tabTitle_(row.tab!)}"
+         data-id="${row.tab!.id}" ?data-isolated="${this.isIsolated_(row.tab!)}"
+-        @click="${this.onTabClick_}" @auxclick="${this.onTabAuxclick_}"
++        @click="${this.onTabClick_}" @auxclick="${this.onTabAuxclick_}" @contextmenu="${this.onTabContextmenu_}"
+         @keydown="${this.onTabKeydown_}">
+       <img class="fav" src="${this.favicon_(row.tab!)}" alt="">
+       <span class="t">${row.tab!.title || row.tab!.url}</span>
+--- a/chrome/browser/resources/heliumpp_sidebar/app.ts
++++ b/chrome/browser/resources/heliumpp_sidebar/app.ts
+@@ -403,6 +403,20 @@
+     }
+   }
+ 
++  // Right click (or the menu key) opens the browser's own tab menu.
++  protected onTabContextmenu_(e: MouseEvent) {
++    e.preventDefault();
++    const row = e.currentTarget as HTMLElement;
++    let x = e.clientX, y = e.clientY;
++    if (!x && !y) {  // keyboard: under the row
++      const r = row.getBoundingClientRect();
++      x = r.left + 8;
++      y = r.bottom;
++    }
++    this.proxy_.handler.showTabMenu(
++        this.idOf_(e).split(':')[0]!, Math.round(x), Math.round(y));
++  }
++
+   protected onTabKeydown_(e: KeyboardEvent) {
+     if (e.key === 'Enter' || e.key === ' ') {
+       e.preventDefault();
+--- a/chrome/browser/ui/views/tabs/vertical/helium_sidebar_web_view.cc
++++ b/chrome/browser/ui/views/tabs/vertical/helium_sidebar_web_view.cc
+@@ -8,6 +8,9 @@
+ #include "base/functional/bind.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/tabs/tab_menu_model.h"
++#include "chrome/browser/ui/tabs/tab_menu_model_delegate.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/webui/webui_embedding_context.h"
+ #include "chrome/common/webui_url_constants.h"
+ #include "chrome/grit/generated_resources.h"
+@@ -15,6 +18,7 @@
+ #include "third_party/skia/include/core/SkColor.h"
+ #include "ui/compositor/layer.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/views/widget/widget.h"
+ 
+ namespace {
+ // The web sidebar is the default; this switch brings back the native one.
+@@ -38,6 +42,8 @@
+       base::BindRepeating(&HeliumSidebarWebView::OnAddressSlot,
+                           weak_factory_.GetWeakPtr()),
+       base::BindRepeating(&HeliumSidebarWebView::OnCaptionRegion,
++                          weak_factory_.GetWeakPtr()),
++      base::BindRepeating(&HeliumSidebarWebView::OnTabMenu,
+                           weak_factory_.GetWeakPtr()));
+   SetWebContents(contents_wrapper_->web_contents());
+   contents_wrapper_->web_contents()->WasShown();
+@@ -45,7 +51,7 @@
+ 
+ HeliumSidebarWebView::~HeliumSidebarWebView() {
+   heliumpp_sidebar::SetHostCallbacks(contents_wrapper_->web_contents(), {},
+-                                     {});
++                                     {}, {});
+   contents_wrapper_->web_contents()->WasHidden();
+   contents_wrapper_->SetHost(nullptr);
+ }
+@@ -83,6 +89,74 @@
+   InvalidateLayout();
+ }
+ 
++void HeliumSidebarWebView::OnTabMenu(int32_t tab_id, const gfx::Point& point) {
++  TabStripModel* model = browser_->GetTabStripModel();
++  tabs::TabInterface* tab = nullptr;
++  for (tabs::TabInterface* t : browser_->GetAllTabInterfaces()) {
++    if (t->GetHandle().raw_value() == tab_id) {
++      tab = t;
++    }
++  }
++  if (!tab || !GetWidget()) {
++    return;
++  }
++  const int index = model->GetIndexOfTab(tab);
++  if (index == TabStripModel::kNoTab) {
++    return;
++  }
++  // Page pixels are DIPs here: the page is not zoomed.
++  gfx::Point screen_point = point;
++  views::View::ConvertPointToScreen(this, &screen_point);
++  tab_menu_ =
++      std::make_unique<TabContextMenuController>(tab->GetHandle(), this);
++  auto menu = std::make_unique<TabMenuModel>(
++      tab_menu_.get(), TabMenuModelDelegate::From(browser_), model, index);
++  TabMenuModel* menu_ptr = menu.get();
++  tab_menu_->LoadModel(std::move(menu), menu_ptr);
++  tab_menu_->RunMenuAt(screen_point, ui::mojom::MenuSourceType::kMouse,
++                       GetWidget());
++}
++
++bool HeliumSidebarWebView::IsContextMenuCommandChecked(
++    TabStripModel::ContextMenuCommand command_id) {
++  return false;
++}
++
++bool HeliumSidebarWebView::IsContextMenuCommandEnabled(
++    tabs::TabInterface* tab,
++    TabStripModel::ContextMenuCommand command_id) {
++  TabStripModel* model = browser_->GetTabStripModel();
++  const int index = model->GetIndexOfTab(tab);
++  return index != TabStripModel::kNoTab &&
++         model->IsContextMenuCommandEnabled(index, command_id);
++}
++
++bool HeliumSidebarWebView::IsContextMenuCommandAlerted(
++    TabStripModel::ContextMenuCommand command_id) {
++  return false;
++}
++
++void HeliumSidebarWebView::ExecuteContextMenuCommand(
++    tabs::TabInterface* tab,
++    TabStripModel::ContextMenuCommand command_id,
++    int event_flags) {
++  TabStripModel* model = browser_->GetTabStripModel();
++  const int index = model->GetIndexOfTab(tab);
++  if (index != TabStripModel::kNoTab) {
++    model->ExecuteContextMenuCommand(index, command_id);
++  }
++}
++
++bool HeliumSidebarWebView::GetContextMenuAccelerator(
++    int command_id,
++    ui::Accelerator* accelerator) {
++  int browser_cmd;
++  return GetWidget() &&
++         TabStripModel::ContextMenuCommandToBrowserCommand(command_id,
++                                                           &browser_cmd) &&
++         GetWidget()->GetAccelerator(browser_cmd, accelerator);
++}
++
+ void HeliumSidebarWebView::OnCaptionRegion(
+     const gfx::Rect& row,
+     const std::vector<gfx::Rect>& buttons) {
+--- a/chrome/browser/ui/views/tabs/vertical/helium_sidebar_web_view.h
++++ b/chrome/browser/ui/views/tabs/vertical/helium_sidebar_web_view.h
+@@ -10,6 +10,7 @@
+ 
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/weak_ptr.h"
++#include "chrome/browser/ui/views/tabs/tab/tab_context_menu_controller.h"
+ #include "chrome/browser/ui/webui/heliumpp_sidebar/sidebar_ui.h"
+ #include "chrome/browser/ui/webui/top_chrome/webui_contents_wrapper.h"
+ #include "ui/base/metadata/metadata_header_macros.h"
+@@ -22,7 +23,8 @@
+ // region (the web sidebar; the default, --helium-native-sidebar for the
+ // native one).
+ class HeliumSidebarWebView : public views::WebView,
+-                             public WebUIContentsWrapper::Host {
++                             public WebUIContentsWrapper::Host,
++                             public TabContextMenuController::Delegate {
+   METADATA_HEADER(HeliumSidebarWebView, views::WebView)
+ 
+  public:
+@@ -54,7 +56,23 @@
+   bool HandleKeyboardEvent(content::WebContents* source,
+                            const input::NativeWebKeyboardEvent& event) override;
+ 
++  // TabContextMenuController::Delegate (the page's tab rows open the same menu
++  // as native tabs):
++  bool IsContextMenuCommandChecked(
++      TabStripModel::ContextMenuCommand command_id) override;
++  bool IsContextMenuCommandEnabled(
++      tabs::TabInterface* tab,
++      TabStripModel::ContextMenuCommand command_id) override;
++  bool IsContextMenuCommandAlerted(
++      TabStripModel::ContextMenuCommand command_id) override;
++  void ExecuteContextMenuCommand(tabs::TabInterface* tab,
++                                 TabStripModel::ContextMenuCommand command_id,
++                                 int event_flags) override;
++  bool GetContextMenuAccelerator(int command_id,
++                                 ui::Accelerator* accelerator) override;
++
+  private:
++  void OnTabMenu(int32_t tab_id, const gfx::Point& point);
+   void OnAddressSlot(const gfx::Rect& slot);
+   void OnCaptionRegion(const gfx::Rect& row,
+                        const std::vector<gfx::Rect>& buttons);
+@@ -64,6 +82,7 @@
+   gfx::Rect address_slot_;
+   gfx::Rect caption_row_;
+   std::vector<gfx::Rect> caption_buttons_;
++  std::unique_ptr<TabContextMenuController> tab_menu_;
+   std::unique_ptr<WebUIContentsWrapperT<heliumpp_sidebar::SidebarUI>>
+       contents_wrapper_;
+   // Browser shortcuts (Ctrl+T, ...) typed while the sidebar has focus.
+--- a/chrome/browser/ui/webui/heliumpp_sidebar/heliumpp_sidebar.mojom
++++ b/chrome/browser/ui/webui/heliumpp_sidebar/heliumpp_sidebar.mojom
+@@ -75,6 +75,9 @@
+   // Ids (TabHandle values, the id part of a tab's NodeId) of this window's
+   // isolated tabs, which the list marks.
+   GetIsolatedTabs() => (array<string> tab_ids);
++  // Opens the browser's own tab context menu for one of this window's tabs
++  // (`tab_id` as in GetIsolatedTabs) at page pixel (x, y).
++  ShowTabMenu(string tab_id, int32 x, int32 y);
+ };
+ 
+ // Page side.
+--- a/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_page_handler.cc
++++ b/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_page_handler.cc
+@@ -40,12 +40,14 @@
+     base::RepeatingCallback<void(const gfx::Rect&)> on_address_slot,
+     base::RepeatingCallback<void(const gfx::Rect&,
+                                  const std::vector<gfx::Rect>&)>
+-        on_caption_region)
++        on_caption_region,
++    base::RepeatingCallback<void(int32_t, const gfx::Point&)> on_tab_menu)
+     : page_(std::move(page)),
+       receiver_(this, std::move(receiver)),
+       browser_(browser),
+       on_address_slot_(std::move(on_address_slot)),
+-      on_caption_region_(std::move(on_caption_region)) {
++      on_caption_region_(std::move(on_caption_region)),
++      on_tab_menu_(std::move(on_tab_menu)) {
+   registrar_.Init(browser_->GetProfile()->GetPrefs());
+   const auto send = base::BindRepeating(&SidebarPageHandler::SendState,
+                                         base::Unretained(this));
+@@ -263,4 +265,21 @@
+                          holes);
+ }
+ 
++void SidebarPageHandler::ShowTabMenu(const std::string& tab_id,
++                                     int32_t x,
++                                     int32_t y) {
++  // Page input: only a tab of this window, at a point inside a sane range.
++  int32_t id = 0;
++  if (!base::StringToInt(tab_id, &id) || x < 0 || y < 0 || x > 10000 ||
++      y > 10000) {
++    return;
++  }
++  for (tabs::TabInterface* tab : browser_->GetAllTabInterfaces()) {
++    if (tab->GetHandle().raw_value() == id) {
++      on_tab_menu_.Run(id, gfx::Point(x, y));
++      return;
++    }
++  }
++}
++
+ }  // namespace heliumpp_sidebar
+--- a/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_page_handler.h
++++ b/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_page_handler.h
+@@ -17,6 +17,7 @@
+ #include "components/prefs/pref_change_registrar.h"
+ #include "mojo/public/cpp/bindings/receiver.h"
+ #include "mojo/public/cpp/bindings/remote.h"
++#include "ui/gfx/geometry/point.h"
+ #include "ui/gfx/geometry/rect.h"
+ 
+ class BrowserWindowInterface;
+@@ -33,7 +34,9 @@
+                      base::RepeatingCallback<void(const gfx::Rect&)>
+                          on_address_slot,
+                      base::RepeatingCallback<void(const gfx::Rect&, const std::vector<gfx::Rect>&)>
+-                         on_caption_region);
++                         on_caption_region,
++                     base::RepeatingCallback<void(int32_t, const gfx::Point&)>
++                         on_tab_menu);
+   SidebarPageHandler(const SidebarPageHandler&) = delete;
+   SidebarPageHandler& operator=(const SidebarPageHandler&) = delete;
+   ~SidebarPageHandler() override;
+@@ -52,6 +55,7 @@
+   void SetCaptionRegion(mojom::RectPtr row,
+                         std::vector<mojom::RectPtr> buttons) override;
+   void GetIsolatedTabs(GetIsolatedTabsCallback callback) override;
++  void ShowTabMenu(const std::string& tab_id, int32_t x, int32_t y) override;
+ 
+   // extensions::ExtensionActionDispatcher::Observer:
+   void OnExtensionActionUpdated(
+@@ -74,6 +78,7 @@
+   base::RepeatingCallback<void(const gfx::Rect&)> on_address_slot_;
+   base::RepeatingCallback<void(const gfx::Rect&, const std::vector<gfx::Rect>&)>
+       on_caption_region_;
++  base::RepeatingCallback<void(int32_t, const gfx::Point&)> on_tab_menu_;
+   // The badge last sent, so uBlock Origin's frequent updates only reach the
+   // page when the number changes.
+   std::string last_blocked_;
+--- a/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_ui.cc
++++ b/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_ui.cc
+@@ -32,12 +32,15 @@
+  public:
+   AddressSlotHolder(content::WebContents* contents,
+                     AddressSlotCallback callback,
+-                    CaptionRegionCallback caption_region)
++                    CaptionRegionCallback caption_region,
++                    TabMenuCallback tab_menu)
+       : content::WebContentsUserData<AddressSlotHolder>(*contents),
+         callback(std::move(callback)),
+-        caption_region(std::move(caption_region)) {}
++        caption_region(std::move(caption_region)),
++        tab_menu(std::move(tab_menu)) {}
+   AddressSlotCallback callback;
+   CaptionRegionCallback caption_region;
++  TabMenuCallback tab_menu;
+   WEB_CONTENTS_USER_DATA_KEY_DECL();
+ };
+ 
+@@ -58,15 +61,25 @@
+   }
+ }
+ 
++void RunTabMenuCallback(content::WebContents* contents,
++                        int32_t tab_id,
++                        const gfx::Point& point) {
++  if (auto* holder = AddressSlotHolder::FromWebContents(contents)) {
++    holder->tab_menu.Run(tab_id, point);
++  }
++}
++
+ }  // namespace
+ 
+ void SetHostCallbacks(content::WebContents* contents,
+                       AddressSlotCallback address_slot,
+-                      CaptionRegionCallback caption_region) {
++                      CaptionRegionCallback caption_region,
++                      TabMenuCallback tab_menu) {
+   contents->RemoveUserData(AddressSlotHolder::UserDataKey());
+-  if (address_slot && caption_region) {
++  if (address_slot && caption_region && tab_menu) {
+     AddressSlotHolder::CreateForWebContents(contents, std::move(address_slot),
+-                                            std::move(caption_region));
++                                            std::move(caption_region),
++                                            std::move(tab_menu));
+   }
+ }
+ 
+@@ -130,6 +143,8 @@
+       base::BindRepeating(&RunAddressSlotCallback,
+                           base::Unretained(web_ui()->GetWebContents())),
+       base::BindRepeating(&RunCaptionRegionCallback,
++                          base::Unretained(web_ui()->GetWebContents())),
++      base::BindRepeating(&RunTabMenuCallback,
+                           base::Unretained(web_ui()->GetWebContents())));
+ }
+ 
+--- a/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_ui.h
++++ b/chrome/browser/ui/webui/heliumpp_sidebar/sidebar_ui.h
+@@ -15,6 +15,7 @@
+ #include "chrome/browser/ui/webui/top_chrome/top_chrome_web_ui_controller.h"
+ #include "chrome/browser/ui/webui/top_chrome/top_chrome_webui_config.h"
+ #include "components/browser_apis/tab_strip/tab_strip_api.mojom.h"
++#include "ui/gfx/geometry/point.h"
+ #include "ui/gfx/geometry/rect.h"
+ #include "mojo/public/cpp/bindings/pending_receiver.h"
+ #include "mojo/public/cpp/bindings/receiver.h"
+@@ -36,10 +37,15 @@
+ using CaptionRegionCallback =
+     base::RepeatingCallback<void(const gfx::Rect& row,
+                                  const std::vector<gfx::Rect>& buttons)>;
++// Opens the browser's tab context menu for a tab of this window (its TabHandle
++// value) at a page pixel.
++using TabMenuCallback =
++    base::RepeatingCallback<void(int32_t tab_id, const gfx::Point& point)>;
+ // Null callbacks detach the host.
+ void SetHostCallbacks(content::WebContents* contents,
+                       AddressSlotCallback address_slot,
+-                      CaptionRegionCallback caption_region);
++                      CaptionRegionCallback caption_region,
++                      TabMenuCallback tab_menu);
+ 
+ class SidebarUIConfig : public DefaultTopChromeWebUIConfig<SidebarUI> {
+  public:

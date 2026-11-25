@@ -6,6 +6,7 @@ new tab, activate a tab, close a tab, back / forward / reload, workspace switch 
 sidebar collapse (the page becomes a narrow rail), the footer shield showing uBlock Origin's blocked count for
 the active tab (ad hosts mapped to the local server, all other hosts unreachable), the tab list following title changes of background tabs,
 and finally the close-window dot ending the browser (maximize needs a window manager: not in Xvfb).
+Also: arrow keys in the list (0164) and the right-click tab menu (0165, needs python Xlib for one real key).
 Run from the project root: python3 -I scripts/test_web_sidebar.py"""
 import http.server, json, os, shutil, subprocess, sys, threading, time, urllib.request
 
@@ -108,6 +109,22 @@ try:
     check("Arrow Up focuses the previous tab row", focused() == ids()[0], (focused(), ids()))
     press("End", 35)
     check("End focuses the last tab row", focused() == ids()[-1], (focused(), ids()))
+
+    # Right click on a row opens the browser's own tab menu (0165); "d" picks Duplicate (real X key: the
+    # native menu holds the keyboard, not the page).
+    r = ev(f"(r => [r.left + 20, r.top + r.height / 2])({root}.querySelector('.scroll .tab').getBoundingClientRect())")
+    n = len(pages())
+    for t in ("mousePressed", "mouseReleased"):
+        ws.call("Input.dispatchMouseEvent", {"type": t, "x": r[0], "y": r[1], "button": "right", "clickCount": 1}, s)
+    time.sleep(1)
+    from Xlib import X, XK, display as xdisplay
+    from Xlib.ext import xtest
+    xd = xdisplay.Display(DISP); kc = xd.keysym_to_keycode(XK.string_to_keysym("d"))
+    xtest.fake_input(xd, X.KeyPress, kc); xtest.fake_input(xd, X.KeyRelease, kc); xd.sync()
+    check("right click menu: Duplicate adds a tab", wait(lambda: len(pages()) == n + 1, 5), (n, len(pages())))
+    for t in pages()[n:]:  # back to the earlier tab set for the checks below
+        ws.call("Target.closeTarget", {"targetId": t["targetId"]})
+    wait(lambda: len(pages()) == n)
 
     # Navigate tab "a" to /b with the page itself, then use the sidebar's back / forward / reload.
     a = next(t for t in pages() if t["url"] == U("a"))

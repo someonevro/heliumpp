@@ -57,7 +57,11 @@ Updated 2026-11-21 (session 10; session 9 end; RESUME: see "SESSION 9 RESUME" be
   (--password-store=basic, Xvfb), else opaque origin / pref off at runtime. Next: check the store. Probe: build/audit/pw_probe.py norm|iso.
   REGRESSION 2026-11-24 (build with 0159-0164): scripts/run_regression.sh 0164 -> 0 failed, no flaky reruns
   (build/audit/regression-0164.txt).
-  NOT committed yet (0159-0164 + test_sidebar_drag.py + test_isolated_clipboard.py + test_web_sidebar.py edits).
+  2026-11-25: committed + pushed (93f97c1); Windows run 45532831893 started (resume 45022012681, patches 0158-0164).
+  0165-sidebar-tab-menu: right click (or menu key) on a web-sidebar tab row opens Chromium's own tab context menu
+  (TabMenuModel + TabContextMenuController, as the native vertical strip). Page sends ShowTabMenu(tab id, x, y); handler
+  accepts only a tab of its window and 0..10000 coords. test_web_sidebar.py: right click + "d" (XTest) duplicates a tab:
+  PASS, whole test PASS. NOT committed; not in the running Windows build. Menu look on a real desktop not checked.
 
 - SESSION 10 (2026-11-21): Windows tester report: native caption buttons stretched into a tall strip (web sidebar moves
   the toolbar to the window bottom, so BrowserFrameViewWin sized them from it). Patch 0141-windows-hide-native-caption-buttons
