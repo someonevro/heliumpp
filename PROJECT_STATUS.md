@@ -69,6 +69,9 @@ Updated 2026-11-21 (session 10; session 9 end; RESUME: see "SESSION 9 RESUME" be
   PASS; test_web_sidebar.py still PASS. Untested: folder and pinned drops (no folder/pin in the test), dragging whole
   folders (not supported). Known: a tab dropped at the very front of the folder right below it lands second.
   Committed.
+  Windows run 45532831893 FAILED at 15678/34985: chromium-style "needs an explicit out-of-line destructor" in upstream
+  content/browser/helium_noise/noise_token_data.h (Linux build has no style plugin). Fix 0167-windows-noise-token-dtor
+  (Linux build OK), pushed 239ad98. Failed runs save no tree: new run 45670104379 resumes 45022012681 with 0158-0167.
 
 - SESSION 10 (2026-11-21): Windows tester report: native caption buttons stretched into a tall strip (web sidebar moves
   the toolbar to the window bottom, so BrowserFrameViewWin sized them from it). Patch 0141-windows-hide-native-caption-buttons
