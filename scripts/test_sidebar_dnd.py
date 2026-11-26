@@ -6,11 +6,14 @@ over CDP from the sidebar's list, which mirrors the tab strip:
   - p1 dropped on the lower half of p3   -> order p2, p3, p1
   - p1 dropped on the upper half of p2   -> order p1, p2, p3
   - p1 dropped on the list's empty end   -> order p2, p3, p1
+  - p2 put in a folder (native tab menu), p3 dropped in the strip left of the folder's rows -> no move
+  - p1 dropped into the folder (lower part of its head)   -> folder holds p2, p1
+  - p3 pinned (native tab menu), p1 dropped after its tile -> p1 pinned too
 The sidebar page's screen offset is measured, not guessed: a real mouse move is read back as clientX/clientY.
 Run from the project root: python3 -I scripts/test_sidebar_dnd.py"""
 import http.server, json, os, shutil, subprocess, sys, threading, time, urllib.request
 
-from Xlib import X, display
+from Xlib import X, XK, display
 from Xlib.ext import xtest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -120,6 +123,37 @@ try:
     ev("location.reload()")
     time.sleep(2)
     check("order survives a fresh read from the tab strip", bool(wait(lambda: order() == ["p2", "p3", "p1"], 10)), order())
+
+    def menu(title, key):
+        """Right click the row titled `title`, then pick the native menu item starting with `key`."""
+        a = row(title)
+        xtest.fake_input(d, X.MotionNotify, x=int(a[0] + 40), y=int((a[1] + a[3]) / 2)); d.sync(); time.sleep(0.2)
+        xtest.fake_input(d, X.ButtonPress, 3); xtest.fake_input(d, X.ButtonRelease, 3); d.sync(); time.sleep(1)
+        kc = d.keysym_to_keycode(XK.string_to_keysym(key))
+        xtest.fake_input(d, X.KeyPress, kc); xtest.fake_input(d, X.KeyRelease, kc); d.sync(); time.sleep(1)
+
+    folder = lambda: ev(f"[...{sr}.querySelectorAll('.scroll .folder .tab .t')].map(e => e.textContent.trim())") or []
+    menu("p2", "a")  # Add tab to new group
+    check("p2 is in a new folder", bool(wait(lambda: folder() == ["p2"], 5)), folder())
+    kc = d.keysym_to_keycode(XK.string_to_keysym("Escape"))  # the new folder's editor bubble
+    xtest.fake_input(d, X.KeyPress, kc); xtest.fake_input(d, X.KeyRelease, kc); d.sync(); time.sleep(0.5)
+    a, b = row("p3"), row("p2")
+    drag(int(a[0] + 40), int((a[1] + a[3]) / 2), int(b[0] - 6), int((b[1] + b[3]) / 2))
+    time.sleep(1)
+    check("drop in the gap beside a folder's rows moves nothing", order() == ["p2", "p3", "p1"], order())
+    h = ev(f"(r => [r.left, r.top, r.right, r.bottom])({sr}.querySelector('.scroll .folder .head').getBoundingClientRect())")
+    a = row("p1")
+    drag(int(a[0] + 40), int((a[1] + a[3]) / 2), int(h[0] + 40 + ox), int(h[1] + (h[3] - h[1]) * 0.8 + oy))
+    check("drop on a folder head puts p1 in the folder", bool(wait(lambda: folder() == ["p2", "p1"], 5)), folder())
+
+    tiles = lambda: ev(f"{sr}.querySelectorAll('.tile').length")
+    menu("p3", "p")  # Pin
+    check("p3 is pinned", bool(wait(lambda: tiles() == 1, 5)), tiles())
+    t = ev(f"(r => [r.left, r.top, r.right, r.bottom])({sr}.querySelector('.tile').getBoundingClientRect())")
+    a = row("p1")
+    drag(int(a[0] + 40), int((a[1] + a[3]) / 2), int(t[2] - 4 + ox), int((t[1] + t[3]) / 2 + oy))
+    check("drop after a pinned tile pins p1", bool(wait(lambda: tiles() == 2 and order() == ["p2"], 5)),
+          (tiles(), order()))
 except Exception:
     import traceback; traceback.print_exc(); fails.append("exception")
 finally:

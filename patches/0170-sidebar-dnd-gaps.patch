@@ -1,0 +1,74 @@
+--- a/chrome/browser/resources/heliumpp_sidebar/app.css
++++ b/chrome/browser/resources/heliumpp_sidebar/app.css
+@@ -843,7 +843,8 @@
+   box-shadow: inset 0 2px 0 var(--hp-accent);
+ }
+ 
+-.tab[data-drop='after'] {
++.tab[data-drop='after'],
++.folder[data-drop='after'] {
+   box-shadow: inset 0 -2px 0 var(--hp-accent);
+ }
+ 
+--- a/chrome/browser/resources/heliumpp_sidebar/app.ts
++++ b/chrome/browser/resources/heliumpp_sidebar/app.ts
+@@ -448,7 +448,11 @@
+   private dropWhere_(e: DragEvent, el: HTMLElement): string {
+     const r = el.getBoundingClientRect();
+     if (el.classList.contains('scroll')) {
+-      return 'end';
++      // Only the empty space below the last row; the gaps between rows and
++      // folders also reach the list and accept no drop.
++      const last = this.lastRow_(el);
++      return !last || e.clientY > last.getBoundingClientRect().bottom ? 'end' :
++                                                                        '';
+     }
+     if (el.classList.contains('tile')) {
+       return e.clientX < r.left + r.width / 2 ? 'before' : 'after';
+@@ -459,15 +463,30 @@
+     return e.clientY < r.top + r.height / 2 ? 'before' : 'after';
+   }
+ 
++  // The list's last top-level row (a tab or a folder).
++  private lastRow_(list: HTMLElement): HTMLElement|null {
++    const rows =
++        list.querySelectorAll<HTMLElement>(':scope > .tab, :scope > .folder');
++    return rows[rows.length - 1] || null;
++  }
++
+   protected onDragover_(e: DragEvent) {
+     if (!this.dragId_) {
+       return;
+     }
+-    e.preventDefault();
+     e.stopPropagation();
+     const el = e.currentTarget as HTMLElement;
+     const where = this.dropWhere_(e, el);
+-    this.markDrop_(where === 'end' ? null : el, where);
++    if (!where) {
++      this.markDrop_(null, '');
++      return;
++    }
++    e.preventDefault();
++    if (where === 'end') {
++      this.markDrop_(this.lastRow_(el), 'after');
++    } else {
++      this.markDrop_(el, where);
++    }
+   }
+ 
+   protected onDrop_(e: DragEvent) {
+@@ -478,8 +497,11 @@
+     e.preventDefault();
+     e.stopPropagation();
+     const el = e.currentTarget as HTMLElement;
+-    const position =
+-        this.dropPosition_(dragged, el.dataset['id'] || '', this.dropWhere_(e, el));
++    const where = this.dropWhere_(e, el);
++    if (!where) {
++      return;
++    }
++    const position = this.dropPosition_(dragged, el.dataset['id'] || '', where);
+     this.onDragend_();
+     if (position) {
+       this.proxy_.tabs.moveNode(dragged, position);
