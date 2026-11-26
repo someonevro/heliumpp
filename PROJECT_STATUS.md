@@ -72,6 +72,10 @@ Updated 2026-11-21 (session 10; session 9 end; RESUME: see "SESSION 9 RESUME" be
   Windows run 45532831893 FAILED at 15678/34985: chromium-style "needs an explicit out-of-line destructor" in upstream
   content/browser/helium_noise/noise_token_data.h (Linux build has no style plugin). Fix 0167-windows-noise-token-dtor
   (Linux build OK), pushed 239ad98. Failed runs save no tree: new run 45670104379 resumes 45022012681 with 0158-0167.
+  Run 45670104379 FAILED in stage 2: inline virtual bodies (chromium-style) -> 0168. Run 45767363546 passed all C++ to
+  12550/25459, then FAILED: backtick in a CSS comment (0128, new_tab_page/app.css) ends the generated css.ts template
+  string -> 0169. args.gn has no clang_use_chrome_plugins line (default on), so more style errors are possible.
+  Owner 2026-11-26: Windows CI fix loop (commit, push, start run) runs without asking.
 
 - SESSION 10 (2026-11-21): Windows tester report: native caption buttons stretched into a tall strip (web sidebar moves
   the toolbar to the window bottom, so BrowserFrameViewWin sized them from it). Patch 0141-windows-hide-native-caption-buttons

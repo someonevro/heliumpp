@@ -1,0 +1,11 @@
+--- a/chrome/browser/resources/new_tab_page/app.css
++++ b/chrome/browser/resources/new_tab_page/app.css
+@@ -718,7 +718,7 @@
+   visibility: hidden;
+ }
+ 
+-/* Line icons (the generic `svg` rule above fixes position for other svgs). */
++/* Line icons (the generic svg rule above fixes position for other svgs). */
+ .i {
+   fill: none;
+   position: static;
