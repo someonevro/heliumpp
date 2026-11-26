@@ -93,6 +93,8 @@ jobs:
           7z x artifacts.zip -y | Select-Object -Last 3
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           Remove-Item artifacts.zip
+          # Why chromium-style runs on Windows (upstream flags.gn turns it off): show the tree's setting.
+          Select-String -Path src\out\Default\args.gn -Pattern 'plugins' | Out-Host
           foreach ($p in $env:PATCHES.Split(' ', [StringSplitOptions]::RemoveEmptyEntries)) {
             src\third_party\git\usr\bin\patch.exe -p1 -d src -i "D:\helium-windows\heliumpp\patches\$p"
             if ($LASTEXITCODE) { exit $LASTEXITCODE }

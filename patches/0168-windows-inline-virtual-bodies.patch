@@ -1,0 +1,98 @@
+--- a/chrome/browser/ui/views/frame/BUILD.gn
++++ b/chrome/browser/ui/views/frame/BUILD.gn
+@@ -703,6 +703,7 @@
+ 
+ source_set("browser_view_layout_delegate") {
+   public = [ "layout/browser_view_layout_delegate.h" ]
++  sources = [ "layout/browser_view_layout_delegate.cc" ]
+   public_deps = [
+     ":browser_view_layout_params",
+     "//base",
+--- /dev/null
++++ b/chrome/browser/ui/views/frame/layout/browser_view_layout_delegate.cc
+@@ -0,0 +1,27 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "chrome/browser/ui/views/frame/layout/browser_view_layout_delegate.h"
++
++// Out of line: chromium-style (enforced on Windows) rejects inline virtual
++// methods with bodies.
++bool BrowserViewLayoutDelegate::IsZenModeEnabledForLayout() const {
++  return false;
++}
++
++float BrowserViewLayoutDelegate::GetTopChromeRevealRatio() const {
++  return 1.f;
++}
++
++float BrowserViewLayoutDelegate::GetSideChromeRevealRatio() const {
++  return 1.f;
++}
++
++bool BrowserViewLayoutDelegate::IsZenModeSideChromePinned() const {
++  return false;
++}
++
++bool BrowserViewLayoutDelegate::IsZenModeTopChromePinned() const {
++  return false;
++}
+--- a/chrome/browser/ui/views/frame/layout/browser_view_layout_delegate.h
++++ b/chrome/browser/ui/views/frame/layout/browser_view_layout_delegate.h
+@@ -59,11 +59,11 @@
+   virtual OrganizerPanelLocation GetOrganizerPanelLocation() const = 0;
+   virtual bool IsTopControlsSlideBehaviorEnabled() const = 0;
+   virtual float GetTopControlsSlideBehaviorShownRatio() const = 0;
+-  virtual bool IsZenModeEnabledForLayout() const { return false; }
+-  virtual float GetTopChromeRevealRatio() const { return 1.f; }
+-  virtual float GetSideChromeRevealRatio() const { return 1.f; }
+-  virtual bool IsZenModeSideChromePinned() const { return false; }
+-  virtual bool IsZenModeTopChromePinned() const { return false; }
++  virtual bool IsZenModeEnabledForLayout() const;
++  virtual float GetTopChromeRevealRatio() const;
++  virtual float GetSideChromeRevealRatio() const;
++  virtual bool IsZenModeSideChromePinned() const;
++  virtual bool IsZenModeTopChromePinned() const;
+   virtual gfx::NativeView GetHostViewForAnchoring() const = 0;
+   virtual bool HasFindBarController() const = 0;
+   virtual void MoveWindowForFindBarIfNecessary() const = 0;
+--- a/components/sessions/BUILD.gn
++++ b/components/sessions/BUILD.gn
+@@ -112,6 +112,7 @@
+     "core/command_storage_read_status.h",
+     "core/live_tab.cc",
+     "core/live_tab.h",
++    "core/live_tab_context.cc",
+     "core/live_tab_context.h",
+     "core/serialized_navigation_driver.h",
+     "core/serialized_navigation_entry.cc",
+--- /dev/null
++++ b/components/sessions/core/live_tab_context.cc
+@@ -0,0 +1,15 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "components/sessions/core/live_tab_context.h"
++
++namespace sessions {
++
++// Out of line: chromium-style (enforced on Windows) rejects inline virtual
++// methods with bodies.
++bool LiveTabContext::HasSavedTabGroup(const base::Uuid& saved) const {
++  return false;
++}
++
++}  // namespace sessions
+--- a/components/sessions/core/live_tab_context.h
++++ b/components/sessions/core/live_tab_context.h
+@@ -71,7 +71,7 @@
+       const base::Uuid& saved) const = 0;
+   // Unlike GetGroupIdForSavedGroup(), also recognizes closed saved groups.
+   // False means tabs must be restored individually, e.g. for deleted groups.
+-  virtual bool HasSavedTabGroup(const base::Uuid& saved) const { return false; }
++  virtual bool HasSavedTabGroup(const base::Uuid& saved) const;
+   virtual bool IsTabPinned(int index) const = 0;
+   // Update |group|'s metadata. Should only be called for |group| if a tab has
+   // been restored in |group| via AddRestoredTab() or ReplaceRestoredTab().
