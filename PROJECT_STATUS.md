@@ -76,6 +76,11 @@ Updated 2026-11-21 (session 10; session 9 end; RESUME: see "SESSION 9 RESUME" be
   12550/25459, then FAILED: backtick in a CSS comment (0128, new_tab_page/app.css) ends the generated css.ts template
   string -> 0169. args.gn has no clang_use_chrome_plugins line (default on), so more style errors are possible.
   Owner 2026-11-26: Windows CI fix loop (commit, push, start run) runs without asking.
+  Run 45806587429 FAILED at 15092/25459: dns_sd_registry.cc uses a member upstream removed for
+  enable_service_discovery=false. ROOT CAUSE of all Windows style errors: apply_ours.py makes out/Default/fonts
+  before build.py writes args.gn, and build.py --ci skips args.gn when out/Default exists, so gn used Chromium
+  defaults (debug, chromium-style plugin on, service discovery on, no codecs/official/PGO). hook_build_py.py now
+  makes build.py test out/Default/args.gn. Old trees are debug: fresh run (no resume) needed.
 
 - SESSION 10 (2026-11-21): Windows tester report: native caption buttons stretched into a tall strip (web sidebar moves
   the toolbar to the window bottom, so BrowserFrameViewWin sized them from it). Patch 0141-windows-hide-native-caption-buttons
