@@ -5,6 +5,8 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 jobs=8   # 15 GB RAM: ThinLTO links are memory-heavy, stay below 12 threads
 if [ "${1:-}" = "-j" ]; then jobs="$2"; shift 2; fi
+# OUT=out/V3 builds the x86-64-v3 variant (its args.gn sets heliumpp_x86_64_v3=true).
+out="${OUT:-out/Default}"
 # Single source of truth for the onboarding page; touch the dir vite watches only when it changed.
 dest="$root/build/src/components/helium_onboarding/src/lib/presets.json"
 if ! cmp -s "$root/shared/presets.json" "$dest"; then
@@ -19,12 +21,15 @@ tokens="$root/build/src/ui/webui/resources/css/heliumpp_tokens.css"
 cmp -s "$root/shared/design/tokens.css" "$tokens" || cp "$root/shared/design/tokens.css" "$tokens"
 # UI font Figtree (SIL OFL 1.1, shared/fonts/figtree; patch 0125) next to the binary where the browser looks for
 # it. The dir is replaced so no older font (Satoshi, not redistributable) is left behind for packaging.
-rm -rf "$root/build/src/out/Default/fonts"; mkdir -p "$root/build/src/out/Default/fonts"
-cp "$root"/shared/fonts/figtree/* "$root/build/src/out/Default/fonts/"
+rm -rf "$root/build/src/$out/fonts"; mkdir -p "$root/build/src/$out/fonts"
+cp "$root"/shared/fonts/figtree/* "$root/build/src/$out/fonts/"
 # vite never cleans its output dir; stale hashed files overflow the grd's fixed resource ID range
 # (IdRangeOverflow). Wiping it forces a vite run on every compile (costs ~a minute) but is always correct.
-rm -rf "$root/build/src/out/Default/gen/components/helium_onboarding/dist"
-docker run --rm -i --memory 8g --memory-swap 20g -u "$(id -u):$(id -g)" \
+rm -rf "$root/build/src/$out/gen/components/helium_onboarding/dist"
+# LIMITS="--cpus=3 --memory 6g" caps a long build while the computer is in use (default: none).
+# shellcheck disable=SC2086
+docker run --rm -i --memory 8g --memory-swap 20g ${LIMITS:-} -u "$(id -u):$(id -g)" \
     -e HOME="$root/build/home" -e SISO_PATH="$root/build/src/third_party/siso/cipd/siso" \
     -v "$root/build:$root/build" -w "$root/build/src" chromium-builder:trixie-slim \
-    python3 third_party/depot_tools/autoninja.py -C out/Default -j "$jobs" chrome chromedriver "$@"
+    sh -c '[ -f "$0/build.ninja" ] || buildtools/linux64/gn gen "$0" || exit 1; exec nice -n 19 python3 "$@"' "$out" \
+    third_party/depot_tools/autoninja.py -C "$out" -j "$jobs" chrome chromedriver "$@"

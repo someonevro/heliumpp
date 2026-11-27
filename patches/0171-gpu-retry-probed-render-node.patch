@@ -1,0 +1,28 @@
+--- a/content/browser/gpu/gpu_process_host.cc
++++ b/content/browser/gpu/gpu_process_host.cc
+@@ -1498,6 +1498,25 @@
+     return;
+   }
+ 
++#if BUILDFLAG(IS_OZONE)
++  // Helium++: Wayland points the GPU process at the compositor's GPU, which can
++  // crash it (seen: Radeon RX 550 next to an Intel iGPU, one monitor on each),
++  // and three crashes mean software drawing for the whole session. Retry once
++  // on the render node the GPU process probes itself before counting crashes.
++  static bool retried_render_node = false;
++  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
++  if (!retried_render_node &&
++      command_line->HasSwitch(switches::kRenderNodeOverride)) {
++    retried_render_node = true;
++    LOG(WARNING) << "GPU process crashed on "
++                 << command_line->GetSwitchValueASCII(
++                        switches::kRenderNodeOverride)
++                 << "; retrying on the probed render node";
++    command_line->RemoveSwitch(switches::kRenderNodeOverride);
++    return;
++  }
++#endif
++
+   // Keep track of the total number of GPU crashes.
+   base::subtle::NoBarrier_AtomicIncrement(&gpu_crash_count_, 1);
+   LOG(WARNING) << "The GPU process has crashed " << GetGpuCrashCount()
