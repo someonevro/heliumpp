@@ -86,6 +86,11 @@ Updated 2026-11-21 (session 10; session 9 end; RESUME: see "SESSION 9 RESUME" be
   build/windows-artifacts/45863779497/. Not run on Windows yet, unsigned, not released. Includes 0170 (a resume with it found it already applied).
   RELEASED v0.20.2.4-alpha (owner approved 2026-11-27), marked Latest: Linux AppImage sha256 c320782c...0511
   (160598520 bytes, signed latest.json, signature verified against kUpdatePublicKey) + Windows installer/zip.
+  AUDIT + SPEED (2026-11-27): CI guards added (05f61c9: build stops on non-release args.gn; resume skips patches
+  already applied). Measured (Xvfb, software GL, N=3): web sidebar costs +18 ms first window paint, +35 ms first
+  idle vs native; while 20 tabs load it uses 1.2% CPU (0.3 s of 25 s). Not worth optimizing. Build already
+  official + ThinLTO + PGO (Linux and Windows); after PGO we matched upstream Helium (1.01x). Next lever:
+  x86-64-v3 (AVX2) build variant, full rebuild, needs owner OK.
 
 - SESSION 10 (2026-11-21): Windows tester report: native caption buttons stretched into a tall strip (web sidebar moves
   the toolbar to the window bottom, so BrowserFrameViewWin sized them from it). Patch 0141-windows-hide-native-caption-buttons
