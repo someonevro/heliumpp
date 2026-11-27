@@ -81,6 +81,9 @@ Updated 2026-11-21 (session 10; session 9 end; RESUME: see "SESSION 9 RESUME" be
   before build.py writes args.gn, and build.py --ci skips args.gn when out/Default exists, so gn used Chromium
   defaults (debug, chromium-style plugin on, service discovery on, no codecs/official/PGO). hook_build_py.py now
   makes build.py test out/Default/args.gn. Old trees are debug: fresh run (no resume) needed.
+  Run 45863779497 (fresh, official config, 76162 steps) SUCCEEDED in 3 stages (2026-11-27 07:00Z):
+  heliumpp_0.20.2.4_x64-installer.exe + -windows.zip (fonts included), downloaded to
+  build/windows-artifacts/45863779497/. Not run on Windows yet, unsigned, not released. Built without 0170.
 
 - SESSION 10 (2026-11-21): Windows tester report: native caption buttons stretched into a tall strip (web sidebar moves
   the toolbar to the window bottom, so BrowserFrameViewWin sized them from it). Patch 0141-windows-hide-native-caption-buttons
