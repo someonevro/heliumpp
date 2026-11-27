@@ -84,6 +84,8 @@ Updated 2026-11-21 (session 10; session 9 end; RESUME: see "SESSION 9 RESUME" be
   Run 45863779497 (fresh, official config, 76162 steps) SUCCEEDED in 3 stages (2026-11-27 07:00Z):
   heliumpp_0.20.2.4_x64-installer.exe + -windows.zip (fonts included), downloaded to
   build/windows-artifacts/45863779497/. Not run on Windows yet, unsigned, not released. Includes 0170 (a resume with it found it already applied).
+  RELEASED v0.20.2.4-alpha (owner approved 2026-11-27), marked Latest: Linux AppImage sha256 c320782c...0511
+  (160598520 bytes, signed latest.json, signature verified against kUpdatePublicKey) + Windows installer/zip.
 
 - SESSION 10 (2026-11-21): Windows tester report: native caption buttons stretched into a tall strip (web sidebar moves
   the toolbar to the window bottom, so BrowserFrameViewWin sized them from it). Patch 0141-windows-hide-native-caption-buttons
