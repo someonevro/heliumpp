@@ -20,4 +20,10 @@ args_test = "    if not args.ci or not (source_tree / 'out/Default').exists():\n
 if text.count(args_test) != 1:
     sys.exit(f'{path}: args.gn test found {text.count(args_test)} times, expected 1 (helium-windows changed?)')
 text = text.replace(args_test, "    if not args.ci or not (source_tree / 'out/Default/args.gn').exists():\n")
+# Stop before compiling when args.gn lacks the release settings: a skipped args.gn once gave 14 h debug builds.
+enter = '    # Enter source tree to run build commands\n'
+if text.count(enter) != 1:
+    sys.exit(f'{path}: build-dir anchor found {text.count(enter)} times, expected 1 (helium-windows changed?)')
+text = text.replace(enter, "    if 'is_official_build=true' not in (source_tree / 'out/Default/args.gn').read_text(encoding=ENCODING):\n"
+                           "        sys.exit('Helium++: out/Default/args.gn lacks is_official_build=true')\n" + enter)
 path.write_text(text.replace(anchor, hook + anchor), encoding='utf-8')

@@ -96,6 +96,9 @@ jobs:
           # Why chromium-style runs on Windows (upstream flags.gn turns it off): show the tree's setting.
           Select-String -Path src\out\Default\args.gn -Pattern 'plugins' | Out-Host
           foreach ($p in $env:PATCHES.Split(' ', [StringSplitOptions]::RemoveEmptyEntries)) {
+            # Already in the saved tree (e.g. committed before that run started): skip, do not fail.
+            src\third_party\git\usr\bin\patch.exe -p1 -d src -R -f -s --dry-run -i "D:\helium-windows\heliumpp\patches\$p" *> $null
+            if ($LASTEXITCODE -eq 0) { "$p already applied, skipped" | Out-Host; continue }
             src\third_party\git\usr\bin\patch.exe -p1 -d src -i "D:\helium-windows\heliumpp\patches\$p"
             if ($LASTEXITCODE) { exit $LASTEXITCODE }
           }
