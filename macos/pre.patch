@@ -1,0 +1,22 @@
+macOS-only. Helium's macOS patch native-translation-context-option gives IDC_CONTENT_CONTEXT_SYSTEM_TRANSLATE UMA
+value 173, which our 0086 (copy clean link) also takes. Take it out of the table before our series;
+macos/patches/0002 puts it back after our entries.
+
+--- a/chrome/browser/renderer_context_menu/render_view_context_menu.cc
++++ b/chrome/browser/renderer_context_menu/render_view_context_menu.cc
+@@ -669,14 +669,13 @@
+        {IDC_CONTENT_CONTEXT_ASK_GOOGLE_ABOUT_THIS_PAGE, 170},
+        {IDC_CONTENT_CONTEXT_CONTEXTUAL_TASKS_SUBMENU, 171},
+        {IDC_CONTENT_CONTEXT_FORCE_PASTE, 172},
+-       {IDC_CONTENT_CONTEXT_SYSTEM_TRANSLATE, 173},
+        // To add new items:
+        //   - Add one more line above this comment block, using the UMA value
+        //     from the line below this comment block.
+        //   - Increment the UMA value in that latter line.
+        //   - Add the new item to the RenderViewContextMenuItem enum in
+        //     tools/metrics/histograms/metadata/ui/enums.xml.
+-       {kUmaMaxValueKey, 174}});
++       {kUmaMaxValueKey, 173}});
+   // LINT.ThenChange(//tools/metrics/histograms/metadata/ui/enums.xml:RenderViewContextMenuItem)
+ 
+   // LINT.IfChange(ContextMenuOptionDesktop)

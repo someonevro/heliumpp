@@ -1,5 +1,5 @@
-# Helium++ on top of helium-windows: called from helium-windows' build.py (inserted by
-# hook_build_py.py) right after Helium's own patches, substitutions, version and resources,
+# Helium++ on top of helium-windows / helium-macos: called from helium-windows' build.py (inserted by
+# hook_build_py.py) or macos/apply_ours.py right after Helium's own patches, substitutions, version and resources,
 # the same point where scripts/prepare_source.sh applies our series on Linux.
 import shutil
 from pathlib import Path
@@ -9,11 +9,15 @@ import patches
 _HPP = Path(__file__).resolve().parent.parent
 
 
-def apply(source_tree, patch_bin_path):
+def apply(source_tree, patch_bin_path, platform='windows'):
     # Our patches were made on the Linux tree; give them the Linux context they expect.
     patches.apply_patches([_HPP / 'windows' / 'linux-context.patch'], source_tree,
                           patch_bin_path=patch_bin_path)
-    for series_dir in (_HPP / 'patches', _HPP / 'windows' / 'patches'):
+    # Platform fix-ups that must land before our series (macos/pre.patch).
+    pre = _HPP / platform / 'pre.patch'
+    if pre.exists():
+        patches.apply_patches([pre], source_tree, patch_bin_path=patch_bin_path)
+    for series_dir in (_HPP / 'patches', _HPP / platform / 'patches'):
         patches.apply_patches(
             patches.generate_patches_from_series(series_dir, resolve=True),
             source_tree, patch_bin_path=patch_bin_path)

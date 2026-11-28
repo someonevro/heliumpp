@@ -1,0 +1,134 @@
+# One <6 h hop of the macOS build. Checks out helium-macos (pinned to the Helium version our patches
+# are based on) at the workspace root so its scripts and actions work unchanged, with this repo in
+# heliumpp/. The first hop prepares the source tree (Helium's patches, then ours via
+# macos/hook_shared_sh.py); later hops resume from the previous hop's build-tree artifact.
+name: macOS stage
+on:
+  workflow_call:
+    inputs:
+      arch:
+        required: true
+        type: string
+      runner:
+        required: true
+        type: string
+      from-artifact:
+        required: true
+        type: boolean
+      final:
+        description: Last hop; fail if the build is not finished
+        required: false
+        type: boolean
+        default: false
+      resume-run:
+        description: Run id whose saved build tree to start from (first hop only)
+        required: false
+        type: string
+        default: ''
+      resume-patches:
+        description: Space-separated patches/ or macos/patches/ files (paths from the repo root) to apply on that tree
+        required: false
+        type: string
+        default: ''
+    outputs:
+      finished:
+        value: ${{ jobs.stage.outputs.finished }}
+permissions:
+  contents: read
+  actions: read  # resume-run: download another run's artifact
+defaults:
+  run:
+    shell: bash
+jobs:
+  stage:
+    runs-on: ${{ inputs.runner }}
+    outputs:
+      finished: ${{ steps.build.outputs.status == 'finished' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: imputnet/helium-macos
+          ref: 2db58634c5490cea7ce85260367cec2dabfa0e01  # Helium 0.20.2.1 (helium-chromium 58261a2)
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: heliumpp
+          persist-credentials: false
+      - uses: ./.github/actions/prepare-environment
+      - name: Free space and show it
+        run: |
+          sudo rm -rf /Users/runner/Library/Android /usr/local/share/dotnet /usr/local/lib/node_modules || true
+          df -h /
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        if: ${{ !inputs.from-artifact && inputs.resume-run == '' }}
+        with:
+          name: bonjourr
+          path: heliumpp/build/bonjourr
+      - name: Prepare sources (Helium, then Helium++)
+        if: ${{ !inputs.from-artifact && inputs.resume-run == '' }}
+        run: |
+          set -o pipefail
+          python3 heliumpp/macos/hook_shared_sh.py .
+          source ./devutils/shared.sh
+          prepare_sources 2>&1 | tee -a github_actions_build_${{ inputs.arch }}.log
+          rm -rf build/download_cache
+          write_gn_args '${{ inputs.arch }}' ci
+          # No sccache (upstream feeds it from their own cache) and no debug symbols (disk, time).
+          sed -i '' -e '/^cc_wrapper=/d' -e 's/^symbol_level=1$/symbol_level=0/' "$_out_dir/args.gn"
+          grep -q 'is_official_build=true' "$_out_dir/args.gn"
+          grep -q 'chrome_pgo_phase=2' "$_out_dir/args.gn"
+          gn_gen
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        if: inputs.from-artifact
+        with:
+          name: github_build_artifact_${{ inputs.arch }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        if: ${{ !inputs.from-artifact && inputs.resume-run != '' }}
+        with:
+          name: github_build_artifact_${{ inputs.arch }}
+          run-id: ${{ inputs.resume-run }}
+          github-token: ${{ github.token }}
+      - name: Unpack the build tree
+        if: ${{ inputs.from-artifact || inputs.resume-run != '' }}
+        run: ./github_unpack_archive.sh
+      - name: Apply patches on the resumed tree
+        if: ${{ !inputs.from-artifact && inputs.resume-run != '' }}
+        env:
+          PATCHES: ${{ inputs.resume-patches }}
+        run: |
+          for p in $PATCHES; do
+            # Already in the saved tree: skip, do not fail.
+            if patch -p1 -d build/src -R -f -s --dry-run -i "$PWD/heliumpp/$p" >/dev/null 2>&1; then
+              echo "$p already applied, skipped"; continue
+            fi
+            patch -p1 -d build/src -i "$PWD/heliumpp/$p"
+          done
+      - name: Build
+        id: build
+        run: |
+          set -o pipefail
+          ./github_build.sh '${{ inputs.arch }}' 2>&1 | tee -a github_actions_build_${{ inputs.arch }}.log
+      - name: Save the build tree for the next hop
+        if: steps.build.outputs.status != 'finished' && !inputs.final
+        run: ./github_prepare_artifacts.sh '${{ inputs.arch }}'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: steps.build.outputs.status != 'finished' && !inputs.final
+        with:
+          name: github_build_artifact_${{ inputs.arch }}
+          path: upload_part_build/
+          overwrite: true
+          compression-level: 0
+      - name: Check build completed
+        if: inputs.final && steps.build.outputs.status != 'finished'
+        run: exit 1
+      - name: Package and smoke-test
+        if: steps.build.outputs.status == 'finished'
+        run: heliumpp/macos/package_and_test.sh '${{ inputs.arch }}' "$RUNNER_TEMP/heliumpp-out"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: ${{ always() && steps.build.outputs.status == 'finished' }}
+        with:
+          name: heliumpp-macos-${{ inputs.arch }}
+          path: ${{ runner.temp }}/heliumpp-out/*
+          if-no-files-found: error
+          compression-level: 0

@@ -1,0 +1,152 @@
+# Unsigned Helium++ build for macOS on GitHub's free Mac runners (no local Mac needed), with smoke tests
+# on the runner. Run by hand: Actions -> macOS build -> Run workflow. Output: artifact heliumpp-macos-<arch>.
+# A Chromium build takes longer than one job may run (6 h), so it is split into hops that resume from the
+# previous hop's build tree; later hops are skipped once the build finished.
+name: macOS build
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: arm64 (Apple Silicon) or x86_64 (Intel)
+        required: false
+        default: arm64
+      runner:
+        description: Runner image
+        required: false
+        default: macos-latest
+      resume-run:
+        description: Start from this run's saved build tree (its id); empty = from scratch
+        required: false
+        default: ''
+      resume-patches:
+        description: Files (paths from the repo root) to apply on that tree, space-separated
+        required: false
+        default: ''
+permissions:
+  contents: read
+  actions: read
+jobs:
+  bonjourr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - run: scripts/fetch_bonjourr.sh build/bonjourr
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: bonjourr
+          path: build/bonjourr
+          if-no-files-found: error
+
+  build-1:
+    needs: bonjourr
+    uses: ./.github/workflows/macos-stage.yml
+    with:
+      arch: ${{ inputs.arch }}
+      runner: ${{ inputs.runner }}
+      from-artifact: false
+      resume-run: ${{ inputs.resume-run }}
+      resume-patches: ${{ inputs.resume-patches }}
+
+  build-2:
+    needs: build-1
+    if: needs.build-1.outputs.finished != 'true'
+    uses: ./.github/workflows/macos-stage.yml
+    with:
+      arch: ${{ inputs.arch }}
+      runner: ${{ inputs.runner }}
+      from-artifact: true
+
+  build-3:
+    needs: build-2
+    if: needs.build-2.outputs.finished != 'true'
+    uses: ./.github/workflows/macos-stage.yml
+    with:
+      arch: ${{ inputs.arch }}
+      runner: ${{ inputs.runner }}
+      from-artifact: true
+
+  build-4:
+    needs: build-3
+    if: needs.build-3.outputs.finished != 'true'
+    uses: ./.github/workflows/macos-stage.yml
+    with:
+      arch: ${{ inputs.arch }}
+      runner: ${{ inputs.runner }}
+      from-artifact: true
+
+  build-5:
+    needs: build-4
+    if: needs.build-4.outputs.finished != 'true'
+    uses: ./.github/workflows/macos-stage.yml
+    with:
+      arch: ${{ inputs.arch }}
+      runner: ${{ inputs.runner }}
+      from-artifact: true
+
+  build-6:
+    needs: build-5
+    if: needs.build-5.outputs.finished != 'true'
+    uses: ./.github/workflows/macos-stage.yml
+    with:
+      arch: ${{ inputs.arch }}
+      runner: ${{ inputs.runner }}
+      from-artifact: true
+
+  build-7:
+    needs: build-6
+    if: needs.build-6.outputs.finished != 'true'
+    uses: ./.github/workflows/macos-stage.yml
+    with:
+      arch: ${{ inputs.arch }}
+      runner: ${{ inputs.runner }}
+      from-artifact: true
+
+  build-8:
+    needs: build-7
+    if: needs.build-7.outputs.finished != 'true'
+    uses: ./.github/workflows/macos-stage.yml
+    with:
+      arch: ${{ inputs.arch }}
+      runner: ${{ inputs.runner }}
+      from-artifact: true
+
+  build-9:
+    needs: build-8
+    if: needs.build-8.outputs.finished != 'true'
+    uses: ./.github/workflows/macos-stage.yml
+    with:
+      arch: ${{ inputs.arch }}
+      runner: ${{ inputs.runner }}
+      from-artifact: true
+
+  build-10:
+    needs: build-9
+    if: needs.build-9.outputs.finished != 'true'
+    uses: ./.github/workflows/macos-stage.yml
+    with:
+      arch: ${{ inputs.arch }}
+      runner: ${{ inputs.runner }}
+      from-artifact: true
+
+  build-11:
+    needs: build-10
+    if: needs.build-10.outputs.finished != 'true'
+    uses: ./.github/workflows/macos-stage.yml
+    with:
+      arch: ${{ inputs.arch }}
+      runner: ${{ inputs.runner }}
+      from-artifact: true
+
+  build-12:
+    needs: build-11
+    if: needs.build-11.outputs.finished != 'true'
+    uses: ./.github/workflows/macos-stage.yml
+    with:
+      arch: ${{ inputs.arch }}
+      runner: ${{ inputs.runner }}
+      from-artifact: true
+      final: true

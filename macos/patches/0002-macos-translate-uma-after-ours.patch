@@ -1,0 +1,20 @@
+macOS: put Helium's system-translate context menu entry back into the UMA table after ours (see macos/pre.patch).
+
+--- a/chrome/browser/renderer_context_menu/render_view_context_menu.cc
++++ b/chrome/browser/renderer_context_menu/render_view_context_menu.cc
+@@ -676,13 +676,14 @@
+        {IDC_CONTENT_CONTEXT_FORCE_PASTE, 172},
+        {IDC_CONTENT_CONTEXT_COPYCLEANLINK, 173},
+        {IDC_CONTENT_CONTEXT_INSERT_ALIAS, 174},
++       {IDC_CONTENT_CONTEXT_SYSTEM_TRANSLATE, 175},
+        // To add new items:
+        //   - Add one more line above this comment block, using the UMA value
+        //     from the line below this comment block.
+        //   - Increment the UMA value in that latter line.
+        //   - Add the new item to the RenderViewContextMenuItem enum in
+        //     tools/metrics/histograms/metadata/ui/enums.xml.
+-       {kUmaMaxValueKey, 175}});
++       {kUmaMaxValueKey, 176}});
+   // LINT.ThenChange(//tools/metrics/histograms/metadata/ui/enums.xml:RenderViewContextMenuItem)
+ 
+   // LINT.IfChange(ContextMenuOptionDesktop)
