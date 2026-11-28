@@ -1,0 +1,82 @@
+--- a/chrome/browser/ui/browser_commands.cc
++++ b/chrome/browser/ui/browser_commands.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/ui/browser_commands.h"
+ 
++#include "chrome/browser/helium_privacy_mode/helium_privacy_mode.h"
++
+ #include <algorithm>
+ #include <memory>
+ #include <numeric>
+@@ -2922,11 +2924,24 @@
+                   : false;
+ }
+ 
++namespace {
++// Helium++: links copied from incognito or isolated tabs stay out of clipboard
++// history, like the pages' own copies (0161).
++bool KeepOutOfClipboardHistory(content::WebContents* web_contents) {
++  return web_contents &&
++         (web_contents->GetBrowserContext()->IsOffTheRecord() ||
++          helium_privacy_mode::IsIsolatedWebContents(web_contents));
++}
++}  // namespace
++
+ void CopyURL(BrowserWindowInterface* browser,
+              content::WebContents* web_contents) {
+   ui::ScopedClipboardWriter scw(ui::ClipboardBuffer::kCopyPaste);
+   const std::u16string formatted_url = FormatURLForCopy(web_contents);
+   scw.WriteText(formatted_url);
++  if (KeepOutOfClipboardHistory(web_contents)) {
++    scw.MarkAsOffTheRecord();
++  }
+ 
+ #if !BUILDFLAG(IS_ANDROID)
+   if (toast_features::IsEnabled(toast_features::kLinkCopiedToast)) {
+@@ -2941,10 +2956,12 @@
+ void CopyURLs(
+     const std::vector<content::WebContents*>& web_contentses) {
+   std::u16string urls;
++  bool off_the_record = false;
+   for (content::WebContents* web_contents : web_contentses) {
+     if (!web_contents) {
+       continue;
+     }
++    off_the_record |= KeepOutOfClipboardHistory(web_contents);
+ 
+     if (!urls.empty()) {
+       urls.push_back(u'\n');
+@@ -2958,6 +2975,9 @@
+ 
+   ui::ScopedClipboardWriter scw(ui::ClipboardBuffer::kCopyPaste);
+   scw.WriteText(urls);
++  if (off_the_record) {
++    scw.MarkAsOffTheRecord();
++  }
+ }
+ 
+ bool CanCopyUrl(BrowserWindowInterface* browser) {
+--- a/chrome/browser/ui/webui/omnibox_popup/omnibox_popup_handler.cc
++++ b/chrome/browser/ui/webui/omnibox_popup/omnibox_popup_handler.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/ui/webui/omnibox_popup/omnibox_popup_handler.h"
+ 
++#include "chrome/browser/helium_privacy_mode/helium_privacy_mode.h"
++
+ #include "base/feature_list.h"
+ #include "base/metrics/histogram_functions.h"
+ #include "base/strings/escape.h"
+@@ -412,7 +414,10 @@
+   bool is_cut_or_copy_allowed = !selection.is_empty();
+   if (is_cut_or_copy_allowed) {
+     ui::ScopedClipboardWriter writer(ui::ClipboardBuffer::kCopyPaste);
+-    if (web_contents_ && web_contents_->GetBrowserContext()->IsOffTheRecord()) {
++    // Helium++: isolated tabs too (0161).
++    if (web_contents_ &&
++        (web_contents_->GetBrowserContext()->IsOffTheRecord() ||
++         helium_privacy_mode::IsIsolatedWebContents(web_contents_))) {
+       writer.MarkAsOffTheRecord();
+     }
+     writer.WriteText(u16_selected_text);

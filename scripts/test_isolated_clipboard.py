@@ -7,7 +7,7 @@ The X CLIPBOARD selection is then read with Xlib:
   - the isolated copy must offer x-kde-passwordManagerHint = "secret" (Klipper/CopyQ then keep it out of history)
   - the normal copy must not (normal copies keep going to clipboard history)
 Then the same for copies the browser makes itself (0163), with real X key/mouse input: the address bar
-(Ctrl+L, Ctrl+C) and the page context menu's "Copy link address".
+(Ctrl+L, Ctrl+C), the page context menu's "Copy link address" and Ctrl+Shift+C (copy page link, 0175).
 Run from the project root: python3 -I scripts/test_isolated_clipboard.py"""
 import http.server, json, os, shutil, subprocess, sys, threading, time, urllib.request
 
@@ -34,7 +34,7 @@ threading.Thread(target=srv.serve_forever, daemon=True).start()
 page = lambda m: f"http://127.0.0.1:{srv.server_address[1]}/{m}"
 prof = f"{BUILD}/profile-test-clipboard"
 shutil.rmtree(prof, ignore_errors=True); os.makedirs(f"{prof}/Default")
-json.dump({"helium": {"completed_onboarding": True}}, open(f"{prof}/Default/Preferences", "w"))
+json.dump({"helium": {"completed_onboarding": True, "settings": {"a11y": {"copy_page_url_shortcut": True}}}}, open(f"{prof}/Default/Preferences", "w"))
 
 xvfb = subprocess.Popen(["Xvfb", DISP, "-screen", "0", "1200x800x24", "-nolisten", "tcp"],
                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -68,6 +68,7 @@ def wait(pred, timeout=10):
 
 def selection(target):
     """CLIPBOARD converted to `target` (an atom name): (type name, bytes or atom list), or None."""
+    if d.get_selection_owner(CLIP) == win: return None  # cleared by the test itself
     win.convert_selection(CLIP, d.intern_atom(target), PROP, X.CurrentTime); d.flush()
     end = time.time() + 5
     while time.time() < end:
@@ -153,6 +154,10 @@ try:
         mouse(int(r[0] + ox), int(r[1] + oy), 3)
         key("e")
         hint_check(f"{kind} tab context menu Copy link address", isolated, "LINK" + marker)
+        key("Escape"); mouse(700, 400, 1)
+        win.set_selection_owner(CLIP, X.CurrentTime); d.sync()  # clear, so the link copy above cannot pass this check
+        key("Control_L", "Shift_L", "c")  # Copy page link shortcut (IDC_COPY_URL, 0175)
+        hint_check(f"{kind} tab Ctrl+Shift+C copy page link", isolated, marker)
 except Exception:
     import traceback; traceback.print_exc(); fails.append("exception")
 finally:
