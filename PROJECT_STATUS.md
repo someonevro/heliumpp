@@ -94,6 +94,18 @@ Updated 2026-11-21 (session 10; session 9 end; RESUME: see "SESSION 9 RESUME" be
   omnibox popup copies off the record for isolated and incognito tabs. TESTED: test_isolated_clipboard 20/20 (new
   Ctrl+Shift+C check), isolated tabs/blank/noopener/downloads PASS. Web sidebar parity items (drag and drop, tab menu,
   collapsed rail, keyboard nav) are all in already. Password manager in isolated tabs still untested.
+  MACOS (2026-11-28, owner approved, CI fix loop without asking like Windows): .github/workflows/macos.yml +
+  macos-stage.yml (12 hops, free macos-latest arm64 runner: 3 cores, 7 GB RAM; final link may run out of memory).
+  helium-macos pinned 2db5863 (0.20.2.1); our series applied at the end of prepare_sources (macos/hook_shared_sh.py,
+  macos/apply_ours.py -> windows/apply_ours.py with platform='macos'). macos/pre.patch + patches/0002: Helium's
+  system-translate UMA slot 173 clashed with our 0086; 0001: own bundle id io.github.someonevro.heliumpp, data dir
+  ~/Library/Application Support/heliumpp, keychain item. Local dry run (pristine minus ours, plus mac patches, plus
+  ours) applied cleanly. macos/package_and_test.sh: ad-hoc signed dmg, --version, headless page, window screenshot,
+  data-folder check. No sccache, symbol_level=0. Figtree font not bundled on Mac (shortcut noted). FIRST RUN:
+  46139983923 (started 11:27Z). NEXT: check it; on failure fix (patch / workflow), commit, push, rerun or resume with
+  resume-run + resume-patches. Nobody has a Mac: release would be marked untested on real Macs.
+  0.20.2.6 version patch (0176) committed; not released (owner: more changes first). out/Default is 0.20.2.6 with
+  0174+0175.
   AUDIT + SPEED (2026-11-27): CI guards added (05f61c9: build stops on non-release args.gn; resume skips patches
   already applied). Measured (Xvfb, software GL, N=3): web sidebar costs +18 ms first window paint, +35 ms first
   idle vs native; while 20 tabs load it uses 1.2% CPU (0.3 s of 25 s). Not worth optimizing. Build already
