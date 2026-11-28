@@ -86,6 +86,9 @@ Updated 2026-11-21 (session 10; session 9 end; RESUME: see "SESSION 9 RESUME" be
   build/windows-artifacts/45863779497/. Not run on Windows yet, unsigned, not released. Includes 0170 (a resume with it found it already applied).
   RELEASED v0.20.2.4-alpha (owner approved 2026-11-27), marked Latest: Linux AppImage sha256 c320782c...0511
   (160598520 bytes, signed latest.json, signature verified against kUpdatePublicKey) + Windows installer/zip.
+  RELEASED v0.20.2.5-alpha (owner approved 2026-11-28), Linux only: version patch 0173 + GPU fix 0171 (Wayland render
+  node retry; Ozone-only, so Windows stays on 0.20.2.4). AppImage sha256 20c17caa...022a, 160594424 bytes, signed
+  latest.json verified. x86-64-v3 build (0172, out/V3) measured within noise of the normal build (build/audit/bench-v3.txt): not shipped.
   AUDIT + SPEED (2026-11-27): CI guards added (05f61c9: build stops on non-release args.gn; resume skips patches
   already applied). Measured (Xvfb, software GL, N=3): web sidebar costs +18 ms first window paint, +35 ms first
   idle vs native; while 20 tabs load it uses 1.2% CPU (0.3 s of 25 s). Not worth optimizing. Build already
