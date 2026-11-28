@@ -164,3 +164,4 @@
 0171-gpu-retry-probed-render-node.patch
 0172-x86-64-v3-build-option.patch
 0173-version-0.20.2.5.patch
+0174-gpu-render-node-retry-sticks.patch

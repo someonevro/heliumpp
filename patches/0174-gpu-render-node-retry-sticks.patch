@@ -1,0 +1,34 @@
+--- a/content/browser/gpu/gpu_process_host.cc
++++ b/content/browser/gpu/gpu_process_host.cc
+@@ -1503,11 +1503,12 @@
+   // crash it (seen: Radeon RX 550 next to an Intel iGPU, one monitor on each),
+   // and three crashes mean software drawing for the whole session. Retry once
+   // on the render node the GPU process probes itself before counting crashes.
+-  static bool retried_render_node = false;
++  // The marker switch also stops WaylandConnection::SetRenderNodePath from
++  // putting the compositor's GPU back when the compositor resends its device.
+   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+-  if (!retried_render_node &&
++  if (!command_line->HasSwitch("heliumpp-render-node-retried") &&
+       command_line->HasSwitch(switches::kRenderNodeOverride)) {
+-    retried_render_node = true;
++    command_line->AppendSwitch("heliumpp-render-node-retried");
+     LOG(WARNING) << "GPU process crashed on "
+                  << command_line->GetSwitchValueASCII(
+                         switches::kRenderNodeOverride)
+--- a/ui/ozone/platform/wayland/host/wayland_connection.cc
++++ b/ui/ozone/platform/wayland/host/wayland_connection.cc
+@@ -822,8 +822,12 @@
+ 
+ void WaylandConnection::SetRenderNodePath(base::ScopedFD& drm_fd,
+                                           const char* render_node_path) {
++  // Helium++: once the GPU process crashed on this node and was moved to the
++  // probed one (content/browser/gpu/gpu_process_host.cc), never point it back.
+   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+-          switches::kRenderNodeOverride)) {
++          switches::kRenderNodeOverride) &&
++      !base::CommandLine::ForCurrentProcess()->HasSwitch(
++          "heliumpp-render-node-retried")) {
+     TRACE_EVENT("wayland", "scoped attempt of gbm_create_device");
+     if (drm_fd.is_valid()) {
+       ScopedGbmDevice gbm_device(gbm_create_device(drm_fd.get()));

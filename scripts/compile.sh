@@ -31,5 +31,5 @@ rm -rf "$root/build/src/$out/gen/components/helium_onboarding/dist"
 docker run --rm -i --memory 8g --memory-swap 20g ${LIMITS:-} -u "$(id -u):$(id -g)" \
     -e HOME="$root/build/home" -e SISO_PATH="$root/build/src/third_party/siso/cipd/siso" \
     -v "$root/build:$root/build" -w "$root/build/src" chromium-builder:trixie-slim \
-    sh -c '[ -f "$0/build.ninja" ] || buildtools/linux64/gn gen "$0" || exit 1; exec nice -n 19 python3 "$@"' "$out" \
+    sh -c '[ -f "$0/args.gn" ] || { echo "no $0/args.gn" >&2; exit 1; }; [ -f "$0/build.ninja" ] || buildtools/linux64/gn gen "$0" || exit 1; exec nice -n 19 python3 "$@"' "$out" \
     third_party/depot_tools/autoninja.py -C "$out" -j "$jobs" chrome chromedriver "$@"
